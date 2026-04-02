@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   apiBase: 'capper-api-base',
   token: 'capper-token',
   cooldowns: 'capper-attendance-cooldowns',
+  sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 1200;
@@ -44,6 +45,8 @@ const S = {
   scanStatusDetail: 'Enable Live Scan to start face recognition.',
   cooldowns: loadCooldownStore(),
   cooldownVoiceAt: {},
+  activeSessions: {},        // { userId: { startTime, name, duration, announced5, announcedEnd } }
+  sessionTimerLoop: null,
   enrollmentImages: [],
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
   audioUrl: '', audioContext: null, audioUnlocked: false,
@@ -82,6 +85,7 @@ function initUi() {
   renderAll();
   // Set default tab
   openTab('liveOpsTab');
+  restoreSessionTimers();
 }
 
 function bindEvents() {
@@ -346,6 +350,7 @@ function renderAll() {
   populateSelects();
   renderSystemStatus();
   renderLiveFeed();
+  renderActiveSessionsPanel();
   renderUsers();
   renderSlots();
   renderSessions();
@@ -1881,6 +1886,8 @@ function clearSess() {
     reportFilter: { search:'', status:'', date:'' }, membershipFilter:'all',
   });
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null; S.isScanning = false; S.scanInFlight = false;
+  clearInterval(S.sessionTimerLoop); S.sessionTimerLoop = null; S.activeSessions = {};
+  localStorage.removeItem(STORAGE_KEYS.sessionTimers);
   stopBrowserSpeech(); clearAudio(); stopCamera(); clearDataPoll();
   $('lastSyncText').textContent = 'Never';
   openTab('liveOpsTab');
@@ -2203,6 +2210,12 @@ function applyScanResult(r) {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
     speakText(r.ttsMessage || `${isExit ? 'Exit' : 'Entry'} marked for ${r.name || 'the member'}`, 'HIGH');
+    if (!isExit && r.userId) {
+      startSessionTimer(r.userId, r.name || 'Member');
+    }
+    if (isExit && r.userId) {
+      stopSessionTimer(r.userId);
+    }
     return;
   }
   if (r.status === 'duplicate') {
@@ -2226,6 +2239,168 @@ function applyScanResult(r) {
   }
   speakText(r.message || 'Access denied.', 'LOW');
   setScanState('denied', 'Access Denied', r.message || detail, r.name ? 'Face Found' : 'No Match');
+}
+
+/* ═══════════════════════════════════════════════
+   SESSION TIMER ENGINE
+   ═══════════════════════════════════════════════ */
+
+const SESSION_DURATION_MS = 70 * 60 * 1000;
+const SESSION_TIMER_GRACE_MS = 10 * 60 * 1000;
+
+function startSessionTimer(userId, name) {
+  if (!userId || S.activeSessions[userId]) return;
+  S.activeSessions[userId] = {
+    startTime: Date.now(),
+    name: name || 'Member',
+    duration: SESSION_DURATION_MS,
+    announced5: false,
+    announcedEnd: false,
+  };
+  persistSessionTimers();
+  if (!S.sessionTimerLoop) {
+    S.sessionTimerLoop = setInterval(tickSessionTimers, 1000);
+  }
+  renderActiveSessionsPanel();
+}
+
+function stopSessionTimer(userId) {
+  if (!S.activeSessions[userId]) return;
+  delete S.activeSessions[userId];
+  persistSessionTimers();
+  if (!Object.keys(S.activeSessions).length) {
+    clearInterval(S.sessionTimerLoop);
+    S.sessionTimerLoop = null;
+  }
+  renderActiveSessionsPanel();
+}
+
+function tickSessionTimers() {
+  const now = Date.now();
+  let dirty = false;
+  let anyActive = false;
+
+  Object.entries(S.activeSessions).forEach(([userId, sess]) => {
+    const elapsed = now - sess.startTime;
+    if (elapsed >= sess.duration + SESSION_TIMER_GRACE_MS) {
+      delete S.activeSessions[userId];
+      dirty = true;
+      return;
+    }
+
+    const remaining = sess.duration - elapsed;
+    if (!sess.announced5 && remaining <= 5 * 60 * 1000 && remaining > 0) {
+      sess.announced5 = true;
+      dirty = true;
+      speakText(`${sess.name}, your time is ending in 5 minutes`, 'MEDIUM');
+    }
+    if (!sess.announcedEnd && remaining <= 0) {
+      sess.announcedEnd = true;
+      dirty = true;
+      speakText(`${sess.name}, your time is over`, 'HIGH');
+    }
+    anyActive = true;
+  });
+
+  if (dirty) {
+    persistSessionTimers();
+  }
+  if (!anyActive) {
+    clearInterval(S.sessionTimerLoop);
+    S.sessionTimerLoop = null;
+  }
+  renderActiveSessionsPanel();
+}
+
+function persistSessionTimers() {
+  try {
+    localStorage.setItem(STORAGE_KEYS.sessionTimers, JSON.stringify(
+      Object.fromEntries(
+        Object.entries(S.activeSessions).map(([id, session]) => [id, { ...session }])
+      )
+    ));
+  } catch {}
+}
+
+function restoreSessionTimers() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.sessionTimers);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    const now = Date.now();
+    Object.entries(parsed).forEach(([userId, sess]) => {
+      const elapsed = now - sess.startTime;
+      if (elapsed < sess.duration + SESSION_TIMER_GRACE_MS) {
+        S.activeSessions[userId] = sess;
+      }
+    });
+    if (Object.keys(S.activeSessions).length) {
+      S.sessionTimerLoop = setInterval(tickSessionTimers, 1000);
+      renderActiveSessionsPanel();
+    }
+  } catch {}
+}
+
+function renderActiveSessionsPanel() {
+  const now = Date.now();
+  const sessions = Object.entries(S.activeSessions);
+  const countEl = document.getElementById('activeSessionCount');
+  if (countEl) countEl.textContent = String(sessions.length);
+
+  const container = document.getElementById('activeSessionsPanel');
+  if (!container) return;
+
+  if (!sessions.length) {
+    container.innerHTML = '<div class="empty-hint">No active sessions.</div>';
+    return;
+  }
+
+  container.innerHTML = sessions.map(([userId, sess]) => {
+    const elapsed = now - sess.startTime;
+    const remaining = Math.max(0, sess.duration - elapsed);
+    const progress = Math.min(100, (elapsed / sess.duration) * 100);
+    const elapsedStr = msToMMSS(elapsed);
+    const remainStr = msToMMSS(remaining);
+    const isEnding = remaining <= 5 * 60 * 1000 && remaining > 0;
+    const isExpired = remaining <= 0;
+
+    const cardClass = isExpired ? 'sess-card expired' : isEnding ? 'sess-card ending' : 'sess-card';
+    const statusLabel = isExpired ? 'Expired' : isEnding ? 'Ending Soon' : 'Active';
+    const statusTone = isExpired ? 'tone-red' : isEnding ? 'tone-amber' : 'tone-green';
+    const barColor = isExpired ? '#e11d48' : isEnding ? '#d97706' : '#059669';
+
+    return `<div class="${cardClass}" data-uid="${esc(userId)}">
+      <div class="sess-card-top">
+        <div class="sess-avatar">${esc((sess.name || '?')[0].toUpperCase())}</div>
+        <div class="sess-info">
+          <div class="sess-name">${esc(sess.name)}</div>
+          <div class="sess-id">${esc(userId)}</div>
+        </div>
+        <span class="status-chip ${statusTone}">${statusLabel}</span>
+        <button class="mini-btn del" onclick='stopSessionTimer(${JSON.stringify(userId)})'>End</button>
+      </div>
+      <div class="sess-times">
+        <div class="sess-time-block">
+          <span class="sess-time-label">ELAPSED</span>
+          <span class="sess-time-value">${elapsedStr}</span>
+        </div>
+        <div class="sess-time-block">
+          <span class="sess-time-label">REMAINING</span>
+          <span class="sess-time-value ${isExpired ? 'expired-text' : isEnding ? 'ending-text' : ''}">${isExpired ? 'OVER' : remainStr}</span>
+        </div>
+      </div>
+      <div class="sess-progress-rail">
+        <div class="sess-progress-fill" style="width:${progress}%;background:${barColor};"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function msToMMSS(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
 function pickSpeechVoice(voices) {
