@@ -110,9 +110,13 @@
     </nav>
 
     <!-- ═══ MAIN AREA ═══ -->
-    <main class="main-area">
+    <main class="main-area-full">
 
-      <!-- ══ LEFT: SCANNER (always visible) ══ -->
+      <!-- ══ LIVE OPS TAB (scanner + right panels together) ══ -->
+      <div class="tab-page active" id="liveOpsTab">
+        <div class="liveops-layout">
+
+      <!-- Scanner (only here) -->
       <section class="scanner-panel glass-card">
 
         <!-- Scanner Header -->
@@ -221,11 +225,8 @@
         </div>
       </section>
 
-      <!-- ══ RIGHT: TAB CONTENT ══ -->
+      <!-- Right panels for Live Ops -->
       <aside class="right-panel">
-
-        <!-- ─── TAB: LIVE OPS ─── -->
-        <div class="tab-panel active" id="liveOpsTab">
 
           <!-- Voice Control Card -->
           <div class="panel-card glass-card">
@@ -303,10 +304,14 @@
               </div>
             </form>
           </div>
-        </div>
 
-        <!-- ─── TAB: NEW USER ─── -->
-        <div class="tab-panel" id="newUserTab">
+      </aside>
+        </div>
+      </div>
+
+      <!-- ══ NEW USER TAB ══ -->
+      <div class="tab-page" id="newUserTab">
+        <div class="single-col-layout">
 
           <!-- Enrollment Camera -->
           <div class="panel-card glass-card">
@@ -443,9 +448,11 @@
             </form>
           </div>
         </div>
+      </div>
 
-        <!-- ─── TAB: REPORTS ─── -->
-        <div class="tab-panel" id="reportsTab">
+      <!-- ══ REPORTS TAB ══ -->
+      <div class="tab-page" id="reportsTab">
+        <div class="single-col-layout">
 
           <!-- Search & Filter bar -->
           <div class="panel-card glass-card reports-filter-bar">
@@ -513,9 +520,11 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- ─── TAB: MEMBERSHIP ─── -->
-        <div class="tab-panel" id="membershipTab">
+      <!-- ══ MEMBERSHIP TAB ══ -->
+      <div class="tab-page" id="membershipTab">
+        <div class="single-col-layout">
 
           <!-- Filters -->
           <div class="panel-card glass-card membership-filters">
@@ -591,9 +600,11 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- ─── TAB: ALERTS ─── -->
-        <div class="tab-panel" id="alertsTab">
+      <!-- ══ ALERTS TAB ══ -->
+      <div class="tab-page" id="alertsTab">
+        <div class="single-col-layout">
 
           <!-- Expiring soon -->
           <div class="panel-card glass-card">
@@ -658,9 +669,11 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <!-- ─── TAB: SETTINGS ─── -->
-        <div class="tab-panel" id="settingsTab">
+      <!-- ══ SETTINGS TAB ══ -->
+      <div class="tab-page" id="settingsTab">
+        <div class="single-col-layout">
 
           <!-- Slots -->
           <div class="panel-card glass-card">
@@ -703,8 +716,7 @@
             <div class="alert-list" id="memberNotificationsList"></div>
           </div>
         </div>
-
-      </aside>
+      </div>
     </main>
   </div>
 

@@ -371,7 +371,7 @@ function renderAll() {
 function openTab(id) {
   S.activeTab = id;
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === id));
+  document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === id));
 }
 
 /* ── CONSOLE STATE ──────────────────────────────── */
