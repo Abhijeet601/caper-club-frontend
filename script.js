@@ -266,6 +266,7 @@ async function handleLogin(e) {
 
 function setAuth(user) {
   const ok = Boolean(user && S.token);
+  const cameraAccess = ok && isAdmin();
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
   $('authText').textContent = ok ? `${user.role?.toUpperCase()} • ${user.name}` : 'Signed out';
 
@@ -289,9 +290,9 @@ function setAuth(user) {
   }
 
   // Scanner controls
-  $('enableCameraInput').disabled = !ok || !isAdmin();
-  $('captureScanBtn').disabled = !S.stream;
-  $('captureEnrollmentBtn').disabled = !S.stream;
+  $('enableCameraInput').disabled = !cameraAccess;
+  $('captureScanBtn').disabled = !cameraAccess;
+  $('captureEnrollmentBtn').disabled = !cameraAccess;
 }
 
 function logout() { clearSess(); toast('Signed out.', 'success'); }
@@ -371,7 +372,8 @@ function openTab(id) {
 /* ── CONSOLE STATE ──────────────────────────────── */
 function renderConsole() {
   const live = S.isScanning;
-  const cameraReady = Boolean(S.stream);
+  const cameraReady = streamHasActiveVideo(S.stream);
+  const cameraAccess = Boolean(S.currentUser && S.token && isAdmin());
   const activeSession = S.sessions?.find(s => s.status === 'active');
   const buttonCooldown = { remainingMs: 0 };
   const cooldownActive = false;
@@ -394,8 +396,8 @@ function renderConsole() {
   if (live) $('liveScanStateText').classList.add('active');
   else      $('liveScanStateText').classList.remove('active');
 
-  $('captureScanBtn').disabled = !cameraReady;
-  $('captureEnrollmentBtn').disabled = !cameraReady;
+  $('captureScanBtn').disabled = !cameraAccess;
+  $('captureEnrollmentBtn').disabled = !cameraAccess;
   $('runScanBtn').disabled = S.scanInFlight;
   $('runScanBtn').textContent = S.scanInFlight
     ? 'Scanning…'
@@ -1055,26 +1057,42 @@ function stopLiveScan(opts = {}) {
 }
 
 async function startCamera() {
+  const preview = $('cameraPreview');
   if (streamHasActiveVideo(S.stream)) {
-    $('cameraPreview').srcObject = S.stream;
-    await $('cameraPreview').play().catch(()=>{});
+    preview.srcObject = S.stream;
+    await preview.play().catch(()=>{});
+    const ready = await waitVideoReady(preview);
+    if (!ready) {
+      toast('Camera connected, but the preview is not ready yet. Retry in a moment.','warning');
+      renderConsole();
+      return false;
+    }
     $('cameraShell').classList.add('has-stream');
     renderConsole();
     return true;
   }
   stopCamera({ preserveRequest: true, silent: true });
-  if (!navigator.mediaDevices?.getUserMedia) { toast('Camera not supported.','error'); return false; }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    toast(
+      window.isSecureContext
+        ? 'Camera is not supported in this browser.'
+        : 'Camera access requires HTTPS or localhost. Open the app on https:// or http://localhost.',
+      'error',
+    );
+    return false;
+  }
   try {
     S.stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' }, audio:false });
-    $('cameraPreview').srcObject = S.stream;
+    preview.srcObject = S.stream;
     S.stream.getVideoTracks().forEach(track => {
       track.addEventListener('ended', handleCameraTrackEnded, { once: true });
     });
-    await $('cameraPreview').play().catch(()=>{});
-    await waitVideoReady($('cameraPreview'));
+    await preview.play().catch(()=>{});
+    const ready = await waitVideoReady(preview);
+    if (!ready) throw new Error('Camera preview did not become ready.');
     $('cameraShell').classList.add('has-stream');
     renderConsole(); return true;
-  } catch { toast('Cannot start camera.','error'); renderConsole(); return false; }
+  } catch (err) { toast(getCameraErrorMessage(err),'error'); renderConsole(); return false; }
 }
 
 function stopCamera(opts = {}) {
@@ -1110,6 +1128,26 @@ function waitVideoReady(video, ms = 3000) {
   });
 }
 
+function getCameraErrorMessage(err) {
+  const name = err?.name || '';
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    return 'Camera permission was blocked. Allow camera access in the browser and retry.';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No camera was found on this device.';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'The camera is busy in another app or browser tab.';
+  }
+  if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
+    return 'The selected camera mode is not available on this device.';
+  }
+  if (err?.message === 'Camera preview did not become ready.') {
+    return 'Camera access was granted, but the preview never became ready.';
+  }
+  return err?.message || 'Cannot start camera.';
+}
+
 async function runLiveCycle() {
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
@@ -1125,9 +1163,23 @@ function grabFrame() {
   return c.toDataURL('image/jpeg', 0.92);
 }
 
-function captureScanFrame() {
+async function ensureCameraReadyForCapture() {
+  if (!ensureAdmin()) return false;
+  if (!streamHasActiveVideo(S.stream) || !$('cameraPreview').videoWidth || !$('cameraPreview').videoHeight) {
+    const ok = await startCamera();
+    if (!ok) return false;
+  }
+  if (!$('cameraPreview').videoWidth || !$('cameraPreview').videoHeight) {
+    toast('Camera preview is not ready yet. Wait a moment and retry.','warning');
+    return false;
+  }
+  return true;
+}
+
+async function captureScanFrame() {
+  if (!await ensureCameraReadyForCapture()) return;
   const f = grabFrame();
-  if (!f) { toast('Start camera first.','error'); return; }
+  if (!f) { toast('Camera preview is not ready yet.','error'); return; }
   S.scanImage = f; renderConsole();
   toast('Frame captured.','success');
 }
@@ -1366,9 +1418,10 @@ function applyScanResultBrowser(r) {
   setScanState('denied','Access Denied', r.message||detail, r.name ? 'Face Found' : 'No Match');
 }
 
-function captureEnrollFrame() {
+async function captureEnrollFrame() {
+  if (!await ensureCameraReadyForCapture()) return;
   const f = grabFrame();
-  if (!f) { toast('Start camera first.','error'); return; }
+  if (!f) { toast('Camera preview is not ready yet.','error'); return; }
   if (S.enrollmentImages.length >= 5) { toast('Max 5 images.','success'); return; }
   S.enrollmentImages.push(f); renderEnrollGallery();
   toast(`Frame ${S.enrollmentImages.length}/5 captured!`, 'success');
