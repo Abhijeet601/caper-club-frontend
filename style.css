@@ -519,6 +519,9 @@ table { width: 100%; border-collapse: collapse; }
   padding: clamp(5px, 0.5vh, 8px) clamp(6px, 0.6vw, 10px);
 }
 .scan-meta-item { padding: 7px 10px; border-radius: var(--r-sm); background: var(--surface2); border: 1px solid var(--border); }
+
+.liveops-layout .scan-meta-row,
+.liveops-layout .scan-controls { display: none; }
 .meta-key { display: block; font-family: var(--font-mono); font-size: .58rem; text-transform: uppercase; color: var(--text3); letter-spacing: .06em; margin-bottom: 2px; }
 .meta-val { font-size: .76rem; font-weight: 600; color: var(--text); }
 .scan-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
