@@ -70,6 +70,10 @@ document.addEventListener('DOMContentLoaded', () => {
 function initUi() {
   updateApiBaseUi();
   registerMediaUnlock();
+  const apiConfigForm = $('apiConfigForm');
+  if (apiConfigForm?.closest('.panel-card')) {
+    apiConfigForm.closest('.panel-card').hidden = true;
+  }
   $('scanAreaInput').value = 'Capper Sports Club Entry';
   $('sessionAreaInput').value = 'Capper Sports Club Floor';
   $('sessionConfidenceValue').textContent = Number($('sessionConfidenceInput').value).toFixed(2);
@@ -96,8 +100,8 @@ function bindEvents() {
   );
 
   // Backend
-  $('apiConfigForm').addEventListener('submit', handleApiSave);
-  $('refreshAllBtn').addEventListener('click', () => refreshAll({ toast: true }));
+  if ($('apiConfigForm')) $('apiConfigForm').addEventListener('submit', handleApiSave);
+  if ($('refreshAllBtn')) $('refreshAllBtn').addEventListener('click', () => refreshAll({ toast: true }));
 
   // Auth
   $('loginForm').addEventListener('submit', handleLogin);
@@ -249,7 +253,7 @@ async function restoreSession() {
 /* ── API CONFIG ─────────────────────────────────── */
 async function handleApiSave(e) {
   e.preventDefault();
-  setApiBase($('apiBaseInput').value || DEFAULT_API_BASE);
+  setApiBase($('apiBaseInput')?.value || DEFAULT_API_BASE);
   const ok = await pingHealth();
   if (S.currentUser && ok) await refreshAll({ toast: true });
   else if (ok) toast('Backend URL saved.', 'success');
@@ -310,7 +314,7 @@ async function refreshAll(opts = {}) {
   if (!S.currentUser || !S.token) { renderAll(); return; }
   try {
     await Promise.all(isAdmin() ? [loadAdmin(), loadMember()] : [loadMember()]);
-    $('lastSyncText').textContent = fmtDT(new Date().toISOString());
+    if ($('lastSyncText')) $('lastSyncText').textContent = fmtDT(new Date().toISOString());
     renderAll();
     if (opts.toast) toast('Data refreshed.', 'success');
     startDataPoll();
@@ -2236,8 +2240,8 @@ function setApiBase(value, opts = {}) {
   updateApiBaseUi();
 }
 function updateApiBaseUi() {
-  $('apiBaseInput').value = S.apiBase;
-  $('apiBaseLabel').textContent = S.apiBase.replace('http://','').replace('https://','');
+  if ($('apiBaseInput')) $('apiBaseInput').value = S.apiBase;
+  if ($('apiBaseLabel')) $('apiBaseLabel').textContent = S.apiBase.replace('http://','').replace('https://','');
 }
 function updateHealthUi() {
   $('healthDot').className = `status-dot ${S.healthOk ? 'online' : 'alert'}`;
@@ -2367,7 +2371,7 @@ function clearSess() {
   clearInterval(S.sessionTimerLoop); S.sessionTimerLoop = null; S.activeSessions = {};
   localStorage.removeItem(STORAGE_KEYS.sessionTimers);
   stopBrowserSpeech(); clearAudio(); stopCamera(); clearDataPoll();
-  $('lastSyncText').textContent = 'Never';
+  if ($('lastSyncText')) $('lastSyncText').textContent = 'Never';
   openTab('liveOpsTab');
   renderAll();
 }

@@ -31,6 +31,10 @@
         <div class="brand-text">
           <h1 class="brand-name">Capper Sports Club</h1>
           <p class="brand-sub" id="typingSubtitle"></p>
+          <p class="brand-powered">
+            Powered by
+            <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a>
+          </p>
         </div>
       </div>
 
@@ -70,10 +74,6 @@
         <div class="clock-block">
           <div class="clock-time" id="liveTime">00:00:00</div>
           <div class="clock-date" id="liveDate">—</div>
-        </div>
-        <div class="api-info">
-          <span class="api-chip" id="apiBaseLabel">localhost:8001</span>
-          <span class="api-chip sync-chip">Sync: <span id="lastSyncText">Never</span></span>
         </div>
       </div>
     </header>
@@ -843,6 +843,15 @@
             </div>
           </div>
 
+          <div class="panel-card glass-card developer-panel">
+            <div class="card-head"><span class="card-title">About / Developer</span></div>
+            <div class="developer-meta">
+              <p>Developed by <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a></p>
+              <p>Website: <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a></p>
+              <p>Version: <span>2026.04</span></p>
+            </div>
+          </div>
+
           <!-- Member Account (self) -->
           <div class="panel-card glass-card" id="myAccountSection" hidden>
             <div class="card-head"><span class="card-title">👤 My Account</span></div>
@@ -870,6 +879,13 @@
 
   <!-- Toast -->
   <div class="toast" id="toast"></div>
+
+  <footer class="app-footer">
+    <span>© 2026 </span>
+    <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a>
+    <span>. All rights reserved. | </span>
+    <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a>
+  </footer>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script src="vendor/face-api.min.js"></script>
