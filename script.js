@@ -108,20 +108,22 @@ function bindEvents() {
   $('userRoleInput').addEventListener('change', syncSlotField);
   $('userForm').addEventListener('submit', handleUserSubmit);
   $('userResetBtn').addEventListener('click', resetUserForm);
-  $('usersTableBody').addEventListener('click', handleUsersClick);
-  $('userFilterInput').addEventListener('input', e => { S.userFilter = e.target.value; renderUsers(); });
+  if ($('usersTableBody')) $('usersTableBody').addEventListener('click', handleUsersClick);
+  if ($('userFilterInput')) $('userFilterInput').addEventListener('input', e => { S.userFilter = e.target.value; renderUsers(); });
 
   // Reports filter
-  $('reportSearchInput').addEventListener('input', e => { S.reportFilter.search = e.target.value; renderReportTable(); });
-  $('reportFilterStatus').addEventListener('change', e => { S.reportFilter.status = e.target.value; renderReportTable(); });
-  $('reportFilterDate').addEventListener('change', e => { S.reportFilter.date = e.target.value; renderReportTable(); });
-  $('reportClearBtn').addEventListener('click', () => {
+  if ($('reportSearchInput')) $('reportSearchInput').addEventListener('input', e => { S.reportFilter.search = e.target.value; renderReportTable(); });
+  if ($('reportFilterStatus')) $('reportFilterStatus').addEventListener('change', e => { S.reportFilter.status = e.target.value; renderReportTable(); });
+  if ($('reportFilterDate')) $('reportFilterDate').addEventListener('change', e => { S.reportFilter.date = e.target.value; renderReportTable(); });
+  if ($('reportClearBtn')) $('reportClearBtn').addEventListener('click', () => {
     S.reportFilter = { search: '', status: '', date: '' };
-    $('reportSearchInput').value = ''; $('reportFilterStatus').value = ''; $('reportFilterDate').value = '';
+    if ($('reportSearchInput')) $('reportSearchInput').value = '';
+    if ($('reportFilterStatus')) $('reportFilterStatus').value = '';
+    if ($('reportFilterDate')) $('reportFilterDate').value = '';
     renderReportTable();
   });
-  $('reportDetailClose').addEventListener('click', () => { $('reportUserDetail').hidden = true; });
-  $('reportTableBody').addEventListener('click', handleReportRowClick);
+  if ($('reportDetailClose')) $('reportDetailClose').addEventListener('click', () => { $('reportUserDetail').hidden = true; });
+  if ($('reportTableBody')) $('reportTableBody').addEventListener('click', handleReportRowClick);
 
   // Membership filters
   document.querySelectorAll('.filter-chip').forEach(btn =>
@@ -517,11 +519,14 @@ function renderLiveFeed() {
 }
 
 function renderUsers() {
+  const tableBody = $('usersTableBody');
+  if (!tableBody) return;
+
   const filtered = S.users.filter(u => {
     if (!S.userFilter.trim()) return true;
     return [u.name, u.email, u.memberId, u.role].join(' ').toLowerCase().includes(S.userFilter.toLowerCase());
   });
-  $('usersTableBody').innerHTML = filtered.length
+  tableBody.innerHTML = filtered.length
     ? filtered.map(u => `<tr data-user-row="${u.id}">
         <td><div class="t-primary">${esc(u.name)}</div><div class="t-secondary">${esc(u.email)}</div></td>
         <td>${esc(u.membershipPlan||'-')} ${chip(u.membershipStatus||'slate', u.membershipStatus||'-')}</td>
@@ -569,12 +574,19 @@ function renderAnnouncements() {
 
 /* ── REPORTS ─────────────────────────────────────── */
 function renderReports() {
+  if ($('admissionTableBody')) {
+    renderReportsAll();
+    return;
+  }
+
   renderReportTable();
 
-  // Chart
+  const attendanceBars = $('attendanceBars');
+  if (!attendanceBars) return;
+
   const bars = S.reports?.attendanceBars || [];
   const maxV = Math.max(...bars.map(b => Number(b.count||0)), 1);
-  $('attendanceBars').innerHTML = bars.length
+  attendanceBars.innerHTML = bars.length
     ? bars.map(b => {
         const h = Math.max(5, Math.round((Number(b.count||0)/maxV)*100));
         return `<div class="mini-bar-col">
@@ -586,6 +598,10 @@ function renderReports() {
 }
 
 function renderReportTable() {
+  const reportCountChip = $('reportCountChip');
+  const reportTableBody = $('reportTableBody');
+  if (!reportCountChip || !reportTableBody) return;
+
   // Combine sessions + recent activity as attendance records
   let records = S.sessions.map(s => ({
     name: s.name || 'Unknown',
@@ -608,8 +624,8 @@ function renderReportTable() {
     records = records.filter(r => r.time && r.time.startsWith(S.reportFilter.date));
   }
 
-  $('reportCountChip').textContent = records.length;
-  $('reportTableBody').innerHTML = records.length
+  reportCountChip.textContent = records.length;
+  reportTableBody.innerHTML = records.length
     ? records.map(r => `<tr data-report-user="${esc(r.id)}" data-report-name="${esc(r.name)}">
         <td><div class="t-primary">${esc(r.name)}</div><div class="t-secondary">${esc(r.area||'-')}</div></td>
         <td class="t-secondary">${esc(fmtDT(r.time))}</td>
@@ -632,8 +648,13 @@ async function handleReportRowClick(e) {
 }
 
 function showReportDetail(name, report) {
-  $('reportDetailName').textContent = `📊 ${name}`;
-  $('reportDetailContent').innerHTML = `
+  const detailName = $('reportDetailName');
+  const detailContent = $('reportDetailContent');
+  const detailDrawer = $('reportUserDetail');
+  if (!detailName || !detailContent || !detailDrawer) return;
+
+  detailName.textContent = `📊 ${name}`;
+  detailContent.innerHTML = `
     <div class="meta-grid" style="margin-bottom:8px;">
       <div class="meta-item"><span class="meta-label">Visits</span><span class="meta-value">${esc(String(report?.profile?.visits||0))}</span></div>
       <div class="meta-item"><span class="meta-label">Sessions</span><span class="meta-value">${toArr(report?.sessions).length}</span></div>
@@ -651,7 +672,7 @@ function showReportDetail(name, report) {
         </tbody>
       </table>
     </div>`;
-  $('reportUserDetail').hidden = false;
+  detailDrawer.hidden = false;
 }
 
 /* ── MEMBERSHIP LIST ─────────────────────────────── */
