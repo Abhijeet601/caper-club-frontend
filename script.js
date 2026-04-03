@@ -109,7 +109,12 @@ function bindEvents() {
   $('loadMeBtn').addEventListener('click', () => refreshAll({ toast: true }));
 
   // Users
-  $('userRoleInput').addEventListener('change', syncSlotField);
+  $('userRoleInput').addEventListener('change', () => {
+    syncSlotField();
+    syncUserMemberIdField();
+  });
+  $('userPlanInput').addEventListener('change', syncUserPlanDates);
+  $('userStartInput').addEventListener('input', syncUserPlanDates);
   $('userForm').addEventListener('submit', handleUserSubmit);
   $('userResetBtn').addEventListener('click', resetUserForm);
   if ($('usersTableBody')) $('usersTableBody').addEventListener('click', handleUsersClick);
@@ -331,6 +336,7 @@ async function loadAdmin() {
   S.sessions = toArr(sessions); S.reports = reports || null; S.announcements = toArr(ann);
   S.faceUsers = toArr(embeddings);
   syncCooldownStoreFromUsers(S.users);
+  syncUserMemberIdField();
   syncActiveSessionsFromBackend();
 }
 
@@ -745,11 +751,9 @@ function initReportsModule() {
     })
   );
 
-  document.querySelectorAll('.rpt-qbtn').forEach(btn =>
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.rpt-qbtn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      RPT.quickFilter = btn.dataset.qfilter;
+  document.querySelectorAll('[data-qfilter]').forEach(control =>
+    control.addEventListener('click', () => {
+      setActiveQuickFilter(control.dataset.qfilter || 'all');
       applyQuickFilter(RPT.quickFilter);
       renderReportsAll();
     })
@@ -768,9 +772,15 @@ function clearRptFilters() {
   $('rptSearch').value = ''; $('rptFilterPlan').value = '';
   $('rptFilterPayment').value = ''; $('rptFilterDate').value = '';
   $('rptFilterMode') && ($('rptFilterMode').value = '');
-  RPT.quickFilter = 'all';
-  document.querySelectorAll('.rpt-qbtn').forEach(btn => btn.classList.toggle('active', btn.dataset.qfilter === 'all'));
+  setActiveQuickFilter('all');
   renderReportsAll();
+}
+
+function setActiveQuickFilter(filter) {
+  RPT.quickFilter = filter || 'all';
+  document.querySelectorAll('[data-qfilter]').forEach(control => {
+    control.classList.toggle('active', control.dataset.qfilter === RPT.quickFilter);
+  });
 }
 
 function applyQuickFilter(filter) {
@@ -808,14 +818,75 @@ function applyQuickFilter(filter) {
   if ($('rptFilterMode')) $('rptFilterMode').value = RPT.mode;
 }
 
+function getReportPayments() {
+  const payments = toArr(S.reports?.payments);
+  if (payments.length) return payments;
+
+  return S.users
+    .filter(user => user.role === 'user' && (
+      Number(user.paymentAmount || 0) > 0 ||
+      user.paymentStatus ||
+      user.membershipStart
+    ))
+    .map(user => ({
+      id: `user-${user.id}`,
+      userId: user.id,
+      userName: user.name,
+      memberId: user.memberId,
+      plan: user.membershipPlan,
+      amount: Number(user.paymentAmount || 0),
+      paymentMode: user.paymentMode,
+      paymentStatus: user.paymentStatus,
+      membershipStart: user.membershipStart,
+      membershipExpiry: user.membershipExpiry,
+      source: 'Admin onboarding',
+      createdAt: user.membershipStart,
+    }));
+}
+
+function getPaidReportPayments() {
+  return getReportPayments().filter(payment => String(payment?.paymentStatus || '').toLowerCase() === 'paid');
+}
+
+function getTodayPaidReportPayments() {
+  const today = isoDate(new Date());
+  return getPaidReportPayments().filter(payment => localDateKey(payment.createdAt) === today);
+}
+
+function isAdmissionPayment(payment) {
+  const source = String(payment?.source || '').toLowerCase();
+  return source.includes('onboarding') || source.includes('admission');
+}
+
+function sumPaymentAmounts(payments) {
+  return toArr(payments).reduce((sum, payment) => sum + Number(payment?.amount || 0), 0);
+}
+
 function renderReportsAll() {
   renderSummaryCards();
+  renderQuickFilterCards();
   renderLiveSummary();
   renderAdmissionTable();
   renderPaymentSummary();
   renderRenewalList();
   renderAttendanceAnalytics();
   renderSlotEngagement();
+}
+
+function renderQuickFilterCards() {
+  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === isoDate(new Date()));
+  const todayPayments = getTodayPaidReportPayments();
+  const todayAdmissions = todayPayments.filter(isAdmissionPayment);
+  const todayRenewals = todayPayments.filter(payment => !isAdmissionPayment(payment));
+  const cashToday = todayPayments.filter(payment => payment.paymentMode === 'Cash');
+  const upiToday = todayPayments.filter(payment => payment.paymentMode === 'UPI');
+
+  if ($('qcardAll')) $('qcardAll').textContent = String(S.sessions.length);
+  if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length);
+  if ($('qcardTodayRenewals')) $('qcardTodayRenewals').textContent = String(todayRenewals.length);
+  if ($('qcardTodayCheckins')) $('qcardTodayCheckins').textContent = String(todaySessions.length);
+  if ($('qcardCash')) $('qcardCash').textContent = fmtMoney(sumPaymentAmounts(cashToday));
+  if ($('qcardUpi')) $('qcardUpi').textContent = fmtMoney(sumPaymentAmounts(upiToday));
 }
 
 function renderSummaryCards() {
@@ -828,9 +899,7 @@ function renderSummaryCards() {
     return days >= 0 && days <= 7;
   });
   const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === localDateKey());
-  const todayRevenue = S.users
-    .filter(u => u.role === 'user' && localDateKey(u.membershipStart) === localDateKey())
-    .reduce((sum, u) => sum + Number(u.paymentAmount || 0), 0);
+  const todayRevenue = sumPaymentAmounts(getTodayPaidReportPayments());
 
   $('rptTotalMembersVal').textContent = users.length;
   $('rptActiveMembersVal').textContent = active.length;
@@ -843,15 +912,12 @@ function renderSummaryCards() {
 function renderLiveSummary() {
   const today = isoDate(new Date());
   const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
-  const todayUsers = S.users.filter(u => u.role === 'user' && localDateKey(u.membershipStart) === today);
-
-  const cashToday = todayUsers
-    .filter(u => u.paymentMode === 'Cash' && u.paymentStatus === 'Paid')
-    .reduce((s, u) => s + Number(u.paymentAmount || 0), 0);
-  const upiToday = todayUsers
-    .filter(u => u.paymentMode === 'UPI' && u.paymentStatus === 'Paid')
-    .reduce((s, u) => s + Number(u.paymentAmount || 0), 0);
-  const renewalsToday = todayUsers.filter(u => u.paymentStatus === 'Paid').length;
+  const todayPayments = getTodayPaidReportPayments();
+  const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
+  const cashToday = sumPaymentAmounts(todayPayments.filter(payment => payment.paymentMode === 'Cash'));
+  const upiToday = sumPaymentAmounts(todayPayments.filter(payment => payment.paymentMode === 'UPI'));
+  const renewalsToday = todayPayments.filter(payment => !isAdmissionPayment(payment)).length;
+  const admissionsToday = todayPayments.filter(isAdmissionPayment).length;
 
   const liveAdmissions = document.getElementById('liveAdmissions');
   const liveRenewals = document.getElementById('liveRenewals');
@@ -859,17 +925,27 @@ function renderLiveSummary() {
   const liveUpi = document.getElementById('liveUpi');
   const liveTotalRev = document.getElementById('liveTotalRevenue');
 
-  if (liveAdmissions) liveAdmissions.textContent = todaySessions.length;
+  if (liveAdmissions) liveAdmissions.textContent = String(admissionsToday || todaySessions.length);
   if (liveRenewals) liveRenewals.textContent = renewalsToday;
   if (liveCash) liveCash.textContent = fmtMoney(cashToday);
   if (liveUpi) liveUpi.textContent = fmtMoney(upiToday);
-  if (liveTotalRev) liveTotalRev.textContent = fmtMoney(cashToday + upiToday);
+  if (liveTotalRev) liveTotalRev.textContent = fmtMoney(totalRevenue);
 }
 
 function getFilteredAdmissions() {
+  const todayPaymentsByUser = new Map();
+  getTodayPaidReportPayments().forEach(payment => {
+    const userId = String(payment.userId || '');
+    if (!userId) return;
+    const existing = todayPaymentsByUser.get(userId) || [];
+    existing.push(payment);
+    todayPaymentsByUser.set(userId, existing);
+  });
+
   return S.sessions.filter(s => {
     const user = S.users.find(u => u.id === s.userId);
     if (!user) return false;
+    const userTodayPayments = todayPaymentsByUser.get(String(user.id)) || [];
     if (RPT.search) {
       const q = RPT.search.toLowerCase();
       if (!(user.name||'').toLowerCase().includes(q) &&
@@ -879,6 +955,10 @@ function getFilteredAdmissions() {
     if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
     if (RPT.mode && user.paymentMode !== RPT.mode) return false;
     if (RPT.date && !localDateKey(s.startedAt).startsWith(RPT.date)) return false;
+    if (RPT.quickFilter === 'today-admissions' && !userTodayPayments.some(isAdmissionPayment)) return false;
+    if (RPT.quickFilter === 'today-renewals' && !userTodayPayments.some(payment => !isAdmissionPayment(payment))) return false;
+    if (RPT.quickFilter === 'cash' && !userTodayPayments.some(payment => payment.paymentMode === 'Cash')) return false;
+    if (RPT.quickFilter === 'upi' && !userTodayPayments.some(payment => payment.paymentMode === 'UPI')) return false;
     return true;
   });
 }
@@ -961,28 +1041,36 @@ function renderPaymentSummary() {
   const startOfWeek  = new Date(startOfDay); startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const paidUsers = S.users.filter(u => u.role === 'user' && u.paymentStatus === 'Paid');
-  const calc = (from) => paidUsers
-    .filter(u => u.membershipStart && new Date(u.membershipStart) >= from)
-    .reduce((sum, u) => sum + Number(u.paymentAmount || 0), 0);
+  const reportPayments = getReportPayments();
+  const paidPayments = getPaidReportPayments();
+  const calc = (from) => sumPaymentAmounts(
+    paidPayments.filter(payment => {
+      const createdAt = new Date(payment.createdAt);
+      return !Number.isNaN(createdAt.getTime()) && createdAt >= from;
+    })
+  );
 
   $('payDaily').textContent   = fmtMoney(calc(startOfDay));
   $('payWeekly').textContent  = fmtMoney(calc(startOfWeek));
   $('payMonthly').textContent = fmtMoney(calc(startOfMonth));
   $('payPending').textContent = fmtMoney(
-    S.users.filter(u => u.role === 'user' && u.paymentStatus === 'Pending')
-      .reduce((sum, u) => sum + Number(u.paymentAmount || 0), 0)
+    sumPaymentAmounts(
+      reportPayments.filter(payment => String(payment.paymentStatus || '').toLowerCase() === 'pending')
+    )
   );
 
-  const payRows = S.users.filter(u => u.role === 'user' && u.paymentAmount > 0);
+  const payRows = reportPayments.filter(payment => Number(payment.amount || 0) > 0);
   $('payHistoryBody').innerHTML = payRows.length
-    ? payRows.map(u => `<tr>
-        <td><div class="t-primary">${esc(u.name)}</div></td>
-        <td>${esc(u.membershipPlan||'-')}</td>
-        <td>${fmtMoney(u.paymentAmount||0)}</td>
-        <td>${esc(u.paymentMode||'-')}</td>
-        <td>${chip(u.paymentStatus||'slate', u.paymentStatus||'-')}</td>
-        <td class="t-secondary">${esc(u.membershipStart||'-')}</td>
+    ? payRows.map(payment => `<tr>
+        <td>
+          <div class="t-primary">${esc(payment.userName || 'Unknown')}</div>
+          <div class="t-secondary">${esc(payment.memberId || '-')}</div>
+        </td>
+        <td>${esc(payment.plan||'-')}</td>
+        <td>${fmtMoney(payment.amount||0)}</td>
+        <td>${esc(payment.paymentMode||'-')}</td>
+        <td>${chip(payment.paymentStatus||'slate', payment.paymentStatus||'-')}</td>
+        <td class="t-secondary">${esc(fmtDT(payment.createdAt))}</td>
       </tr>`).join('')
     : `<tr><td colspan="6"><div class="empty-hint">No payment records.</div></td></tr>`;
 }
@@ -1323,9 +1411,10 @@ async function handleUserSubmit(e) {
   if (!ensureAdmin()) return;
   const editId = $('userIdInput').value.trim();
   const password = $('userPasswordInput').value.trim();
+  const resolvedMemberId = $('userMemberIdInput').value.trim() || generateNextMemberId($('userRoleInput').value);
   const payload = {
     name: $('userNameInput').value.trim(),
-    memberId: $('userMemberIdInput').value.trim(),
+    memberId: resolvedMemberId,
     email: $('userEmailInput').value.trim(),
     password: password || null,
     mobileNumber: $('userMobileInput')?.value?.trim() || null,
@@ -1377,6 +1466,8 @@ function beginUserEdit(id) {
   $('userPlanInput').value = u.membershipPlan||'Monthly';
   $('userStartInput').value = u.membershipStart||isoDate(new Date());
   $('userExpiryInput').value = u.membershipExpiry||isoDate(addDays(new Date(),30));
+  $('userMemberIdInput').readOnly = false;
+  $('userMemberIdInput').required = true;
   $('userAmountInput').value = String(u.paymentAmount||0);
   $('userPaymentModeInput').value = u.paymentMode||'Cash';
   $('userPaymentStatusInput').value = u.paymentStatus||'Pending';
@@ -1387,6 +1478,7 @@ function beginUserEdit(id) {
   $('userFormTitle').textContent = `✏ Edit ${u.name}`;
   $('userSubmitBtn').textContent = 'Update Member';
   syncSlotField();
+  syncUserPlanDates();
 }
 
 async function deleteUser(id) {
@@ -1411,11 +1503,59 @@ function resetUserForm() {
   $('userAmountInput').value = '0';
   $('userPasswordInput').required = true;
   $('userPasswordInput').placeholder = 'Min 8 characters';
+  $('userMemberIdInput').placeholder = 'Auto-generated';
   syncSlotField();
+  syncUserPlanDates();
+  syncUserMemberIdField();
 }
 
 function syncSlotField() {
   $('userSlotInput').disabled = $('userRoleInput').value !== 'user';
+}
+
+function generateNextMemberId(role = 'user') {
+  const normalizedRole = String(role || 'user').toLowerCase();
+  const prefix = normalizedRole === 'admin' ? 'ADMIN' : 'CSC';
+  const width = prefix === 'ADMIN' ? 4 : 3;
+  let highest = 0;
+
+  toArr(S.users).forEach(user => {
+    const memberId = String(user?.memberId || '').trim().toUpperCase();
+    const match = memberId.match(new RegExp(`^${prefix}-(\\d+)$`));
+    if (match) highest = Math.max(highest, Number(match[1]));
+  });
+
+  return `${prefix}-${String(highest + 1).padStart(width, '0')}`;
+}
+
+function syncUserMemberIdField() {
+  const memberIdInput = $('userMemberIdInput');
+  if (!memberIdInput) return;
+
+  const isEditMode = Boolean($('userIdInput').value.trim());
+  if (isEditMode) {
+    memberIdInput.readOnly = false;
+    memberIdInput.required = true;
+    return;
+  }
+
+  memberIdInput.readOnly = true;
+  memberIdInput.required = false;
+  memberIdInput.value = generateNextMemberId($('userRoleInput').value);
+}
+
+function syncUserPlanDates() {
+  const startValue = $('userStartInput').value;
+  const plan = $('userPlanInput').value;
+  const expiryInput = $('userExpiryInput');
+  if (!expiryInput) return;
+
+  const planDays = { Monthly: 30, Quarterly: 90, Yearly: 365 };
+  const days = planDays[plan];
+  expiryInput.readOnly = Boolean(days);
+  if (!startValue || !days) return;
+
+  expiryInput.value = isoDate(addDays(new Date(startValue), days));
 }
 
 /* ── SLOTS ────────────────────────────────────── */

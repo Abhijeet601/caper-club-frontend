@@ -1481,3 +1481,46 @@ textarea { min-height: 60px; resize: none; }
   border-color: rgba(99,102,241,.3);
   box-shadow: 0 0 0 2px rgba(99,102,241,.08);
 }
+
+.rpt-quick-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: clamp(6px, 0.8vw, 10px);
+}
+.rpt-quick-card {
+  padding: clamp(10px, 1vw, 14px);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  transition: all .2s;
+  min-width: 0;
+  cursor: pointer;
+}
+.rpt-quick-card:hover {
+  border-color: var(--border2);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+.rpt-quick-card.active {
+  background: var(--surface2);
+  border-color: rgba(79,70,229,.28);
+  box-shadow: 0 0 0 2px rgba(79,70,229,.08);
+}
+.rpt-quick-card-label {
+  font-family: var(--font-mono);
+  font-size: clamp(0.58rem, 0.64vw, 0.68rem);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text3);
+}
+.rpt-quick-card-value {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 1.15vw, 1.25rem);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text);
+}

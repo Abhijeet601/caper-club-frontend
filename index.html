@@ -347,7 +347,7 @@
                 </label>
                 <label class="field-stack">
                   <span>Member ID</span>
-                  <input type="text" id="userMemberIdInput" required placeholder="CSC-001">
+                  <input type="text" id="userMemberIdInput" placeholder="Auto-generated" readonly>
                 </label>
               </div>
               <div class="form-row">
@@ -491,6 +491,33 @@
       <button class="rpt-qbtn" data-qfilter="today-checkins">🔑 Today's Check-ins</button>
       <button class="rpt-qbtn" data-qfilter="cash">💵 Cash</button>
       <button class="rpt-qbtn" data-qfilter="upi">📱 UPI</button>
+    </div>
+
+    <div class="rpt-quick-card-grid">
+      <button class="rpt-quick-card active" data-qfilter="all">
+        <span class="rpt-quick-card-label">All</span>
+        <span class="rpt-quick-card-value" id="qcardAll">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="today-admissions">
+        <span class="rpt-quick-card-label">Today's Admissions</span>
+        <span class="rpt-quick-card-value" id="qcardTodayAdmissions">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="today-renewals">
+        <span class="rpt-quick-card-label">Today's Renewals</span>
+        <span class="rpt-quick-card-value" id="qcardTodayRenewals">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="today-checkins">
+        <span class="rpt-quick-card-label">Today's Check-ins</span>
+        <span class="rpt-quick-card-value" id="qcardTodayCheckins">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="cash">
+        <span class="rpt-quick-card-label">Cash</span>
+        <span class="rpt-quick-card-value" id="qcardCash">₹0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="upi">
+        <span class="rpt-quick-card-label">UPI</span>
+        <span class="rpt-quick-card-value" id="qcardUpi">₹0</span>
+      </button>
     </div>
 
     <!-- Live Dynamic Summary -->
