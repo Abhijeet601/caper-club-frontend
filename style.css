@@ -1027,3 +1027,175 @@ textarea { min-height: 60px; resize: none; }
   height: 100%; border-radius: 999px;
   transition: width 1s linear, background .5s ease;
 }
+
+/* ═══════════════════════════════════════════════
+   REPORTS MODULE STYLES
+   ═══════════════════════════════════════════════ */
+
+/* Summary grid */
+.rpt-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: clamp(6px, 0.8vw, 12px);
+  padding: clamp(10px, 1vw, 16px);
+}
+.rpt-stat-card {
+  padding: 12px 10px; border-radius: var(--r-md);
+  background: var(--surface2); border: 1.5px solid var(--border);
+  text-align: center; transition: all .25s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.rpt-stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+.rpt-stat-card.active  { border-color: rgba(5,150,105,.3);  background: rgba(5,150,105,.06); }
+.rpt-stat-card.warning { border-color: rgba(217,119,6,.3);  background: rgba(217,119,6,.06); }
+.rpt-stat-card.revenue { border-color: rgba(79,70,229,.3);  background: rgba(79,70,229,.06); }
+.rpt-stat-card.info    { border-color: rgba(14,165,233,.3); background: rgba(14,165,233,.06); }
+.rpt-stat-icon { font-size: 1.1rem; line-height: 1; }
+.rpt-stat-val  {
+  font-family: var(--font-display); font-size: clamp(1.1rem, 1.5vw, 1.5rem);
+  font-weight: 800; letter-spacing: -.02em; color: var(--text); line-height: 1;
+}
+.rpt-stat-label {
+  font-family: var(--font-mono); font-size: .6rem;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--text3);
+}
+
+/* Filter bar */
+.rpt-filter-bar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 10px 14px;
+}
+.rpt-input  { flex: 1; min-width: 120px; padding: 7px 11px; border-radius: var(--r-sm); border: 1.5px solid #e2e8f0; font-size: .8rem; }
+.rpt-select { padding: 7px 28px 7px 10px; border-radius: var(--r-sm); border: 1.5px solid #e2e8f0; font-size: .78rem; }
+.rpt-date   { padding: 7px 10px; border-radius: var(--r-sm); border: 1.5px solid #e2e8f0; font-size: .78rem; }
+
+/* Admission table */
+.rpt-table-wrap {
+  overflow-x: auto; overflow-y: auto;
+  max-height: clamp(180px, 26vh, 300px);
+  border-radius: var(--r-sm); border: 1px solid var(--border);
+}
+.rpt-table { width: 100%; border-collapse: collapse; }
+.rpt-table th, .rpt-table td {
+  padding: 9px 11px; text-align: left;
+  border-bottom: 1px solid var(--border); vertical-align: middle;
+  white-space: nowrap;
+}
+.rpt-table th {
+  font-family: var(--font-mono); font-size: .6rem;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--text3);
+  position: sticky; top: 0; background: rgba(255,255,255,.97); z-index: 1;
+}
+.rpt-row { cursor: pointer; transition: background .15s; }
+.rpt-row:hover td { background: rgba(99,102,241,.05); }
+
+/* Charts row */
+.rpt-charts-row {
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--gap);
+}
+.rpt-chart-card { min-height: 260px; }
+
+/* Analytics grid */
+.rpt-analytics-grid {
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 7px;
+}
+.rpt-analytic-item {
+  padding: 9px 8px; border-radius: var(--r-sm);
+  text-align: center; border: 1px solid var(--border);
+  background: var(--surface2);
+}
+.rpt-analytic-item.blue   { border-color: rgba(14,165,233,.25); background: rgba(14,165,233,.07); }
+.rpt-analytic-item.green  { border-color: rgba(5,150,105,.25);  background: rgba(5,150,105,.07);  }
+.rpt-analytic-item.violet { border-color: rgba(124,58,237,.25); background: rgba(124,58,237,.07); }
+.rpt-analytic-item.amber  { border-color: rgba(217,119,6,.25);  background: rgba(217,119,6,.07);  }
+.rpt-analytic-val {
+  font-family: var(--font-display); font-size: 1.2rem;
+  font-weight: 800; letter-spacing: -.02em; line-height: 1; margin-bottom: 3px;
+}
+.rpt-analytic-lbl {
+  font-family: var(--font-mono); font-size: .58rem;
+  text-transform: uppercase; color: var(--text3); letter-spacing: .06em;
+}
+
+/* Slot bars */
+.slot-bars { display: flex; flex-direction: column; gap: 12px; padding: 6px 0; }
+.slot-bar-row { display: flex; align-items: center; gap: 10px; }
+.slot-bar-label {
+  width: 90px; flex-shrink: 0;
+  font-size: .78rem; font-weight: 600; color: var(--text2);
+}
+.slot-bar-track {
+  flex: 1; height: 12px; border-radius: 999px;
+  background: var(--surface2); border: 1px solid var(--border); overflow: hidden;
+}
+.slot-bar-fill {
+  height: 100%; border-radius: 999px;
+  transition: width 1s cubic-bezier(.34,1.64,1);
+}
+.slot-bar-count {
+  width: 28px; text-align: right;
+  font-family: var(--font-mono); font-size: .72rem; font-weight: 600; color: var(--text2);
+}
+
+/* Payment summary */
+.rpt-payment-grid {
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 8px;
+}
+.rpt-pay-card {
+  padding: 10px 12px; border-radius: var(--r-sm);
+  border: 1px solid var(--border); text-align: center;
+}
+.rpt-pay-card.green  { border-color: rgba(5,150,105,.25);  background: rgba(5,150,105,.06);  }
+.rpt-pay-card.blue   { border-color: rgba(14,165,233,.25); background: rgba(14,165,233,.06); }
+.rpt-pay-card.violet { border-color: rgba(124,58,237,.25); background: rgba(124,58,237,.06); }
+.rpt-pay-card.amber  { border-color: rgba(217,119,6,.25);  background: rgba(217,119,6,.06);  }
+.rpt-pay-label {
+  font-family: var(--font-mono); font-size: .6rem;
+  text-transform: uppercase; color: var(--text3); letter-spacing: .06em; margin-bottom: 4px;
+}
+.rpt-pay-val {
+  font-family: var(--font-display); font-size: 1rem;
+  font-weight: 800; letter-spacing: -.02em; color: var(--text);
+}
+
+/* Renewal tabs */
+.rpt-renewal-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.rpt-rtab {
+  padding: 5px 14px; border-radius: 999px; font-size: .74rem; font-weight: 600;
+  border: 1.5px solid var(--border); background: transparent; color: var(--text2);
+  transition: all .2s; cursor: pointer;
+}
+.rpt-rtab:hover { background: var(--surface2); }
+.rpt-rtab.active { background: var(--grad-hero); color: #fff; border-color: transparent; box-shadow: 0 3px 10px rgba(79,70,229,.25); }
+
+/* Plan calculator */
+.plan-calc-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;
+}
+.plan-calc-result {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--r-sm);
+  background: rgba(79,70,229,.06); border: 1.5px solid rgba(79,70,229,.2);
+  font-size: .8rem; font-weight: 500; color: var(--text2);
+}
+.plan-calc-badge {
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--grad-hero); color: #fff;
+  font-family: var(--font-mono); font-size: .65rem; font-weight: 700;
+  letter-spacing: .06em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .rpt-summary-grid   { grid-template-columns: repeat(3,1fr); }
+  .rpt-charts-row     { grid-template-columns: 1fr; }
+  .rpt-analytics-grid { grid-template-columns: repeat(2,1fr); }
+  .rpt-payment-grid   { grid-template-columns: repeat(2,1fr); }
+  .plan-calc-grid     { grid-template-columns: 1fr; }
+}
+@media (max-width: 500px) {
+  .rpt-summary-grid { grid-template-columns: repeat(2,1fr); }
+  .rpt-filter-bar   { flex-direction: column; }
+  .rpt-input, .rpt-select, .rpt-date { width: 100%; }
+}
+

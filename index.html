@@ -454,152 +454,297 @@
       <div class="tab-page" id="reportsTab">
         <div class="single-col-layout">
 
-          <!-- Search & Filter bar -->
-          <div class="panel-card glass-card reports-filter-bar">
-            <input type="search" id="reportSearchInput" placeholder="Search user…" class="report-search">
-            <select id="reportFilterStatus" class="report-filter-sel">
-              <option value="">All Status</option>
-              <option value="IN">IN</option>
-              <option value="OUT">OUT</option>
-              <option value="granted">Granted</option>
-              <option value="denied">Denied</option>
-            </select>
-            <input type="date" id="reportFilterDate" class="report-filter-date">
-            <button class="btn-ghost btn-sm" id="reportClearBtn">Clear</button>
-          </div>
+    <!-- Summary Cards Row -->
+    <div class="rpt-summary-grid panel-card glass-card">
+      <div class="rpt-stat-card" id="rptTotalMembers">
+        <span class="rpt-stat-icon">👥</span>
+        <div class="rpt-stat-val" id="rptTotalMembersVal">0</div>
+        <div class="rpt-stat-label">Total Members</div>
+      </div>
+      <div class="rpt-stat-card active" id="rptActiveMembers">
+        <span class="rpt-stat-icon">✅</span>
+        <div class="rpt-stat-val" id="rptActiveMembersVal">0</div>
+        <div class="rpt-stat-label">Active</div>
+      </div>
+      <div class="rpt-stat-card warning" id="rptExpiringSoon">
+        <span class="rpt-stat-icon">⚠</span>
+        <div class="rpt-stat-val" id="rptExpiringSoonVal">0</div>
+        <div class="rpt-stat-label">Expiring Soon</div>
+      </div>
+      <div class="rpt-stat-card revenue" id="rptTodayRevenue">
+        <span class="rpt-stat-icon">₹</span>
+        <div class="rpt-stat-val" id="rptTodayRevenueVal">₹0</div>
+        <div class="rpt-stat-label">Today's Revenue</div>
+      </div>
+      <div class="rpt-stat-card info" id="rptTodayCheckins">
+        <span class="rpt-stat-icon">🔑</span>
+        <div class="rpt-stat-val" id="rptTodayCheckinsVal">0</div>
+        <div class="rpt-stat-label">Today's Check-ins</div>
+      </div>
+    </div>
 
-          <!-- Attendance Table -->
-          <div class="panel-card glass-card">
-            <div class="card-head">
-              <span class="card-title">📋 Attendance Records</span>
-              <span class="badge-chip chip-blue" id="reportCountChip">0</span>
-            </div>
-            <div class="table-scroll">
-              <table class="report-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Time</th>
-                    <th>Status</th>
-                    <th>Conf.</th>
-                  </tr>
-                </thead>
-                <tbody id="reportTableBody">
-                  <tr><td colspan="4"><div class="empty-hint">No records yet.</div></td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+    <!-- Filter Bar -->
+    <div class="panel-card glass-card rpt-filter-bar">
+      <input type="search" id="rptSearch" placeholder="Search user…" class="rpt-input">
+      <select id="rptFilterPlan" class="rpt-select">
+        <option value="">All Plans</option>
+        <option value="Monthly">Monthly</option>
+        <option value="Quarterly">Quarterly</option>
+        <option value="Half-Yearly">Half-Yearly</option>
+        <option value="Yearly">Yearly</option>
+        <option value="Custom">Custom</option>
+      </select>
+      <select id="rptFilterPayment" class="rpt-select">
+        <option value="">All Payments</option>
+        <option value="Paid">Paid</option>
+        <option value="Pending">Pending</option>
+        <option value="Expired">Expired</option>
+      </select>
+      <input type="date" id="rptFilterDate" class="rpt-date">
+      <button class="btn-ghost btn-sm" id="rptClearFilters">Clear</button>
+      <button class="btn-primary btn-sm" id="rptExportBtn">⬇ Export</button>
+    </div>
 
-          <!-- User detail drawer -->
-          <div class="panel-card glass-card" id="reportUserDetail" hidden>
-            <div class="card-head">
-              <span class="card-title" id="reportDetailName">User Report</span>
-              <button class="icon-btn" id="reportDetailClose">✕</button>
-            </div>
-            <div id="reportDetailContent"></div>
-          </div>
+    <!-- Daily Admission Report Table -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">🧾 Daily Admission Report</span>
+        <span class="badge-chip chip-blue" id="rptAdmissionCount">0</span>
+      </div>
+      <div class="rpt-table-wrap">
+        <table class="rpt-table" id="admissionTable">
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Check-in</th>
+              <th>Check-out</th>
+              <th>Plan</th>
+              <th>Payment</th>
+              <th>Amount</th>
+              <th>Renewal</th>
+            </tr>
+          </thead>
+          <tbody id="admissionTableBody">
+            <tr><td colspan="7"><div class="empty-hint">No admission records.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-          <!-- Charts -->
-          <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">📊 Weekly Attendance</span></div>
-            <div id="attendanceBars" class="mini-chart"></div>
-          </div>
+    <!-- Row Detail Drawer -->
+    <div class="panel-card glass-card" id="rptDetailDrawer" hidden>
+      <div class="card-head">
+        <span class="card-title" id="rptDetailTitle">Member Detail</span>
+        <button class="icon-btn" id="rptDetailClose">✕</button>
+      </div>
+      <div id="rptDetailBody"></div>
+    </div>
 
-          <!-- Members Table -->
-          <div class="panel-card glass-card">
-            <div class="card-head">
-              <span class="card-title">👥 All Members</span>
-              <input type="search" id="userFilterInput" class="mini-search" placeholder="Filter…">
-            </div>
-            <div class="table-scroll">
-              <table class="report-table">
-                <thead><tr><th>Member</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
-                <tbody id="usersTableBody"></tbody>
-              </table>
-            </div>
+    <!-- Charts Row -->
+    <div class="rpt-charts-row">
+
+      <!-- Attendance Analytics -->
+      <div class="panel-card glass-card rpt-chart-card">
+        <div class="card-head"><span class="card-title">📈 Attendance Analytics</span></div>
+        <div class="rpt-analytics-grid" id="rptAnalyticsGrid">
+          <div class="rpt-analytic-item blue">
+            <div class="rpt-analytic-val" id="anaCheckins">0</div>
+            <div class="rpt-analytic-lbl">Check-ins</div>
+          </div>
+          <div class="rpt-analytic-item green">
+            <div class="rpt-analytic-val" id="anaCheckouts">0</div>
+            <div class="rpt-analytic-lbl">Check-outs</div>
+          </div>
+          <div class="rpt-analytic-item violet">
+            <div class="rpt-analytic-val" id="anaActive">0</div>
+            <div class="rpt-analytic-lbl">Active Now</div>
+          </div>
+          <div class="rpt-analytic-item amber">
+            <div class="rpt-analytic-val" id="anaPeak">–</div>
+            <div class="rpt-analytic-lbl">Peak Slot</div>
           </div>
         </div>
+        <div style="position:relative;height:180px;margin-top:10px;">
+          <canvas id="weeklyAttendanceChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Slot Engagement -->
+      <div class="panel-card glass-card rpt-chart-card">
+        <div class="card-head"><span class="card-title">🕒 Slot Engagement</span></div>
+        <div id="slotEngagementBars" class="slot-bars"></div>
+      </div>
+
+    </div>
+
+    <!-- Payment Details -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">💰 Payment Summary</span>
+      </div>
+      <div class="rpt-payment-grid">
+        <div class="rpt-pay-card green">
+          <div class="rpt-pay-label">Daily</div>
+          <div class="rpt-pay-val" id="payDaily">₹0</div>
+        </div>
+        <div class="rpt-pay-card blue">
+          <div class="rpt-pay-label">Weekly</div>
+          <div class="rpt-pay-val" id="payWeekly">₹0</div>
+        </div>
+        <div class="rpt-pay-card violet">
+          <div class="rpt-pay-label">Monthly</div>
+          <div class="rpt-pay-val" id="payMonthly">₹0</div>
+        </div>
+        <div class="rpt-pay-card amber">
+          <div class="rpt-pay-label">Pending</div>
+          <div class="rpt-pay-val" id="payPending">₹0</div>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table class="report-table">
+          <thead><tr><th>Member</th><th>Plan</th><th>Amount</th><th>Mode</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody id="payHistoryBody">
+            <tr><td colspan="6"><div class="empty-hint">No payment records.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Renewal Details -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">🔄 Renewal Tracker</span>
+      </div>
+      <div class="rpt-renewal-tabs">
+        <button class="rpt-rtab active" data-rtab="expiring">⚠ Expiring</button>
+        <button class="rpt-rtab" data-rtab="expired">🔴 Expired</button>
+        <button class="rpt-rtab" data-rtab="renewed">✅ Renewed</button>
+      </div>
+      <div id="renewalList" class="alert-list mt8">
+        <div class="empty-hint">No renewal data.</div>
+      </div>
+    </div>
+
+  </div>
+
       </div>
 
       <!-- ══ MEMBERSHIP TAB ══ -->
       <div class="tab-page" id="membershipTab">
         <div class="single-col-layout">
 
-          <!-- Filters -->
-          <div class="panel-card glass-card membership-filters">
-            <button class="filter-chip active" data-mfilter="all">All</button>
-            <button class="filter-chip" data-mfilter="active">🟢 Active</button>
-            <button class="filter-chip" data-mfilter="expiring">🟡 Expiring</button>
-            <button class="filter-chip" data-mfilter="expired">🔴 Expired</button>
-          </div>
+    <!-- Plan Calculator -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">🧮 Plan Calculator</span>
+      </div>
+      <div class="plan-calc-grid">
+        <label class="field-stack">
+          <span>Plan Type</span>
+          <select id="planCalcType">
+            <option value="Monthly">Monthly (30 days)</option>
+            <option value="Quarterly">Quarterly (90 days)</option>
+            <option value="Half-Yearly">Half-Yearly (180 days)</option>
+            <option value="Yearly">Yearly (365 days)</option>
+            <option value="Custom">Custom (1–29 days)</option>
+          </select>
+        </label>
+        <label class="field-stack" id="planCalcCustomWrap" hidden>
+          <span>Custom Days (1–29)</span>
+          <input type="number" id="planCalcDays" min="1" max="29" value="7" placeholder="e.g. 15">
+        </label>
+        <label class="field-stack">
+          <span>Start Date</span>
+          <input type="date" id="planCalcStart">
+        </label>
+        <label class="field-stack">
+          <span>Calculated Expiry</span>
+          <input type="date" id="planCalcExpiry" readonly placeholder="Auto-calculated">
+        </label>
+      </div>
+      <div class="plan-calc-result" id="planCalcResult" hidden>
+        <span class="plan-calc-badge" id="planCalcBadge">30 days</span>
+        <span id="planCalcText">Monthly plan · Expires on —</span>
+      </div>
+    </div>
 
-          <!-- Members list -->
-          <div class="panel-card glass-card">
-            <div class="card-head">
-              <span class="card-title">💳 Members</span>
-              <span class="badge-chip" id="membershipCountChip">0</span>
-            </div>
-            <div class="membership-list" id="membershipList">
-              <div class="empty-hint">No membership data.</div>
-            </div>
-          </div>
+    <!-- Filters -->
+    <div class="panel-card glass-card membership-filters">
+      <button class="filter-chip active" data-mfilter="all">All</button>
+      <button class="filter-chip" data-mfilter="active">🟢 Active</button>
+      <button class="filter-chip" data-mfilter="expiring">🟡 Expiring</button>
+      <button class="filter-chip" data-mfilter="expired">🔴 Expired</button>
+    </div>
 
-          <!-- Create membership -->
-          <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">➕ Add Membership</span></div>
-            <form id="membershipForm" class="compact-form">
-              <select id="membershipUserInput" required></select>
-              <div class="form-row">
-                <select id="membershipPlanInput">
-                  <option value="Monthly">Monthly</option>
-                  <option value="Quarterly">Quarterly</option>
-                  <option value="Yearly">Yearly</option>
-                  <option value="Custom">Custom</option>
-                </select>
-                <select id="membershipModeInput">
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Card">Card</option>
-                </select>
-              </div>
-              <div class="form-row">
-                <input type="date" id="membershipStartInput" required>
-                <input type="date" id="membershipExpiryInput" required>
-              </div>
-              <div class="form-row">
-                <input type="number" id="membershipAmountInput" min="0" value="0" placeholder="Amount ₹">
-                <select id="membershipStatusInput">
-                  <option value="Paid">Paid</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Expired">Expired</option>
-                </select>
-              </div>
-              <input type="text" id="membershipSourceInput" value="Frontend renewal">
-              <button type="submit" class="btn-primary btn-sm full-w">Create Membership</button>
-            </form>
-          </div>
+    <!-- Members list -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">💳 Members</span>
+        <span class="badge-chip" id="membershipCountChip">0</span>
+      </div>
+      <div class="membership-list" id="membershipList">
+        <div class="empty-hint">No membership data.</div>
+      </div>
+    </div>
 
-          <!-- Sessions -->
-          <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">🏃 Sessions</span></div>
-            <form id="sessionStartForm" class="compact-form">
-              <select id="sessionUserInput" required></select>
-              <input type="text" id="sessionAreaInput" value="Capper Sports Club Floor">
-              <label class="range-label">
-                Confidence: <strong id="sessionConfidenceValue">0.90</strong>
-                <input type="range" id="sessionConfidenceInput" min="0" max="1" step="0.01" value="0.9" class="range-input">
-              </label>
-              <button type="submit" class="btn-primary btn-sm full-w">Start Session</button>
-            </form>
-            <div class="table-scroll mt8">
-              <table class="report-table">
-                <thead><tr><th>Member</th><th>Status</th><th>Duration</th><th>Act.</th></tr></thead>
-                <tbody id="sessionsTableBody"></tbody>
-              </table>
-            </div>
-          </div>
+    <!-- Create membership -->
+    <div class="panel-card glass-card">
+      <div class="card-head"><span class="card-title">➕ Add Membership</span></div>
+      <form id="membershipForm" class="compact-form">
+        <select id="membershipUserInput" required></select>
+        <div class="form-row">
+          <select id="membershipPlanInput">
+            <option value="Monthly">Monthly</option>
+            <option value="Quarterly">Quarterly</option>
+            <option value="Half-Yearly">Half-Yearly</option>
+            <option value="Yearly">Yearly</option>
+            <option value="Custom">Custom</option>
+          </select>
+          <select id="membershipModeInput">
+            <option value="Cash">Cash</option>
+            <option value="UPI">UPI</option>
+            <option value="Card">Card</option>
+          </select>
         </div>
+        <div class="form-row">
+          <input type="date" id="membershipStartInput" required>
+          <input type="date" id="membershipExpiryInput" required>
+        </div>
+        <div class="form-row">
+          <input type="number" id="membershipAmountInput" min="0" value="0" placeholder="Amount ₹">
+          <select id="membershipStatusInput">
+            <option value="Paid">Paid</option>
+            <option value="Pending">Pending</option>
+            <option value="Expired">Expired</option>
+          </select>
+        </div>
+        <input type="text" id="membershipSourceInput" value="Frontend renewal">
+        <button type="submit" class="btn-primary btn-sm full-w">Create Membership</button>
+      </form>
+    </div>
+
+    <!-- Sessions -->
+    <div class="panel-card glass-card">
+      <div class="card-head"><span class="card-title">🏃 Sessions</span></div>
+      <form id="sessionStartForm" class="compact-form">
+        <select id="sessionUserInput" required></select>
+        <input type="text" id="sessionAreaInput" value="Capper Sports Club Floor">
+        <label class="range-label">
+          Confidence: <strong id="sessionConfidenceValue">0.90</strong>
+          <input type="range" id="sessionConfidenceInput" min="0" max="1" step="0.01" value="0.9" class="range-input">
+        </label>
+        <button type="submit" class="btn-primary btn-sm full-w">Start Session</button>
+      </form>
+      <div class="table-scroll mt8">
+        <table class="report-table">
+          <thead><tr><th>Member</th><th>Status</th><th>Duration</th><th>Act.</th></tr></thead>
+          <tbody id="sessionsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
       </div>
 
       <!-- ══ ALERTS TAB ══ -->
@@ -726,8 +871,10 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <script src="vendor/face-api.min.js"></script>
   <script src="face-ai.js"></script>
   <script src="script.js"></script>
 </body>
+
 </html>

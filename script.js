@@ -45,7 +45,7 @@ const S = {
   scanStatusDetail: 'Enable Live Scan to start face recognition.',
   cooldowns: loadCooldownStore(),
   cooldownVoiceAt: {},
-  activeSessions: {},        // { userId: { startTime, name, duration, announced5, announcedEnd } }
+  activeSessions: {},        // { userId: { sessionId, startTime, deadlineTime, duration, name, announced5, announcedEnd } }
   sessionTimerLoop: null,
   enrollmentImages: [],
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
@@ -86,6 +86,7 @@ function initUi() {
   // Set default tab
   openTab('liveOpsTab');
   restoreSessionTimers();
+  initReportsModule();
 }
 
 function bindEvents() {
@@ -324,6 +325,7 @@ async function loadAdmin() {
   S.sessions = toArr(sessions); S.reports = reports || null; S.announcements = toArr(ann);
   S.faceUsers = toArr(embeddings);
   syncCooldownStoreFromUsers(S.users);
+  syncActiveSessionsFromBackend();
 }
 
 async function loadMember() {
@@ -358,6 +360,7 @@ function renderAll() {
   renderReports();
   renderMembershipList();
   renderAlerts();
+  renderReportsAll();
   renderEnrollGallery();
   renderMember();
   renderScannerStatus();
@@ -372,6 +375,7 @@ function openTab(id) {
   S.activeTab = id;
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === id));
+  if (id === 'reportsTab') renderReportsAll();
 }
 
 /* ── CONSOLE STATE ──────────────────────────────── */
@@ -686,6 +690,367 @@ function renderMembershipList() {
     : '<div class="empty-hint">No members found.</div>';
 }
 
+/* ═══════════════════════════════════════════════
+   REPORTS MODULE
+   ═══════════════════════════════════════════════ */
+
+const RPT = {
+  search: '', plan: '', payment: '', date: '',
+  renewalTab: 'expiring',
+};
+
+function initReportsModule() {
+  $('rptSearch').addEventListener('input', e => { RPT.search = e.target.value; renderReportsAll(); });
+  $('rptFilterPlan').addEventListener('change', e => { RPT.plan = e.target.value; renderReportsAll(); });
+  $('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
+  $('rptFilterDate').addEventListener('change', e => { RPT.date = e.target.value; renderReportsAll(); });
+  $('rptClearFilters').addEventListener('click', clearRptFilters);
+  $('rptDetailClose').addEventListener('click', () => { $('rptDetailDrawer').hidden = true; });
+  $('admissionTable').addEventListener('click', handleAdmissionRowClick);
+  $('rptExportBtn').addEventListener('click', exportReportCSV);
+
+  document.querySelectorAll('.rpt-rtab').forEach(btn =>
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rpt-rtab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      RPT.renewalTab = btn.dataset.rtab;
+      renderRenewalList();
+    })
+  );
+
+  // Plan calculator
+  $('planCalcType').addEventListener('change', calcPlanExpiry);
+  $('planCalcStart').addEventListener('input', calcPlanExpiry);
+  $('planCalcDays').addEventListener('input', calcPlanExpiry);
+  $('planCalcStart').value = isoDate(new Date());
+  calcPlanExpiry();
+}
+
+function clearRptFilters() {
+  RPT.search = ''; RPT.plan = ''; RPT.payment = ''; RPT.date = '';
+  $('rptSearch').value = ''; $('rptFilterPlan').value = '';
+  $('rptFilterPayment').value = ''; $('rptFilterDate').value = '';
+  renderReportsAll();
+}
+
+function renderReportsAll() {
+  renderSummaryCards();
+  renderAdmissionTable();
+  renderPaymentSummary();
+  renderRenewalList();
+  renderAttendanceAnalytics();
+  renderSlotEngagement();
+}
+
+function renderSummaryCards() {
+  const users = S.users.filter(u => u.role === 'user');
+  const now = new Date();
+  const active = users.filter(u => u.membershipExpiry && new Date(u.membershipExpiry) >= now);
+  const expiring = users.filter(u => {
+    if (!u.membershipExpiry) return false;
+    const days = (new Date(u.membershipExpiry) - now) / 86400000;
+    return days >= 0 && days <= 7;
+  });
+  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === localDateKey());
+  const todayRevenue = S.users
+    .filter(u => u.role === 'user' && localDateKey(u.membershipStart) === localDateKey())
+    .reduce((sum, u) => sum + Number(u.paymentAmount || 0), 0);
+
+  $('rptTotalMembersVal').textContent = users.length;
+  $('rptActiveMembersVal').textContent = active.length;
+  $('rptExpiringSoonVal').textContent = expiring.length;
+  $('rptTodayRevenueVal').textContent = fmtMoney(todayRevenue);
+  $('rptTodayCheckinsVal').textContent = todaySessions.length;
+  $('rptAdmissionCount').textContent = getFilteredAdmissions().length;
+}
+
+function getFilteredAdmissions() {
+  return S.sessions.filter(s => {
+    const user = S.users.find(u => u.id === s.userId);
+    if (!user) return false;
+    if (RPT.search) {
+      const q = RPT.search.toLowerCase();
+      if (!(user.name||'').toLowerCase().includes(q) &&
+          !(user.memberId||'').toLowerCase().includes(q)) return false;
+    }
+    if (RPT.plan && user.membershipPlan !== RPT.plan) return false;
+    if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
+    if (RPT.date && !localDateKey(s.startedAt).startsWith(RPT.date)) return false;
+    return true;
+  });
+}
+
+function renderAdmissionTable() {
+  const records = getFilteredAdmissions();
+  $('rptAdmissionCount').textContent = records.length;
+  $('admissionTableBody').innerHTML = records.length
+    ? records.map(s => {
+        const user = S.users.find(u => u.id === s.userId) || {};
+        const now = new Date();
+        const exp = user.membershipExpiry ? new Date(user.membershipExpiry) : null;
+        const daysLeft = exp ? Math.ceil((exp - now) / 86400000) : null;
+        const renewalStatus = !exp ? 'Unknown'
+          : daysLeft < 0 ? 'Expired'
+          : daysLeft <= 7 ? 'Expiring'
+          : 'Active';
+        const renewTone = renewalStatus === 'Expired' ? 'tone-red'
+          : renewalStatus === 'Expiring' ? 'tone-amber' : 'tone-green';
+        return `<tr class="rpt-row" data-session-id="${esc(s.id)}" data-user-id="${esc(s.userId)}">
+          <td>
+            <div class="t-primary">${esc(user.name||'Unknown')}</div>
+            <div class="t-secondary">${esc(user.memberId||'-')}</div>
+          </td>
+          <td class="t-secondary">${esc(fmtDT(s.startedAt))}</td>
+          <td class="t-secondary">${s.endedAt ? esc(fmtDT(s.endedAt)) : '<span class="status-chip tone-green">Active</span>'}</td>
+          <td>${chip(user.membershipPlan||'slate', user.membershipPlan||'-')}</td>
+          <td>${chip(user.paymentStatus||'slate', user.paymentStatus||'-')}</td>
+          <td class="t-secondary">${fmtMoney(user.paymentAmount||0)}</td>
+          <td><span class="status-chip ${renewTone}">${renewalStatus}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="7"><div class="empty-hint">No records match the filters.</div></td></tr>`;
+}
+
+function handleAdmissionRowClick(e) {
+  const row = e.target.closest('tr[data-user-id]');
+  if (!row) return;
+  const userId = row.dataset.userId;
+  const user = S.users.find(u => u.id === userId);
+  if (!user) return;
+  const userSessions = S.sessions.filter(s => s.userId === userId);
+  const now = new Date();
+  const exp = user.membershipExpiry ? new Date(user.membershipExpiry) : null;
+  const daysLeft = exp ? Math.ceil((exp - now) / 86400000) : null;
+
+  $('rptDetailTitle').textContent = `📊 ${user.name}`;
+  $('rptDetailBody').innerHTML = `
+    <div class="meta-grid" style="margin-bottom:10px;">
+      ${meta('Member ID', user.memberId)} ${meta('Plan', user.membershipPlan)}
+      ${meta('Payment', user.paymentStatus)} ${meta('Amount', fmtMoney(user.paymentAmount||0))}
+      ${meta('Expires', user.membershipExpiry||'-')} ${meta('Days Left', daysLeft !== null ? String(daysLeft) : '-')}
+      ${meta('Slot', user.slotName||'-')} ${meta('Mobile', user.mobileNumber||'-')}
+    </div>
+    <div class="card-sub-head">Session History</div>
+    <div class="table-scroll" style="max-height:140px;">
+      <table class="report-table">
+        <thead><tr><th>Check-in</th><th>Check-out</th><th>Duration</th><th>Status</th></tr></thead>
+        <tbody>${userSessions.slice(0,8).map(s=>`<tr>
+          <td class="t-secondary">${esc(fmtDT(s.startedAt))}</td>
+          <td class="t-secondary">${s.endedAt ? esc(fmtDT(s.endedAt)) : '–'}</td>
+          <td class="t-secondary">${esc(fmtDur(s.durationMinutes))}</td>
+          <td>${chip(s.status, s.status)}</td>
+        </tr>`).join('') || `<tr><td colspan="4"><div class="empty-hint">No sessions.</div></td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+  $('rptDetailDrawer').hidden = false;
+}
+
+function renderPaymentSummary() {
+  const now = new Date();
+  const startOfDay   = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfWeek  = new Date(startOfDay); startOfWeek.setDate(startOfDay.getDate() - startOfDay.getDay());
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const paidUsers = S.users.filter(u => u.role === 'user' && u.paymentStatus === 'Paid');
+  const calc = (from) => paidUsers
+    .filter(u => u.membershipStart && new Date(u.membershipStart) >= from)
+    .reduce((sum, u) => sum + Number(u.paymentAmount || 0), 0);
+
+  $('payDaily').textContent   = fmtMoney(calc(startOfDay));
+  $('payWeekly').textContent  = fmtMoney(calc(startOfWeek));
+  $('payMonthly').textContent = fmtMoney(calc(startOfMonth));
+  $('payPending').textContent = fmtMoney(
+    S.users.filter(u => u.role === 'user' && u.paymentStatus === 'Pending')
+      .reduce((sum, u) => sum + Number(u.paymentAmount || 0), 0)
+  );
+
+  const payRows = S.users.filter(u => u.role === 'user' && u.paymentAmount > 0);
+  $('payHistoryBody').innerHTML = payRows.length
+    ? payRows.map(u => `<tr>
+        <td><div class="t-primary">${esc(u.name)}</div></td>
+        <td>${esc(u.membershipPlan||'-')}</td>
+        <td>${fmtMoney(u.paymentAmount||0)}</td>
+        <td>${esc(u.paymentMode||'-')}</td>
+        <td>${chip(u.paymentStatus||'slate', u.paymentStatus||'-')}</td>
+        <td class="t-secondary">${esc(u.membershipStart||'-')}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="6"><div class="empty-hint">No payment records.</div></td></tr>`;
+}
+
+function renderRenewalList() {
+  const now = new Date();
+  const users = S.users.filter(u => u.role === 'user');
+  let list = [];
+
+  if (RPT.renewalTab === 'expiring') {
+    list = users.filter(u => {
+      if (!u.membershipExpiry) return false;
+      const d = (new Date(u.membershipExpiry) - now) / 86400000;
+      return d >= 0 && d <= 7;
+    });
+  } else if (RPT.renewalTab === 'expired') {
+    list = users.filter(u => u.membershipExpiry && new Date(u.membershipExpiry) < now);
+  } else {
+    list = users.filter(u => {
+      if (!u.membershipStart) return false;
+      const d = (now - new Date(u.membershipStart)) / 864e5;
+      return d <= 30;
+    });
+  }
+
+  $('renewalList').innerHTML = list.length
+    ? list.map(u => {
+        const exp = u.membershipExpiry ? new Date(u.membershipExpiry) : null;
+        const daysLeft = exp ? Math.ceil((exp - now) / 86400000) : null;
+        const tone = RPT.renewalTab === 'expired' ? 'alert-error'
+          : RPT.renewalTab === 'expiring' ? 'alert-warn' : 'alert-info';
+        return `<div class="alert-item ${tone}">
+          <div class="alert-top">
+            <span class="alert-name">${esc(u.name)}</span>
+            ${chip(u.membershipPlan||'slate', u.membershipPlan||'-')}
+          </div>
+          <p class="alert-msg">${esc(u.memberId||'-')} · ${fmtMoney(u.paymentAmount||0)}</p>
+          <span class="alert-time">
+            Expires: ${esc(u.membershipExpiry||'Unknown')}
+            ${daysLeft !== null ? ` · ${daysLeft < 0 ? Math.abs(daysLeft)+' days ago' : daysLeft+' days left'}` : ''}
+          </span>
+        </div>`;
+      }).join('')
+    : `<div class="empty-hint">No ${RPT.renewalTab} memberships.</div>`;
+}
+
+function renderAttendanceAnalytics() {
+  const sessions = S.sessions;
+  const checkins  = sessions.filter(s => s.startedAt).length;
+  const checkouts = sessions.filter(s => s.endedAt).length;
+  const active    = sessions.filter(s => s.status === 'active').length;
+
+  // Peak slot from startedAt hours
+  const hourCount = {};
+  sessions.forEach(s => {
+    if (!s.startedAt) return;
+    const h = new Date(s.startedAt).getHours();
+    const slot = h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
+    hourCount[slot] = (hourCount[slot] || 0) + 1;
+  });
+  const peak = Object.entries(hourCount).sort((a,b) => b[1]-a[1])[0]?.[0] || '–';
+
+  $('anaCheckins').textContent  = checkins;
+  $('anaCheckouts').textContent = checkouts;
+  $('anaActive').textContent    = active;
+  $('anaPeak').textContent      = peak;
+
+  // Weekly bar chart
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const counts = Array(7).fill(0);
+  sessions.forEach(s => {
+    if (!s.startedAt) return;
+    counts[new Date(s.startedAt).getDay()]++;
+  });
+
+  if (window._weeklyChart) { window._weeklyChart.destroy(); }
+  const ctx = document.getElementById('weeklyAttendanceChart');
+  if (!ctx) return;
+  window._weeklyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: days,
+      datasets: [{
+        label: 'Check-ins',
+        data: counts,
+        backgroundColor: 'rgba(99,102,241,0.7)',
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' } }
+      }
+    }
+  });
+}
+
+function renderSlotEngagement() {
+  const slotMap = { Morning: 0, Afternoon: 0, Evening: 0 };
+  S.sessions.forEach(s => {
+    if (!s.startedAt) return;
+    const h = new Date(s.startedAt).getHours();
+    if (h < 12) slotMap.Morning++;
+    else if (h < 17) slotMap.Afternoon++;
+    else slotMap.Evening++;
+  });
+
+  const maxVal = Math.max(...Object.values(slotMap), 1);
+  const colors = { Morning: '#f59e0b', Afternoon: '#6366f1', Evening: '#10b981' };
+  const icons  = { Morning: '🌅', Afternoon: '☀', Evening: '🌙' };
+
+  $('slotEngagementBars').innerHTML = Object.entries(slotMap).map(([slot, count]) => {
+    const pct = Math.round((count / maxVal) * 100);
+    return `<div class="slot-bar-row">
+      <div class="slot-bar-label">${icons[slot]} ${slot}</div>
+      <div class="slot-bar-track">
+        <div class="slot-bar-fill" style="width:${pct}%;background:${colors[slot]};"></div>
+      </div>
+      <div class="slot-bar-count">${count}</div>
+    </div>`;
+  }).join('');
+}
+
+function exportReportCSV() {
+  const records = getFilteredAdmissions();
+  if (!records.length) { toast('No data to export.', 'warning'); return; }
+  const headers = ['Name','Member ID','Check-in','Check-out','Plan','Payment','Amount'];
+  const rows = records.map(s => {
+    const u = S.users.find(x => x.id === s.userId) || {};
+    return [
+      u.name||'', u.memberId||'', fmtDT(s.startedAt),
+      s.endedAt ? fmtDT(s.endedAt) : '',
+      u.membershipPlan||'', u.paymentStatus||'', u.paymentAmount||0
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+  });
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `capper-report-${isoDate(new Date())}.csv`;
+  a.click();
+  toast('Report exported!', 'success');
+}
+
+/* ── PLAN CALCULATOR ─────────────────────────────── */
+function calcPlanExpiry() {
+  const type = $('planCalcType').value;
+  const isCustom = type === 'Custom';
+  $('planCalcCustomWrap').hidden = !isCustom;
+
+  const startVal = $('planCalcStart').value;
+  if (!startVal) return;
+
+  const start = new Date(startVal);
+  const daysMap = { Monthly: 30, Quarterly: 90, 'Half-Yearly': 180, Yearly: 365 };
+  const days = isCustom
+    ? Math.min(29, Math.max(1, Number($('planCalcDays').value) || 7))
+    : daysMap[type] || 30;
+
+  const expiry = addDays(start, days);
+  $('planCalcExpiry').value = isoDate(expiry);
+
+  const result = $('planCalcResult');
+  result.hidden = false;
+  $('planCalcBadge').textContent = `${days} days`;
+  $('planCalcText').textContent = `${type} plan · Expires on ${isoDate(expiry)}`;
+
+  // Sync with membership form
+  $('membershipStartInput').value = startVal;
+  $('membershipExpiryInput').value = isoDate(expiry);
+  $('membershipPlanInput').value = type;
+}
+
+
 /* ── ALERTS ──────────────────────────────────────── */
 function renderAlerts() {
   const now = new Date();
@@ -827,12 +1192,17 @@ function renderMember() {
 
 /* ── TTS ─────────────────────────────────────────── */
 function renderTts() {
-  const map = { ready:{label:'READY',cls:'chip-blue'}, browser:{label:'BROWSER',cls:'chip-green'}, error:{label:'ERROR',cls:'chip-rose'} };
+  const map = {
+    ready:{label:'READY',cls:'chip-blue'},
+    server:{label:'ELEVEN',cls:'chip-green'},
+    browser:{label:'BROWSER',cls:'chip-green'},
+    error:{label:'ERROR',cls:'chip-rose'},
+  };
   const s = map[S.ttsMode] || map.ready;
   $('ttsModeChip').className = `badge-chip ${s.cls}`;
   $('ttsModeChip').textContent = s.label;
   $('ttsStatusText').textContent = S.ttsStatusText;
-  $('ttsAudio').hidden = true;
+  $('ttsAudio').hidden = S.ttsMode !== 'server';
 }
 
 /* ═══════════════════════════════════════════════
@@ -1007,7 +1377,13 @@ function handleSessionsClick(e) {
 }
 async function endSession(id) {
   if (!ensureAdmin()) return;
-  try { await api('/session/end', { method:'POST', body: { sessionId: id } }); toast('Session ended.','success'); await refreshAll(); }
+  try {
+    const session = toArr(S.sessions).find(item => String(item.id) === String(id));
+    await api('/session/end', { method:'POST', body: { sessionId: id } });
+    if (session?.userId) stopSessionTimer(session.userId);
+    toast('Session ended.','success');
+    await refreshAll();
+  }
   catch (err) { handleErr(err, { toast: true }); }
 }
 
@@ -1607,13 +1983,52 @@ async function doSpeak(text) {
   const message = String(text || '').trim();
   if (!message) return false;
   clearAudio();
-  const ok = await speakBrowser(message);
-  if (ok) {
-    setTtsMode('browser', 'Browser voice is active.');
+  const serverOk = await speakServerAudio(message);
+  if (serverOk) {
+    setTtsMode('server', 'ElevenLabs voice is active.');
     return true;
   }
-  setTtsMode('error', 'Web Speech API is unavailable in this browser.');
+  const browserOk = await speakBrowser(message);
+  if (browserOk) {
+    setTtsMode('browser', 'Browser voice fallback is active.');
+    return true;
+  }
+  setTtsMode('error', 'ElevenLabs and Web Speech are unavailable.');
   return false;
+}
+
+async function speakServerAudio(text) {
+  const message = String(text || '').trim();
+  if (!message || !S.token || !isAdmin()) return false;
+
+  try {
+    const response = await fetch(`${S.apiBase}/tts`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {
+        'Authorization': `Bearer ${S.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: message }),
+    });
+
+    if (!response.ok) return false;
+
+    const audioBlob = await response.blob();
+    if (!audioBlob.size) return false;
+
+    const audio = $('ttsAudio');
+    S.audioUrl = URL.createObjectURL(audioBlob);
+    audio.src = S.audioUrl;
+    audio.hidden = false;
+    await unlockAudioPlayback().catch(() => {});
+    await audio.play();
+    await waitForAudioComplete(audio, 60000);
+    return true;
+  } catch {
+    clearAudio();
+    return false;
+  }
 }
 
 async function handleTts(e) {
@@ -2210,7 +2625,9 @@ function applyScanResult(r) {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
     speakText(r.ttsMessage || `${isExit ? 'Exit' : 'Entry'} marked for ${r.name || 'the member'}`, 'HIGH');
-    if (!isExit && r.userId) {
+    if (!isExit && r.session) {
+      upsertActiveSessionFromBackend(r.session);
+    } else if (!isExit && r.userId) {
       startSessionTimer(r.userId, r.name || 'Member');
     }
     if (isExit && r.userId) {
@@ -2248,47 +2665,118 @@ function applyScanResult(r) {
 const SESSION_DURATION_MS = 70 * 60 * 1000;
 const SESSION_TIMER_GRACE_MS = 10 * 60 * 1000;
 
+function parseTimestampMs(value) {
+  const parsed = Date.parse(String(value || ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function ensureSessionTimerLoop() {
+  const hasActive = Object.keys(S.activeSessions).length > 0;
+  if (hasActive && !S.sessionTimerLoop) {
+    S.sessionTimerLoop = setInterval(tickSessionTimers, 1000);
+  } else if (!hasActive && S.sessionTimerLoop) {
+    clearInterval(S.sessionTimerLoop);
+    S.sessionTimerLoop = null;
+  }
+}
+
+function buildActiveSessionState(session, existing = null) {
+  const startedAtMs = parseTimestampMs(session?.startedAt);
+  const startTime = startedAtMs || Number(existing?.startTime) || Date.now();
+  const deadlineTime = parseTimestampMs(session?.slotEndAt)
+    || (startedAtMs ? (startTime + SESSION_DURATION_MS) : 0)
+    || Number(existing?.deadlineTime)
+    || (startTime + SESSION_DURATION_MS);
+  const duration = Math.max(1000, deadlineTime - startTime);
+  const sameSession = String(existing?.sessionId || '') === String(session?.id || '');
+
+  return {
+    sessionId: String(session?.id || existing?.sessionId || ''),
+    userId: String(session?.userId || existing?.userId || ''),
+    startTime,
+    deadlineTime,
+    duration,
+    name: session?.name || existing?.name || 'Member',
+    announced5: sameSession ? Boolean(existing?.announced5) : false,
+    announcedEnd: sameSession ? Boolean(existing?.announcedEnd) : false,
+  };
+}
+
+function upsertActiveSessionFromBackend(session) {
+  const userId = String(session?.userId || '');
+  if (!userId) return;
+  if (String(session?.status || '').toLowerCase() !== 'active') {
+    stopSessionTimer(userId);
+    return;
+  }
+
+  S.activeSessions[userId] = buildActiveSessionState(session, S.activeSessions[userId]);
+  persistSessionTimers();
+  ensureSessionTimerLoop();
+  renderActiveSessionsPanel();
+}
+
+function syncActiveSessionsFromBackend() {
+  const nextSessions = {};
+  toArr(S.sessions)
+    .filter(session => String(session?.status || '').toLowerCase() === 'active')
+    .forEach(session => {
+      const userId = String(session?.userId || '');
+      if (!userId) return;
+      nextSessions[userId] = buildActiveSessionState(session, S.activeSessions[userId]);
+    });
+
+  S.activeSessions = nextSessions;
+  persistSessionTimers();
+  ensureSessionTimerLoop();
+  renderActiveSessionsPanel();
+}
+
 function startSessionTimer(userId, name) {
-  if (!userId || S.activeSessions[userId]) return;
-  S.activeSessions[userId] = {
-    startTime: Date.now(),
-    name: name || 'Member',
+  const normalizedUserId = String(userId || '');
+  if (!normalizedUserId) return;
+
+  const startTime = Date.now();
+  S.activeSessions[normalizedUserId] = {
+    sessionId: String(S.activeSessions[normalizedUserId]?.sessionId || ''),
+    userId: normalizedUserId,
+    startTime,
+    deadlineTime: startTime + SESSION_DURATION_MS,
     duration: SESSION_DURATION_MS,
     announced5: false,
     announcedEnd: false,
+    name: name || S.activeSessions[normalizedUserId]?.name || 'Member',
   };
   persistSessionTimers();
-  if (!S.sessionTimerLoop) {
-    S.sessionTimerLoop = setInterval(tickSessionTimers, 1000);
-  }
+  ensureSessionTimerLoop();
   renderActiveSessionsPanel();
 }
 
 function stopSessionTimer(userId) {
-  if (!S.activeSessions[userId]) return;
-  delete S.activeSessions[userId];
+  const normalizedUserId = String(userId || '');
+  if (!S.activeSessions[normalizedUserId]) return;
+  delete S.activeSessions[normalizedUserId];
   persistSessionTimers();
-  if (!Object.keys(S.activeSessions).length) {
-    clearInterval(S.sessionTimerLoop);
-    S.sessionTimerLoop = null;
-  }
+  ensureSessionTimerLoop();
   renderActiveSessionsPanel();
 }
 
 function tickSessionTimers() {
   const now = Date.now();
   let dirty = false;
-  let anyActive = false;
 
   Object.entries(S.activeSessions).forEach(([userId, sess]) => {
-    const elapsed = now - sess.startTime;
-    if (elapsed >= sess.duration + SESSION_TIMER_GRACE_MS) {
+    const startTime = Number(sess.startTime || now);
+    const duration = Math.max(1000, Number(sess.duration || SESSION_DURATION_MS));
+    const deadlineTime = Number(sess.deadlineTime || (startTime + duration));
+    const remaining = deadlineTime - now;
+
+    if (now >= deadlineTime + SESSION_TIMER_GRACE_MS) {
       delete S.activeSessions[userId];
       dirty = true;
       return;
     }
 
-    const remaining = sess.duration - elapsed;
     if (!sess.announced5 && remaining <= 5 * 60 * 1000 && remaining > 0) {
       sess.announced5 = true;
       dirty = true;
@@ -2299,16 +2787,12 @@ function tickSessionTimers() {
       dirty = true;
       speakText(`${sess.name}, your time is over`, 'HIGH');
     }
-    anyActive = true;
   });
 
   if (dirty) {
     persistSessionTimers();
   }
-  if (!anyActive) {
-    clearInterval(S.sessionTimerLoop);
-    S.sessionTimerLoop = null;
-  }
+  ensureSessionTimerLoop();
   renderActiveSessionsPanel();
 }
 
@@ -2329,15 +2813,24 @@ function restoreSessionTimers() {
     const parsed = JSON.parse(raw);
     const now = Date.now();
     Object.entries(parsed).forEach(([userId, sess]) => {
-      const elapsed = now - sess.startTime;
-      if (elapsed < sess.duration + SESSION_TIMER_GRACE_MS) {
-        S.activeSessions[userId] = sess;
+      const startTime = Number(sess?.startTime || now);
+      const duration = Math.max(1000, Number(sess?.duration || SESSION_DURATION_MS));
+      const deadlineTime = Number(sess?.deadlineTime || (startTime + duration));
+      if (now < deadlineTime + SESSION_TIMER_GRACE_MS) {
+        S.activeSessions[userId] = {
+          ...sess,
+          userId: String(sess?.userId || userId),
+          startTime,
+          duration,
+          deadlineTime,
+          name: sess?.name || 'Member',
+          announced5: Boolean(sess?.announced5),
+          announcedEnd: Boolean(sess?.announcedEnd),
+        };
       }
     });
-    if (Object.keys(S.activeSessions).length) {
-      S.sessionTimerLoop = setInterval(tickSessionTimers, 1000);
-      renderActiveSessionsPanel();
-    }
+    ensureSessionTimerLoop();
+    renderActiveSessionsPanel();
   } catch {}
 }
 
@@ -2356,13 +2849,20 @@ function renderActiveSessionsPanel() {
   }
 
   container.innerHTML = sessions.map(([userId, sess]) => {
-    const elapsed = now - sess.startTime;
-    const remaining = Math.max(0, sess.duration - elapsed);
-    const progress = Math.min(100, (elapsed / sess.duration) * 100);
+    const startTime = Number(sess.startTime || now);
+    const duration = Math.max(1000, Number(sess.duration || SESSION_DURATION_MS));
+    const deadlineTime = Number(sess.deadlineTime || (startTime + duration));
+    const elapsed = Math.max(0, now - startTime);
+    const remaining = Math.max(0, deadlineTime - now);
+    const progress = Math.min(100, (elapsed / duration) * 100);
     const elapsedStr = msToMMSS(elapsed);
     const remainStr = msToMMSS(remaining);
     const isEnding = remaining <= 5 * 60 * 1000 && remaining > 0;
     const isExpired = remaining <= 0;
+    const endAction = sess.sessionId
+      ? `endSession(${JSON.stringify(sess.sessionId)})`
+      : `stopSessionTimer(${JSON.stringify(userId)})`;
+    const endLabel = sess.sessionId ? 'End' : 'Clear';
 
     const cardClass = isExpired ? 'sess-card expired' : isEnding ? 'sess-card ending' : 'sess-card';
     const statusLabel = isExpired ? 'Expired' : isEnding ? 'Ending Soon' : 'Active';
@@ -2377,7 +2877,7 @@ function renderActiveSessionsPanel() {
           <div class="sess-id">${esc(userId)}</div>
         </div>
         <span class="status-chip ${statusTone}">${statusLabel}</span>
-        <button class="mini-btn del" onclick='stopSessionTimer(${JSON.stringify(userId)})'>End</button>
+        <button class="mini-btn del" onclick='${endAction}'>${endLabel}</button>
       </div>
       <div class="sess-times">
         <div class="sess-time-block">
