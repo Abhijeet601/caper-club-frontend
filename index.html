@@ -483,6 +483,40 @@
       </div>
     </div>
 
+    <!-- Quick Filter Buttons -->
+    <div class="panel-card glass-card rpt-quick-filters">
+      <button class="rpt-qbtn active" data-qfilter="all">All</button>
+      <button class="rpt-qbtn" data-qfilter="today-admissions">📋 Today's Admissions</button>
+      <button class="rpt-qbtn" data-qfilter="today-renewals">🔄 Today's Renewals</button>
+      <button class="rpt-qbtn" data-qfilter="today-checkins">🔑 Today's Check-ins</button>
+      <button class="rpt-qbtn" data-qfilter="cash">💵 Cash</button>
+      <button class="rpt-qbtn" data-qfilter="upi">📱 UPI</button>
+    </div>
+
+    <!-- Live Dynamic Summary -->
+    <div class="rpt-live-summary panel-card glass-card">
+      <div class="rpt-live-item">
+        <span class="rpt-live-label">Admissions Today</span>
+        <span class="rpt-live-val" id="liveAdmissions">0</span>
+      </div>
+      <div class="rpt-live-item">
+        <span class="rpt-live-label">Renewals Today</span>
+        <span class="rpt-live-val" id="liveRenewals">0</span>
+      </div>
+      <div class="rpt-live-item">
+        <span class="rpt-live-label">Cash Today</span>
+        <span class="rpt-live-val" id="liveCash">₹0</span>
+      </div>
+      <div class="rpt-live-item">
+        <span class="rpt-live-label">UPI Today</span>
+        <span class="rpt-live-val" id="liveUpi">₹0</span>
+      </div>
+      <div class="rpt-live-item">
+        <span class="rpt-live-label">Total Revenue</span>
+        <span class="rpt-live-val" id="liveTotalRevenue">₹0</span>
+      </div>
+    </div>
+
     <!-- Filter Bar -->
     <div class="panel-card glass-card rpt-filter-bar">
       <input type="search" id="rptSearch" placeholder="Search user…" class="rpt-input">

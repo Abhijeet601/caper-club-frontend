@@ -722,13 +722,14 @@ function renderMembershipList() {
 const RPT = {
   search: '', plan: '', payment: '', date: '', mode: '',
   renewalTab: 'expiring',
+  quickFilter: 'all',
 };
 
 function initReportsModule() {
   $('rptSearch').addEventListener('input', e => { RPT.search = e.target.value; renderReportsAll(); });
   $('rptFilterPlan').addEventListener('change', e => { RPT.plan = e.target.value; renderReportsAll(); });
-$('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
-$('rptFilterMode') && $('rptFilterMode').addEventListener('change', e => { RPT.mode = e.target.value; renderReportsAll(); });
+  $('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
+  $('rptFilterMode') && $('rptFilterMode').addEventListener('change', e => { RPT.mode = e.target.value; renderReportsAll(); });
   $('rptFilterDate').addEventListener('change', e => { RPT.date = e.target.value; renderReportsAll(); });
   $('rptClearFilters').addEventListener('click', clearRptFilters);
   $('rptDetailClose').addEventListener('click', () => { $('rptDetailDrawer').hidden = true; });
@@ -741,6 +742,16 @@ $('rptFilterMode') && $('rptFilterMode').addEventListener('change', e => { RPT.m
       btn.classList.add('active');
       RPT.renewalTab = btn.dataset.rtab;
       renderRenewalList();
+    })
+  );
+
+  document.querySelectorAll('.rpt-qbtn').forEach(btn =>
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.rpt-qbtn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      RPT.quickFilter = btn.dataset.qfilter;
+      applyQuickFilter(RPT.quickFilter);
+      renderReportsAll();
     })
   );
 
@@ -757,11 +768,49 @@ function clearRptFilters() {
   $('rptSearch').value = ''; $('rptFilterPlan').value = '';
   $('rptFilterPayment').value = ''; $('rptFilterDate').value = '';
   $('rptFilterMode') && ($('rptFilterMode').value = '');
+  RPT.quickFilter = 'all';
+  document.querySelectorAll('.rpt-qbtn').forEach(btn => btn.classList.toggle('active', btn.dataset.qfilter === 'all'));
   renderReportsAll();
+}
+
+function applyQuickFilter(filter) {
+  RPT.search = ''; RPT.plan = ''; RPT.payment = ''; RPT.date = ''; RPT.mode = '';
+  $('rptSearch').value = '';
+  $('rptFilterPlan').value = '';
+  $('rptFilterPayment').value = '';
+  $('rptFilterDate').value = '';
+  $('rptFilterMode') && ($('rptFilterMode').value = '');
+
+  const today = isoDate(new Date());
+  switch (filter) {
+    case 'today-admissions':
+    case 'today-checkins':
+      RPT.date = today;
+      break;
+    case 'today-renewals':
+      RPT.date = today;
+      RPT.payment = 'Paid';
+      break;
+    case 'cash':
+      RPT.mode = 'Cash';
+      RPT.date = today;
+      break;
+    case 'upi':
+      RPT.mode = 'UPI';
+      RPT.date = today;
+      break;
+    default:
+      break;
+  }
+
+  if ($('rptFilterDate')) $('rptFilterDate').value = RPT.date;
+  if ($('rptFilterPayment')) $('rptFilterPayment').value = RPT.payment;
+  if ($('rptFilterMode')) $('rptFilterMode').value = RPT.mode;
 }
 
 function renderReportsAll() {
   renderSummaryCards();
+  renderLiveSummary();
   renderAdmissionTable();
   renderPaymentSummary();
   renderRenewalList();
@@ -791,6 +840,32 @@ function renderSummaryCards() {
   $('rptAdmissionCount').textContent = getFilteredAdmissions().length;
 }
 
+function renderLiveSummary() {
+  const today = isoDate(new Date());
+  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
+  const todayUsers = S.users.filter(u => u.role === 'user' && localDateKey(u.membershipStart) === today);
+
+  const cashToday = todayUsers
+    .filter(u => u.paymentMode === 'Cash' && u.paymentStatus === 'Paid')
+    .reduce((s, u) => s + Number(u.paymentAmount || 0), 0);
+  const upiToday = todayUsers
+    .filter(u => u.paymentMode === 'UPI' && u.paymentStatus === 'Paid')
+    .reduce((s, u) => s + Number(u.paymentAmount || 0), 0);
+  const renewalsToday = todayUsers.filter(u => u.paymentStatus === 'Paid').length;
+
+  const liveAdmissions = document.getElementById('liveAdmissions');
+  const liveRenewals = document.getElementById('liveRenewals');
+  const liveCash = document.getElementById('liveCash');
+  const liveUpi = document.getElementById('liveUpi');
+  const liveTotalRev = document.getElementById('liveTotalRevenue');
+
+  if (liveAdmissions) liveAdmissions.textContent = todaySessions.length;
+  if (liveRenewals) liveRenewals.textContent = renewalsToday;
+  if (liveCash) liveCash.textContent = fmtMoney(cashToday);
+  if (liveUpi) liveUpi.textContent = fmtMoney(upiToday);
+  if (liveTotalRev) liveTotalRev.textContent = fmtMoney(cashToday + upiToday);
+}
+
 function getFilteredAdmissions() {
   return S.sessions.filter(s => {
     const user = S.users.find(u => u.id === s.userId);
@@ -801,8 +876,8 @@ function getFilteredAdmissions() {
           !(user.memberId||'').toLowerCase().includes(q)) return false;
     }
     if (RPT.plan && user.membershipPlan !== RPT.plan) return false;
-if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
-if (RPT.mode && user.paymentMode !== RPT.mode) return false;
+    if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
+    if (RPT.mode && user.paymentMode !== RPT.mode) return false;
     if (RPT.date && !localDateKey(s.startedAt).startsWith(RPT.date)) return false;
     return true;
   });
@@ -810,6 +885,11 @@ if (RPT.mode && user.paymentMode !== RPT.mode) return false;
 
 function renderAdmissionTable() {
   const records = getFilteredAdmissions();
+  const tableWrap = document.querySelector('.rpt-table-wrap');
+  if (tableWrap) {
+    const isFiltered = Boolean(RPT.search || RPT.plan || RPT.payment || RPT.date || RPT.mode || RPT.quickFilter !== 'all');
+    tableWrap.classList.toggle('is-filtered', isFiltered);
+  }
   $('rptAdmissionCount').textContent = records.length;
   $('admissionTableBody').innerHTML = records.length
     ? records.map(s => {
@@ -837,7 +917,7 @@ function renderAdmissionTable() {
           <td><span class="status-chip ${renewTone}">${renewalStatus}</span></td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="7"><div class="empty-hint">No records match the filters.</div></td></tr>`;
+    : `<tr><td colspan="8"><div class="empty-hint">No records match the filters.</div></td></tr>`;
 }
 
 function handleAdmissionRowClick(e) {
