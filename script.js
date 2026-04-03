@@ -2143,7 +2143,20 @@ async function api(path, opts = {}) {
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
   if (S.token) headers.Authorization = `Bearer ${S.token}`;
   if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
-  const res = await fetch(`${S.apiBase}${path}`, init);
+  let res;
+  try {
+    res = await fetch(`${S.apiBase}${path}`, init);
+  } catch (error) {
+    if (S.healthOk) {
+      S.healthOk = false;
+      updateHealthUi();
+    }
+    throw error;
+  }
+  if (!S.healthOk) {
+    S.healthOk = true;
+    updateHealthUi();
+  }
   if (!res.ok) {
     let payload = null;
     try { payload = await res.json(); } catch {}
@@ -2213,13 +2226,42 @@ async function probeHealth(base) {
   const target = norm(base);
   if (!target) return false;
 
-  try {
-    const r = await fetch(`${target}/health`, { cache: 'no-store' });
-    if (!r.ok) return false;
-    return Boolean((await r.json()).ok);
-  } catch {
-    return false;
+  const endpoints = [`${target}/health`, target];
+
+  for (const endpoint of endpoints) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      const response = await fetch(endpoint, {
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: { 'Accept': 'application/json, text/plain;q=0.9, */*;q=0.8' },
+        signal: controller.signal,
+      });
+
+      if (!response.ok) continue;
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      if (contentType.includes('application/json')) {
+        try {
+          const payload = await response.json();
+          if (typeof payload?.ok === 'boolean') return payload.ok;
+          return true;
+        } catch {
+          return true;
+        }
+      }
+
+      return true;
+    } catch {
+      continue;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  return false;
 }
 async function ensureBackendConnection() {
   for (const base of getApiBaseCandidates()) {
