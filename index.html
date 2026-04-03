@@ -500,6 +500,12 @@
         <option value="Pending">Pending</option>
         <option value="Expired">Expired</option>
       </select>
+      <select id="rptFilterMode" class="rpt-select">
+        <option value="">All Modes</option>
+        <option value="Cash">Cash</option>
+        <option value="UPI">UPI</option>
+        <option value="Card">Card</option>
+      </select>
       <input type="date" id="rptFilterDate" class="rpt-date">
       <button class="btn-ghost btn-sm" id="rptClearFilters">Clear</button>
       <button class="btn-primary btn-sm" id="rptExportBtn">⬇ Export</button>
@@ -514,12 +520,13 @@
       <div class="rpt-table-wrap">
         <table class="rpt-table" id="admissionTable">
           <thead>
-            <tr>
+<tr>
               <th>Member</th>
               <th>Check-in</th>
               <th>Check-out</th>
               <th>Plan</th>
-              <th>Payment</th>
+              <th>Mode</th>
+              <th>Status</th>
               <th>Amount</th>
               <th>Renewal</th>
             </tr>

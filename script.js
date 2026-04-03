@@ -720,14 +720,15 @@ function renderMembershipList() {
    ═══════════════════════════════════════════════ */
 
 const RPT = {
-  search: '', plan: '', payment: '', date: '',
+  search: '', plan: '', payment: '', date: '', mode: '',
   renewalTab: 'expiring',
 };
 
 function initReportsModule() {
   $('rptSearch').addEventListener('input', e => { RPT.search = e.target.value; renderReportsAll(); });
   $('rptFilterPlan').addEventListener('change', e => { RPT.plan = e.target.value; renderReportsAll(); });
-  $('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
+$('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
+$('rptFilterMode') && $('rptFilterMode').addEventListener('change', e => { RPT.mode = e.target.value; renderReportsAll(); });
   $('rptFilterDate').addEventListener('change', e => { RPT.date = e.target.value; renderReportsAll(); });
   $('rptClearFilters').addEventListener('click', clearRptFilters);
   $('rptDetailClose').addEventListener('click', () => { $('rptDetailDrawer').hidden = true; });
@@ -752,9 +753,10 @@ function initReportsModule() {
 }
 
 function clearRptFilters() {
-  RPT.search = ''; RPT.plan = ''; RPT.payment = ''; RPT.date = '';
+  RPT.search = ''; RPT.plan = ''; RPT.payment = ''; RPT.date = ''; RPT.mode = '';
   $('rptSearch').value = ''; $('rptFilterPlan').value = '';
   $('rptFilterPayment').value = ''; $('rptFilterDate').value = '';
+  $('rptFilterMode') && ($('rptFilterMode').value = '');
   renderReportsAll();
 }
 
@@ -799,7 +801,8 @@ function getFilteredAdmissions() {
           !(user.memberId||'').toLowerCase().includes(q)) return false;
     }
     if (RPT.plan && user.membershipPlan !== RPT.plan) return false;
-    if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
+if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
+if (RPT.mode && user.paymentMode !== RPT.mode) return false;
     if (RPT.date && !localDateKey(s.startedAt).startsWith(RPT.date)) return false;
     return true;
   });
@@ -828,7 +831,8 @@ function renderAdmissionTable() {
           <td class="t-secondary">${esc(fmtDT(s.startedAt))}</td>
           <td class="t-secondary">${s.endedAt ? esc(fmtDT(s.endedAt)) : '<span class="status-chip tone-green">Active</span>'}</td>
           <td>${chip(user.membershipPlan||'slate', user.membershipPlan||'-')}</td>
-          <td>${chip(user.paymentStatus||'slate', user.paymentStatus||'-')}</td>
+<td class="t-secondary">${esc(user.paymentMode||'-')}</td>
+<td>${chip(user.paymentStatus||'slate', user.paymentStatus||'-')}</td>
           <td class="t-secondary">${fmtMoney(user.paymentAmount||0)}</td>
           <td><span class="status-chip ${renewTone}">${renewalStatus}</span></td>
         </tr>`;
