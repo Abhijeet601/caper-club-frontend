@@ -1922,7 +1922,7 @@ async function runScan(opts = {}) {
       cooldownRemainingSeconds: Number(backendResult?.cooldownRemainingSeconds || 0),
       faceBox: probe.detection.faceBox,
       source,
-      userId: match.user.id,
+      userId: match.user.id || match.user?.userId || null,
     });
     if (result.status === 'granted' && result.attendanceAction) {
       recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
@@ -2898,13 +2898,21 @@ function applyScanResult(r) {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
     speakText(r.ttsMessage || `${isExit ? 'Exit' : 'Entry'} marked for ${r.name || 'the member'}`, 'HIGH');
-    if (!isExit && r.session) {
-      upsertActiveSessionFromBackend(r.session);
-    } else if (!isExit && r.userId) {
-      startSessionTimer(r.userId, r.name || 'Member');
-    }
-    if (isExit && r.userId) {
-      stopSessionTimer(r.userId);
+
+    const resolvedUserId = r.userId
+      || r.session?.userId
+      || null;
+    const resolvedName = r.name || r.session?.name || 'Member';
+
+    if (!isExit) {
+      // Always try backend session first, fallback to local timer
+      if (r.session && r.session.userId) {
+        upsertActiveSessionFromBackend(r.session);
+      } else if (resolvedUserId) {
+        startSessionTimer(resolvedUserId, resolvedName);
+      }
+    } else {
+      if (resolvedUserId) stopSessionTimer(resolvedUserId);
     }
     return;
   }
@@ -3006,20 +3014,36 @@ function syncActiveSessionsFromBackend() {
 }
 
 function startSessionTimer(userId, name) {
-  const normalizedUserId = String(userId || '');
-  if (!normalizedUserId) return;
+  const normalizedUserId = String(userId || '').trim();
+  // Guard against invalid IDs
+  if (!normalizedUserId || normalizedUserId === 'null' || normalizedUserId === 'undefined') {
+    console.warn('[SessionTimer] Invalid userId — timer not started:', userId);
+    return;
+  }
 
   const startTime = Date.now();
+  const existing = S.activeSessions[normalizedUserId];
+
+  // Don't restart if already running and not expired
+  if (existing && Date.now() < existing.deadlineTime) {
+    console.log('[SessionTimer] Session already active for:', normalizedUserId);
+    renderActiveSessionsPanel();
+    return;
+  }
+
+  console.log('[SessionTimer] Starting timer for:', normalizedUserId, name);
   S.activeSessions[normalizedUserId] = {
-    sessionId: String(S.activeSessions[normalizedUserId]?.sessionId || ''),
+    sessionId: String(existing?.sessionId || ''),
     userId: normalizedUserId,
     startTime,
     deadlineTime: startTime + SESSION_DURATION_MS,
     duration: SESSION_DURATION_MS,
     announced5: false,
     announcedEnd: false,
-    name: name || S.activeSessions[normalizedUserId]?.name || 'Member',
+    name: name || 'Member',
   };
+  toast(`Session timer started for ${name}`, 'success');
+
   persistSessionTimers();
   ensureSessionTimerLoop();
   renderActiveSessionsPanel();
@@ -3110,6 +3134,8 @@ function restoreSessionTimers() {
 function renderActiveSessionsPanel() {
   const now = Date.now();
   const sessions = Object.entries(S.activeSessions);
+  console.log('[ActiveSessions] Rendering', sessions.length, 'sessions:', Object.keys(S.activeSessions));
+
   const countEl = document.getElementById('activeSessionCount');
   if (countEl) countEl.textContent = String(sessions.length);
 
