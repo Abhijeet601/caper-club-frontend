@@ -317,8 +317,12 @@ function logout() { clearSess(); toast('Signed out.', 'success'); }
 async function refreshAll(opts = {}) {
   await pingHealth();
   if (!S.currentUser || !S.token) { renderAll(); return; }
+  const timerSnapshot = snapshotActiveSessions();
   try {
     await Promise.all(isAdmin() ? [loadAdmin(), loadMember()] : [loadMember()]);
+    restoreMissingActiveSessions(timerSnapshot);
+    persistSessionTimers();
+    ensureSessionTimerLoop();
     if ($('lastSyncText')) $('lastSyncText').textContent = fmtDT(new Date().toISOString());
     renderAll();
     if (opts.toast) toast('Data refreshed.', 'success');
@@ -1937,7 +1941,14 @@ async function runScan(opts = {}) {
     if (opts.showToast || result.status === 'granted') {
       toast(result.message||'Scan complete.', result.status==='granted'?'success':'warning');
     }
-    if (isAdmin()) { await loadAdmin(); renderAll(); }
+    const timerSnapshot = snapshotActiveSessions();
+    if (isAdmin()) {
+      await loadAdmin();
+      restoreMissingActiveSessions(timerSnapshot);
+      persistSessionTimers();
+      ensureSessionTimerLoop();
+      renderAll();
+    }
     return result;
   } catch (err) {
     setScanState('denied','Access Denied', err?.message||'Scan failed.');
@@ -2899,17 +2910,17 @@ function applyScanResult(r) {
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
     speakText(r.ttsMessage || `${isExit ? 'Exit' : 'Entry'} marked for ${r.name || 'the member'}`, 'HIGH');
 
-    const resolvedUserId = r.userId
-      || r.session?.userId
-      || null;
+    const resolvedUserId = String(
+      r.userId || r.session?.userId || ''
+    ).trim();
     const resolvedName = r.name || r.session?.name || 'Member';
 
     if (!isExit) {
-      // Always try backend session first, fallback to local timer
-      if (r.session && r.session.userId) {
-        upsertActiveSessionFromBackend(r.session);
-      } else if (resolvedUserId) {
+      if (resolvedUserId) {
         startSessionTimer(resolvedUserId, resolvedName);
+        if (r.session?.userId) {
+          upsertActiveSessionFromBackend(r.session);
+        }
       }
     } else {
       if (resolvedUserId) stopSessionTimer(resolvedUserId);
@@ -2983,6 +2994,24 @@ function buildActiveSessionState(session, existing = null) {
   };
 }
 
+function snapshotActiveSessions() {
+  return Object.fromEntries(
+    Object.entries(S.activeSessions).map(([userId, session]) => [userId, { ...session }])
+  );
+}
+
+function restoreMissingActiveSessions(snapshot) {
+  const now = Date.now();
+  Object.entries(snapshot || {}).forEach(([userId, session]) => {
+    if (S.activeSessions[userId]) return;
+    if (now >= Number(session?.deadlineTime || 0)) return;
+    S.activeSessions[userId] = {
+      ...session,
+      userId: String(session?.userId || userId),
+    };
+  });
+}
+
 function upsertActiveSessionFromBackend(session) {
   const userId = String(session?.userId || '');
   if (!userId) return;
@@ -2998,13 +3027,26 @@ function upsertActiveSessionFromBackend(session) {
 }
 
 function syncActiveSessionsFromBackend() {
+  const now = Date.now();
   const nextSessions = {};
+
+  Object.entries(S.activeSessions).forEach(([userId, session]) => {
+    if (Number(session?.deadlineTime || 0) > now) {
+      nextSessions[userId] = session;
+    }
+  });
+
   toArr(S.sessions)
     .filter(session => String(session?.status || '').toLowerCase() === 'active')
     .forEach(session => {
-      const userId = String(session?.userId || '');
+      const userId = String(session?.userId || '').trim();
       if (!userId) return;
-      nextSessions[userId] = buildActiveSessionState(session, S.activeSessions[userId]);
+      if (nextSessions[userId]) {
+        nextSessions[userId].sessionId = String(session?.id || '');
+        nextSessions[userId].name = session?.name || nextSessions[userId].name;
+      } else {
+        nextSessions[userId] = buildActiveSessionState(session, null);
+      }
     });
 
   S.activeSessions = nextSessions;
@@ -3015,23 +3057,23 @@ function syncActiveSessionsFromBackend() {
 
 function startSessionTimer(userId, name) {
   const normalizedUserId = String(userId || '').trim();
-  // Guard against invalid IDs
-  if (!normalizedUserId || normalizedUserId === 'null' || normalizedUserId === 'undefined') {
+  if (
+    !normalizedUserId
+    || normalizedUserId === 'null'
+    || normalizedUserId === 'undefined'
+    || normalizedUserId === ''
+  ) {
     console.warn('[SessionTimer] Invalid userId — timer not started:', userId);
     return;
   }
 
-  const startTime = Date.now();
   const existing = S.activeSessions[normalizedUserId];
-
-  // Don't restart if already running and not expired
-  if (existing && Date.now() < existing.deadlineTime) {
-    console.log('[SessionTimer] Session already active for:', normalizedUserId);
+  if (existing && Date.now() < Number(existing?.deadlineTime || 0)) {
     renderActiveSessionsPanel();
     return;
   }
 
-  console.log('[SessionTimer] Starting timer for:', normalizedUserId, name);
+  const startTime = Date.now();
   S.activeSessions[normalizedUserId] = {
     sessionId: String(existing?.sessionId || ''),
     userId: normalizedUserId,
@@ -3042,7 +3084,7 @@ function startSessionTimer(userId, name) {
     announcedEnd: false,
     name: name || 'Member',
   };
-  toast(`Session timer started for ${name}`, 'success');
+  toast(`Session timer started for ${name || 'Member'}`, 'success');
 
   persistSessionTimers();
   ensureSessionTimerLoop();
