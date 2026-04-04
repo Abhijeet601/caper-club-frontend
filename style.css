@@ -1402,79 +1402,8 @@ textarea { min-height: 60px; resize: none; }
 }
 
 /* ── QUICK FILTERS ───────────────────────────────── */
-.rpt-quick-filters {
-  display: flex;
-  gap: clamp(5px, 0.6vw, 8px);
-  flex-wrap: wrap;
-  padding: clamp(8px, 1vw, 12px) clamp(10px, 1.2vw, 16px);
-  align-items: center;
-}
-.rpt-qbtn {
-  padding: 6px clamp(10px, 1.1vw, 16px);
-  border-radius: 999px;
-  border: 1.5px solid var(--border);
-  background: transparent;
-  color: var(--text2);
-  font-family: var(--font-mono);
-  font-size: clamp(0.66rem, 0.72vw, 0.76rem);
-  letter-spacing: .04em;
-  cursor: pointer;
-  transition: all .2s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.rpt-qbtn:hover {
-  background: var(--surface2);
-  border-color: var(--border2);
-  color: var(--text);
-}
-.rpt-qbtn.active {
-  background: var(--grad-hero);
-  color: #fff;
-  border-color: transparent;
-  box-shadow: 0 3px 10px rgba(79,70,229,.25);
-}
 
 /* ── LIVE SUMMARY ────────────────────────────────── */
-.rpt-live-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: clamp(6px, 0.8vw, 10px);
-  padding: clamp(8px, 1vw, 14px);
-}
-.rpt-live-item {
-  padding: clamp(8px, 0.9vh, 12px) clamp(8px, 1vw, 12px);
-  border-radius: var(--r-sm);
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
-  transition: all .2s;
-  min-width: 0;
-}
-.rpt-live-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
-.rpt-live-label {
-  font-family: var(--font-mono);
-  font-size: clamp(0.56rem, 0.62vw, 0.65rem);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--text3);
-  white-space: nowrap;
-}
-.rpt-live-val {
-  font-family: var(--font-display);
-  font-size: clamp(1rem, 1.2vw, 1.3rem);
-  font-weight: 800;
-  letter-spacing: -.02em;
-  background: var(--grad-hero);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  line-height: 1;
-}
 
 /* ── ACTIVE FILTER HIGHLIGHT ON TABLE ───────────── */
 .rpt-table-wrap.is-filtered {

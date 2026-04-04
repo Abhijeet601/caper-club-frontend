@@ -732,6 +732,7 @@ const RPT = {
 };
 
 function initReportsModule() {
+  // Search & filters
   $('rptSearch').addEventListener('input', e => { RPT.search = e.target.value; renderReportsAll(); });
   $('rptFilterPlan').addEventListener('change', e => { RPT.plan = e.target.value; renderReportsAll(); });
   $('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
@@ -742,6 +743,7 @@ function initReportsModule() {
   $('admissionTable').addEventListener('click', handleAdmissionRowClick);
   $('rptExportBtn').addEventListener('click', exportReportCSV);
 
+  // Renewal tabs — single registration
   document.querySelectorAll('.rpt-rtab').forEach(btn =>
     btn.addEventListener('click', () => {
       document.querySelectorAll('.rpt-rtab').forEach(b => b.classList.remove('active'));
@@ -751,9 +753,10 @@ function initReportsModule() {
     })
   );
 
-  document.querySelectorAll('[data-qfilter]').forEach(control =>
-    control.addEventListener('click', () => {
-      setActiveQuickFilter(control.dataset.qfilter || 'all');
+  // Quick filter cards — single registration on card grid only
+  document.querySelectorAll('.rpt-quick-card[data-qfilter]').forEach(card =>
+    card.addEventListener('click', () => {
+      setActiveQuickFilter(card.dataset.qfilter || 'all');
       applyQuickFilter(RPT.quickFilter);
       renderReportsAll();
     })
@@ -865,7 +868,6 @@ function sumPaymentAmounts(payments) {
 function renderReportsAll() {
   renderSummaryCards();
   renderQuickFilterCards();
-  renderLiveSummary();
   renderAdmissionTable();
   renderPaymentSummary();
   renderRenewalList();
@@ -874,19 +876,22 @@ function renderReportsAll() {
 }
 
 function renderQuickFilterCards() {
-  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === isoDate(new Date()));
+  const today = isoDate(new Date());
+  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
   const todayPayments = getTodayPaidReportPayments();
   const todayAdmissions = todayPayments.filter(isAdmissionPayment);
-  const todayRenewals = todayPayments.filter(payment => !isAdmissionPayment(payment));
-  const cashToday = todayPayments.filter(payment => payment.paymentMode === 'Cash');
-  const upiToday = todayPayments.filter(payment => payment.paymentMode === 'UPI');
+  const todayRenewals = todayPayments.filter(p => !isAdmissionPayment(p));
+  const cashToday = todayPayments.filter(p => p.paymentMode === 'Cash');
+  const upiToday = todayPayments.filter(p => p.paymentMode === 'UPI');
+  const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
 
   if ($('qcardAll')) $('qcardAll').textContent = String(S.sessions.length);
-  if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length);
+  if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length || todaySessions.length);
   if ($('qcardTodayRenewals')) $('qcardTodayRenewals').textContent = String(todayRenewals.length);
   if ($('qcardTodayCheckins')) $('qcardTodayCheckins').textContent = String(todaySessions.length);
   if ($('qcardCash')) $('qcardCash').textContent = fmtMoney(sumPaymentAmounts(cashToday));
   if ($('qcardUpi')) $('qcardUpi').textContent = fmtMoney(sumPaymentAmounts(upiToday));
+  if ($('qcardTotalRevenue')) $('qcardTotalRevenue').textContent = fmtMoney(totalRevenue);
 }
 
 function renderSummaryCards() {
@@ -907,29 +912,6 @@ function renderSummaryCards() {
   $('rptTodayRevenueVal').textContent = fmtMoney(todayRevenue);
   $('rptTodayCheckinsVal').textContent = todaySessions.length;
   $('rptAdmissionCount').textContent = getFilteredAdmissions().length;
-}
-
-function renderLiveSummary() {
-  const today = isoDate(new Date());
-  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
-  const todayPayments = getTodayPaidReportPayments();
-  const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
-  const cashToday = sumPaymentAmounts(todayPayments.filter(payment => payment.paymentMode === 'Cash'));
-  const upiToday = sumPaymentAmounts(todayPayments.filter(payment => payment.paymentMode === 'UPI'));
-  const renewalsToday = todayPayments.filter(payment => !isAdmissionPayment(payment)).length;
-  const admissionsToday = todayPayments.filter(isAdmissionPayment).length;
-
-  const liveAdmissions = document.getElementById('liveAdmissions');
-  const liveRenewals = document.getElementById('liveRenewals');
-  const liveCash = document.getElementById('liveCash');
-  const liveUpi = document.getElementById('liveUpi');
-  const liveTotalRev = document.getElementById('liveTotalRevenue');
-
-  if (liveAdmissions) liveAdmissions.textContent = String(admissionsToday || todaySessions.length);
-  if (liveRenewals) liveRenewals.textContent = renewalsToday;
-  if (liveCash) liveCash.textContent = fmtMoney(cashToday);
-  if (liveUpi) liveUpi.textContent = fmtMoney(upiToday);
-  if (liveTotalRev) liveTotalRev.textContent = fmtMoney(totalRevenue);
 }
 
 function getFilteredAdmissions() {
@@ -1550,7 +1532,7 @@ function syncUserPlanDates() {
   const expiryInput = $('userExpiryInput');
   if (!expiryInput) return;
 
-  const planDays = { Monthly: 30, Quarterly: 90, Yearly: 365 };
+  const planDays = { Monthly: 30, Quarterly: 90, 'Half-Yearly': 180, Yearly: 365 };
   const days = planDays[plan];
   expiryInput.readOnly = Boolean(days);
   if (!startValue || !days) return;
@@ -3165,7 +3147,7 @@ function renderActiveSessionsPanel() {
         <div class="sess-avatar">${esc((sess.name || '?')[0].toUpperCase())}</div>
         <div class="sess-info">
           <div class="sess-name">${esc(sess.name)}</div>
-          <div class="sess-id">${esc(userId)}</div>
+          <div class="sess-id">Started ${msToMMSS(Math.max(0, now - Number(sess.startTime || now)))} ago</div>
         </div>
         <span class="status-chip ${statusTone}">${statusLabel}</span>
         <button class="mini-btn del" onclick='${endAction}'>${endLabel}</button>
@@ -3181,8 +3163,10 @@ function renderActiveSessionsPanel() {
         </div>
       </div>
       <div class="sess-progress-rail">
-        <div class="sess-progress-fill" style="width:${progress}%;background:${barColor};"></div>
+        <div class="sess-progress-fill" style="width:${Math.round(progress)}%;background:${barColor};transition:width 1s linear;"></div>
       </div>
+      ${isEnding ? `<div style="margin-top:6px;font-family:var(--font-mono);font-size:.62rem;color:var(--amber);text-align:center;animation:badgeBlink 1.4s ease-in-out infinite;">⚠ Ending soon — please wrap up</div>` : ''}
+      ${isExpired ? `<div style="margin-top:6px;font-family:var(--font-mono);font-size:.62rem;color:var(--rose);text-align:center;">Session time is over</div>` : ''}
     </div>`;
   }).join('');
 }
