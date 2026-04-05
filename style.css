@@ -55,7 +55,7 @@
   --left-w:     58%;
   --right-w:    42%;
   --gap:        clamp(8px, 1vw, 14px);
-  --footer-h:   clamp(30px, 3.6vh, 38px);
+  --footer-h:   0px;
 
   /* Responsive spacing */
   --pad-card:   clamp(12px, 1.2vw, 20px);
@@ -381,6 +381,7 @@ table { width: 100%; border-collapse: collapse; }
 }
 
 .app-footer {
+  display: none !important;
   position: fixed;
   left: 0;
   right: 0;
