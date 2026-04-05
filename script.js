@@ -817,6 +817,10 @@ function applyQuickFilter(filter) {
       RPT.mode = 'UPI';
       RPT.date = today;
       break;
+    case 'card':
+      RPT.mode = 'Card';
+      RPT.date = today;
+      break;
     default:
       break;
   }
@@ -888,6 +892,7 @@ function renderQuickFilterCards() {
   const todayRenewals = todayPayments.filter(p => !isAdmissionPayment(p));
   const cashToday = todayPayments.filter(p => p.paymentMode === 'Cash');
   const upiToday = todayPayments.filter(p => p.paymentMode === 'UPI');
+  const cardToday = todayPayments.filter(p => p.paymentMode === 'Card');
   const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
 
   if ($('qcardAll')) $('qcardAll').textContent = String(S.sessions.length);
@@ -896,6 +901,7 @@ function renderQuickFilterCards() {
   if ($('qcardTodayCheckins')) $('qcardTodayCheckins').textContent = String(todaySessions.length);
   if ($('qcardCash')) $('qcardCash').textContent = fmtMoney(sumPaymentAmounts(cashToday));
   if ($('qcardUpi')) $('qcardUpi').textContent = fmtMoney(sumPaymentAmounts(upiToday));
+  if ($('qcardCard')) $('qcardCard').textContent = fmtMoney(sumPaymentAmounts(cardToday));
   if ($('qcardTotalRevenue')) $('qcardTotalRevenue').textContent = fmtMoney(totalRevenue);
 }
 
@@ -946,6 +952,7 @@ function getFilteredAdmissions() {
     if (RPT.quickFilter === 'today-renewals' && !userTodayPayments.some(payment => !isAdmissionPayment(payment))) return false;
     if (RPT.quickFilter === 'cash' && !userTodayPayments.some(payment => payment.paymentMode === 'Cash')) return false;
     if (RPT.quickFilter === 'upi' && !userTodayPayments.some(payment => payment.paymentMode === 'UPI')) return false;
+    if (RPT.quickFilter === 'card' && !userTodayPayments.some(payment => payment.paymentMode === 'Card')) return false;
     return true;
   });
 }
@@ -2186,7 +2193,7 @@ let activeSpeechItem = null;
 const ttsMessageHistory = new Map();
 const TTS_PROFILE = Object.freeze({
   lang: 'en-IN',
-  rate: 0.95,
+  rate: 1.15,
   pitch: 0.96,
   volume: 1,
   lowRepeatMs: 5000,
