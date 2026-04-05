@@ -2193,9 +2193,9 @@ let activeSpeechItem = null;
 const ttsMessageHistory = new Map();
 const TTS_PROFILE = Object.freeze({
   lang: 'en-IN',
-  rate: 1.15,
+  rate: 1.0,
   pitch: 0.96,
-  volume: 1,
+  volume: 4,
   lowRepeatMs: 5000,
 });
 const TTS_COOLDOWN_MS = Object.freeze({
