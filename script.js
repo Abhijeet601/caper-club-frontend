@@ -1867,24 +1867,6 @@ async function runScan(opts = {}) {
 
     const attendanceRecord = getAttendanceRecord(match.user.id);
     const action = inferAttendanceAction(match.user.id);
-    if (!action && attendanceRecord?.completed) {
-      const result = buildClientScanResult({
-        status: 'duplicate',
-        message: 'Attendance already marked.',
-        name: userRecord?.name || match.user.name,
-        confidence: Number(match.confidence || probe.detection.score || 0),
-        attendanceAction: attendanceRecord.action || 'OUT',
-        faceBox: probe.detection.faceBox,
-        source,
-        userId: match.user.id,
-        ttsMessage: 'Attendance already recorded.',
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      if (opts.showToast) toast(result.message, 'warning');
-      return result;
-    }
 
     const localCooldown = getCooldownInfo(match.user.id);
     if (localCooldown.remainingMs > 0) {
@@ -1998,7 +1980,6 @@ function buildClientScanResult(opts = {}) {
 
 function inferAttendanceAction(userId) {
   const record = getAttendanceRecord(userId);
-  if (record?.completed) return null;
   return record?.active || record?.action === 'IN' ? 'OUT' : 'IN';
 }
 
@@ -2699,16 +2680,17 @@ function getAttendanceRecord(userId) {
   const id = String(userId || '');
   if (!id) return null;
 
-  const today = localDateKey();
-  const todaySessions = toArr(S.sessions)
-    .filter(session => String(session.userId) === id && localDateKey(session.startedAt) === today)
+  const activeSession = toArr(S.sessions)
+    .filter(session =>
+      String(session.userId) === id
+      && String(session.status || '').toLowerCase() === 'active'
+    )
     .sort((left, right) => {
-      const rightTime = Date.parse(right.endedAt || right.startedAt || 0) || 0;
-      const leftTime = Date.parse(left.endedAt || left.startedAt || 0) || 0;
+      const rightTime = Date.parse(right.startedAt || 0) || 0;
+      const leftTime = Date.parse(left.startedAt || 0) || 0;
       return rightTime - leftTime;
-    });
+    })[0];
 
-  const activeSession = todaySessions.find(session => String(session.status || '').toLowerCase() === 'active');
   if (activeSession) {
     return {
       action: 'IN',
@@ -2718,6 +2700,26 @@ function getAttendanceRecord(userId) {
       name: activeSession.name || '',
     };
   }
+
+  const timerSession = S.activeSessions[id];
+  if (timerSession) {
+    return {
+      action: 'IN',
+      active: true,
+      completed: false,
+      timestamp: new Date(Number(timerSession.startTime || Date.now())).toISOString(),
+      name: timerSession.name || '',
+    };
+  }
+
+  const today = localDateKey();
+  const todaySessions = toArr(S.sessions)
+    .filter(session => String(session.userId) === id && localDateKey(session.startedAt) === today)
+    .sort((left, right) => {
+      const rightTime = Date.parse(right.endedAt || right.startedAt || 0) || 0;
+      const leftTime = Date.parse(left.endedAt || left.startedAt || 0) || 0;
+      return rightTime - leftTime;
+    });
 
   const completedSession = todaySessions.find(session => Boolean(session.endedAt));
   if (completedSession) {
@@ -2788,8 +2790,18 @@ function buildCooldownMessage(ms) {
 
 function getCooldownInfo(userId) {
   const id = String(userId || '');
+  const attendanceRecord = getAttendanceRecord(id);
+  if (attendanceRecord?.active || attendanceRecord?.completed) {
+    return { until: 0, remainingMs: 0 };
+  }
+
   const cached = normalizeCooldownRecord(S.cooldowns[id]);
   const userRecord = getUserRecord(id);
+  const lastAction = normalizeAttendanceAction(cached?.lastAction || userRecord?.lastAction);
+  if (lastAction !== 'OUT') {
+    return { until: 0, remainingMs: 0 };
+  }
+
   const backendLastActionAt = normalizeTimestamp(userRecord?.lastActionAt || userRecord?.lastTimestamp);
   const cachedDeadline = cached?.cooldownUntil || 0;
   const backendDeadline = backendLastActionAt ? (Date.parse(backendLastActionAt) + ATTENDANCE_COOLDOWN_MS) : 0;
