@@ -51,7 +51,7 @@ const S = {
   enrollmentImages: [],
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
   audioUrl: '', audioContext: null, audioUnlocked: false,
-  ttsMode: 'ready', ttsStatusText: 'Type an announcement to speak.', userFilter: '',
+  ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.', userFilter: '',
   reportFilter: { search: '', status: '', date: '' },
   membershipFilter: 'all',
 };
@@ -1378,15 +1378,16 @@ function renderMember() {
 function renderTts() {
   const map = {
     ready:{label:'READY',cls:'chip-blue'},
-    server:{label:'ELEVEN',cls:'chip-green'},
-    browser:{label:'BROWSER',cls:'chip-green'},
+    queued:{label:'QUEUED',cls:'chip-amber'},
+    speaking:{label:'SPEAKING',cls:'chip-green'},
+    browser:{label:'VOICE',cls:'chip-green'},
     error:{label:'ERROR',cls:'chip-rose'},
   };
   const s = map[S.ttsMode] || map.ready;
   $('ttsModeChip').className = `badge-chip ${s.cls}`;
   $('ttsModeChip').textContent = s.label;
   $('ttsStatusText').textContent = S.ttsStatusText;
-  $('ttsAudio').hidden = S.ttsMode !== 'server';
+  $('ttsAudio').hidden = true;
 }
 
 /* ═══════════════════════════════════════════════
@@ -2092,7 +2093,15 @@ async function legacyHandleTts(e) {
   const text = $('ttsText').value.trim();
   if (!text) { toast('Enter some text.','error'); return; }
   await unlockAudioPlayback().catch(() => {});
-  speakText(text, 'HIGH');
+  const accepted = speakText(text, 'HIGH', {
+    cooldownMs: 0,
+    cooldownKey: `manual:${Date.now()}`,
+  });
+  if (!accepted) {
+    toast('Voice is not ready.','warning');
+    return;
+  }
+  $('ttsText').value = '';
   toast('Speaking…', 'success');
 }
 
@@ -2169,28 +2178,153 @@ async function legacyUnlockAudioPlayback() {
 let activeSpeechResolver = null;
 let lastLowSpeechText = '';
 let lastLowSpeechAt = 0;
+let ttsVoiceCache = [];
+let ttsPreferredVoice = null;
+let ttsVoiceRetryTimer = null;
+let ttsVoiceRetryCount = 0;
+let activeSpeechItem = null;
+const ttsMessageHistory = new Map();
+const TTS_PROFILE = Object.freeze({
+  lang: 'en-IN',
+  rate: 0.95,
+  pitch: 0.96,
+  volume: 1,
+  lowRepeatMs: 5000,
+});
+const TTS_COOLDOWN_MS = Object.freeze({
+  HIGH: 1200,
+  MEDIUM: 7000,
+  LOW: 12000,
+});
 
-function speakText(text, priority = 'LOW') {
-  const message = String(text || '').trim();
-  if (!message) return;
+function getSpeechEngine() {
+  return 'speechSynthesis' in window ? window.speechSynthesis : null;
+}
 
-  if (priority === 'LOW') {
+function isSpeechBusy() {
+  const synth = getSpeechEngine();
+  return Boolean(ttsBusy || activeSpeechResolver || synth?.speaking || synth?.pending);
+}
+
+function normalizeSpeechText(text) {
+  let message = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!message) return '';
+  message = message.replace(/\s*,\s*/g, ', ');
+  message = message.replace(/\s*([.!?])/g, '$1');
+  message = message.replace(/\.{3,}/g, '…');
+  if (!/[.!?…]$/.test(message)) message += '.';
+  return message;
+}
+
+function describeSpeechVoice(voice) {
+  if (!voice) return 'system voice';
+  const name = String(voice.name || '').trim();
+  const lang = String(voice.lang || TTS_PROFILE.lang).trim();
+  return name ? `${name} (${lang})` : lang;
+}
+
+function buildTtsReadyText() {
+  return ttsPreferredVoice
+    ? `Browser voice ready. Using ${describeSpeechVoice(ttsPreferredVoice)}.`
+    : 'Browser voice ready. Using the default system voice.';
+}
+
+function buildTtsQueuedText() {
+  const queuedCount = ttsQueue.length + (activeSpeechResolver ? 1 : 0);
+  return queuedCount > 1 ? `${queuedCount} voice alerts are lined up.` : 'Voice alert queued.';
+}
+
+function cleanupSpeechHistory() {
+  const now = Date.now();
+  for (const [key, value] of ttsMessageHistory.entries()) {
+    if ((now - value) > 60000) ttsMessageHistory.delete(key);
+  }
+}
+
+function refreshSpeechVoices() {
+  const synth = getSpeechEngine();
+  const voices = toArr(synth?.getVoices());
+  if (!voices.length) return ttsVoiceCache;
+  ttsVoiceRetryCount = 0;
+  ttsVoiceCache = voices;
+  ttsPreferredVoice = pickSpeechVoice(voices);
+  if (!isSpeechBusy()) setTtsMode('ready', buildTtsReadyText());
+  return voices;
+}
+
+function scheduleSpeechVoiceRefresh() {
+  clearTimeout(ttsVoiceRetryTimer);
+  if (ttsVoiceCache.length || ttsVoiceRetryCount >= 12) return;
+  ttsVoiceRetryTimer = setTimeout(() => {
+    ttsVoiceRetryCount += 1;
+    refreshSpeechVoices();
+    if (!ttsVoiceCache.length) scheduleSpeechVoiceRefresh();
+  }, 300);
+}
+
+function ensureSpeechEngineReady() {
+  const synth = getSpeechEngine();
+  if (!synth) {
+    setTtsMode('error', 'Browser speech is unavailable on this device.');
+    return false;
+  }
+  refreshSpeechVoices();
+  scheduleSpeechVoiceRefresh();
+  if (!isSpeechBusy()) setTtsMode('ready', buildTtsReadyText());
+  return true;
+}
+
+function speakText(text, priority = 'LOW', opts = {}) {
+  if (!ensureSpeechEngineReady()) return false;
+
+  const message = normalizeSpeechText(text);
+  if (!message) return false;
+
+  const level = String(priority || 'LOW').toUpperCase();
+  const cooldownKey = String(
+    opts.cooldownKey
+    || `${level}:${String(opts.userId || '')}:${message.toLowerCase()}`
+  );
+  const cooldownMs = Number.isFinite(Number(opts.cooldownMs))
+    ? Number(opts.cooldownMs)
+    : (TTS_COOLDOWN_MS[level] || TTS_COOLDOWN_MS.LOW);
+
+  cleanupSpeechHistory();
+  if (cooldownMs > 0) {
+    const lastAt = Number(ttsMessageHistory.get(cooldownKey) || 0);
+    if ((Date.now() - lastAt) < cooldownMs) return false;
+  }
+
+  if (level === 'LOW') {
     const now = Date.now();
-    if (message === lastLowSpeechText && (now - lastLowSpeechAt) < 5000) return;
+    if (message === lastLowSpeechText && (now - lastLowSpeechAt) < TTS_PROFILE.lowRepeatMs) return false;
+    if (isSpeechBusy() || ttsQueue.length) return false;
     lastLowSpeechText = message;
     lastLowSpeechAt = now;
   }
 
-  if (priority === 'HIGH') {
-    ttsQueue = ttsQueue.filter(item => item.priority === 'HIGH');
+  ttsMessageHistory.set(cooldownKey, Date.now());
+
+  if (level === 'HIGH') {
+    ttsQueue = [];
     stopBrowserSpeech();
-  } else if (priority === 'MEDIUM') {
-    ttsQueue = ttsQueue.filter(item => item.priority === 'HIGH');
+  } else if (level === 'MEDIUM') {
+    ttsQueue = ttsQueue.filter(item => item.priority !== 'LOW');
   }
 
-  ttsQueue.push({ text: message, priority });
-  ttsQueue.sort((left, right) => ttsPriority(right.priority) - ttsPriority(left.priority));
+  ttsQueue.push({
+    text: message,
+    priority: level,
+    createdAt: Date.now(),
+    cooldownKey,
+  });
+  ttsQueue.sort((left, right) => {
+    const priorityDelta = ttsPriority(right.priority) - ttsPriority(left.priority);
+    return priorityDelta || (left.createdAt - right.createdAt);
+  });
+  setTtsMode('queued', buildTtsQueuedText());
   if (!ttsBusy) processTtsQueue();
+  return true;
 }
 
 async function processTtsQueue() {
@@ -2198,68 +2332,42 @@ async function processTtsQueue() {
   ttsBusy = true;
   while (ttsQueue.length) {
     const item = ttsQueue.shift();
-    await doSpeak(item.text);
+    await doSpeak(item);
   }
   ttsBusy = false;
+  if (!activeSpeechResolver) setTtsMode('ready', buildTtsReadyText());
 }
 
-async function doSpeak(text) {
-  const message = String(text || '').trim();
+async function doSpeak(item) {
+  const message = normalizeSpeechText(item?.text);
   if (!message) return false;
   clearAudio();
-  const serverOk = await speakServerAudio(message);
-  if (serverOk) {
-    setTtsMode('server', 'ElevenLabs voice is active.');
-    return true;
-  }
-  const browserOk = await speakBrowser(message);
+  const browserOk = await speakBrowser(message, item);
   if (browserOk) {
-    setTtsMode('browser', 'Browser voice fallback is active.');
+    if (!ttsQueue.length && !activeSpeechResolver) setTtsMode('ready', buildTtsReadyText());
     return true;
   }
-  setTtsMode('error', 'ElevenLabs and Web Speech are unavailable.');
+  setTtsMode('error', 'Browser voice playback failed.');
   return false;
 }
 
 async function speakServerAudio(text) {
-  const message = String(text || '').trim();
-  if (!message || !S.token || !isAdmin()) return false;
-
-  try {
-    const response = await fetch(`${S.apiBase}/tts`, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        'Authorization': `Bearer ${S.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: message }),
-    });
-
-    if (!response.ok) return false;
-
-    const audioBlob = await response.blob();
-    if (!audioBlob.size) return false;
-
-    const audio = $('ttsAudio');
-    S.audioUrl = URL.createObjectURL(audioBlob);
-    audio.src = S.audioUrl;
-    audio.hidden = false;
-    await unlockAudioPlayback().catch(() => {});
-    await audio.play();
-    await waitForAudioComplete(audio, 60000);
-    return true;
-  } catch {
-    clearAudio();
-    return false;
-  }
+  return false;
 }
 
 async function handleTts(e) {
   e.preventDefault();
   const text = $('ttsText').value.trim();
   if (!text) { toast('Enter some text.','error'); return; }
-  speakText(text, 'HIGH');
+  const accepted = speakText(text, 'HIGH', {
+    cooldownMs: 0,
+    cooldownKey: `manual:${Date.now()}`,
+  });
+  if (!accepted) {
+    toast('Voice is not ready.','warning');
+    return;
+  }
+  $('ttsText').value = '';
   toast('Speaking…', 'success');
 }
 
@@ -2297,13 +2405,16 @@ function speakBrowserLegacy(text) {
 }
 
 function stopBrowserSpeech() {
-  if (!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
+  const synth = getSpeechEngine();
+  if (!synth) return;
+  synth.cancel();
   if (activeSpeechResolver) {
     const finish = activeSpeechResolver;
     activeSpeechResolver = null;
     finish(false);
   }
+  activeSpeechItem = null;
+  if (!ttsQueue.length && !ttsBusy) setTtsMode('ready', buildTtsReadyText());
 }
 
 function clearAudio() {
@@ -2325,15 +2436,24 @@ function setTtsMode(mode, text) {
 }
 
 function registerMediaUnlock() {
-  if (!('speechSynthesis' in window)) return;
-  const warmVoices = () => { window.speechSynthesis.getVoices(); };
+  if (!ensureSpeechEngineReady()) return;
+  const warmVoices = () => {
+    unlockAudioPlayback().catch(() => {});
+    refreshSpeechVoices();
+  };
   warmVoices();
   if (typeof window.speechSynthesis.addEventListener === 'function') {
-    window.speechSynthesis.addEventListener('voiceschanged', warmVoices);
+    window.speechSynthesis.addEventListener('voiceschanged', refreshSpeechVoices);
   }
+  window.addEventListener('pointerdown', warmVoices, { passive: true });
+  window.addEventListener('keydown', warmVoices);
 }
 
 async function unlockAudioPlayback() {
+  if (!ensureSpeechEngineReady()) return false;
+  const synth = getSpeechEngine();
+  try { synth?.resume?.(); } catch {}
+  refreshSpeechVoices();
   return true;
 }
 
@@ -2548,7 +2668,7 @@ function clearSess() {
     token:'', activeTab:'liveOpsTab', currentUser:null, dashboard:null, users:[], slots:[],
     sessions:[], announcements:[], reports:null, memberDashboard:null, memberProfile:null,
     memberHistory:[], memberPayments:[], memberNotifications:[], scanImage:'', scanResult:null,
-    enrollmentImages:[], faceUsers:[], userFilter:'', ttsMode:'ready', ttsStatusText:'Type an announcement to speak.',
+    enrollmentImages:[], faceUsers:[], userFilter:'', ttsMode:'ready', ttsStatusText:'Preparing the browser voice assistant.',
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
@@ -2895,6 +3015,78 @@ function refreshCooldownUi() {
   renderConsole();
 }
 
+function speechName(name) {
+  const value = String(name || '').trim();
+  if (!value) return '';
+  return value.split(/\s+/)[0];
+}
+
+function formatSpeechDuration(seconds) {
+  const total = Math.max(0, Math.ceil(Number(seconds || 0)));
+  const minutes = Math.floor(total / 60);
+  const remainingSeconds = total % 60;
+  if (minutes && remainingSeconds) return `${minutes} minutes and ${remainingSeconds} seconds`;
+  if (minutes) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  return `${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`;
+}
+
+function buildScanSpeechText(result) {
+  const name = speechName(result?.name);
+  const action = normalizeAttendanceAction(result?.attendanceAction);
+  const status = String(result?.status || '').toLowerCase();
+  const rawMessage = String(result?.message || '').trim();
+
+  if (status === 'granted') {
+    if (action === 'OUT') {
+      return name
+        ? `${name}, your exit has been marked successfully. Have a good day.`
+        : 'Your exit has been marked successfully. Have a good day.';
+    }
+    return name
+      ? `Welcome, ${name}. Your attendance has been marked successfully.`
+      : 'Welcome. Your attendance has been marked successfully.';
+  }
+
+  if (status === 'cooldown') {
+    const waitFor = formatSpeechDuration(result?.cooldownRemainingSeconds || 0);
+    return action === 'OUT'
+      ? `Please wait ${waitFor}… then you can exit.`
+      : `Please wait ${waitFor} before trying again.`;
+  }
+
+  if (status === 'duplicate') {
+    if (/exit already/i.test(rawMessage)) return 'Your exit has already been marked for today.';
+    if (/exit is pending/i.test(rawMessage)) return 'You are already checked in… please scan again when you are ready to exit.';
+    return 'Your attendance is already marked.';
+  }
+
+  if (status === 'retry') {
+    return 'I need a clearer view of your face… please look at the camera and try again.';
+  }
+
+  if (status === 'unknown') {
+    return 'I could not recognize your face… please try again.';
+  }
+
+  if (/expired/i.test(rawMessage)) {
+    return 'Your membership has expired. Please contact the front desk.';
+  }
+
+  return rawMessage || 'Access denied. Please contact the front desk.';
+}
+
+function buildSessionSpeechText(session, type) {
+  const name = speechName(session?.name);
+  if (type === 'warning') {
+    return name
+      ? `${name}, your session will end in 5 minutes… please prepare to exit.`
+      : 'Your session will end in 5 minutes… please prepare to exit.';
+  }
+  return name
+    ? `${name}, your session time is over. Please exit now.`
+    : 'Your session time is over. Please exit now.';
+}
+
 function shouldSpeakScanFeedback(key, throttleMs) {
   const now = Date.now();
   const lastAt = Number(S.cooldownVoiceAt[key] || 0);
@@ -2903,16 +3095,24 @@ function shouldSpeakScanFeedback(key, throttleMs) {
   return true;
 }
 
-function maybeSpeakCooldown(userId) {
-  const key = `cooldown:${userId || 'unknown'}`;
+function maybeSpeakCooldown(result) {
+  const key = `cooldown:${result?.userId || 'unknown'}`;
   if (!shouldSpeakScanFeedback(key, COOLDOWN_VOICE_THROTTLE_MS)) return;
-  speakText('Please wait before marking again', 'MEDIUM');
+  speakText(buildScanSpeechText(result), 'LOW', {
+    cooldownKey: key,
+    cooldownMs: COOLDOWN_VOICE_THROTTLE_MS,
+    userId: result?.userId,
+  });
 }
 
-function maybeSpeakDuplicate(userId) {
-  const key = `duplicate:${userId || 'unknown'}`;
+function maybeSpeakDuplicate(result) {
+  const key = `duplicate:${result?.userId || 'unknown'}`;
   if (!shouldSpeakScanFeedback(key, 10000)) return;
-  speakText('Attendance already recorded', 'MEDIUM');
+  speakText(buildScanSpeechText(result), 'LOW', {
+    cooldownKey: key,
+    cooldownMs: 10000,
+    userId: result?.userId,
+  });
 }
 
 function applyScanResult(r) {
@@ -2920,7 +3120,11 @@ function applyScanResult(r) {
   if (r.status === 'granted') {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
-    speakText(r.ttsMessage || `${isExit ? 'Exit' : 'Entry'} marked for ${r.name || 'the member'}`, 'HIGH');
+    speakText(buildScanSpeechText(r), 'HIGH', {
+      cooldownKey: `granted:${r.userId || 'unknown'}:${r.attendanceAction || 'none'}:${localDateKey(r.scannedAt)}`,
+      cooldownMs: 1500,
+      userId: r.userId,
+    });
 
     const resolvedUserId = String(
       r.userId || r.session?.userId || ''
@@ -2940,12 +3144,12 @@ function applyScanResult(r) {
     return;
   }
   if (r.status === 'duplicate') {
-    maybeSpeakDuplicate(r.userId);
+    maybeSpeakDuplicate(r);
     setScanState('detected', 'Already Marked', r.message || detail, 'Duplicate');
     return;
   }
   if (r.status === 'cooldown') {
-    maybeSpeakCooldown(r.userId);
+    maybeSpeakCooldown(r);
     setScanState('detected', 'Please Wait', r.message || detail, 'Cooldown');
     return;
   }
@@ -2954,11 +3158,19 @@ function applyScanResult(r) {
     return;
   }
   if (r.status === 'unknown') {
-    speakText(r.message || 'Face not recognized.', 'LOW');
+    speakText(buildScanSpeechText(r), 'LOW', {
+      cooldownKey: `unknown:${r.userId || 'face'}`,
+      cooldownMs: 8000,
+      userId: r.userId,
+    });
     setScanState('denied', 'No Match', r.message || detail, 'Unknown');
     return;
   }
-  speakText(r.message || 'Access denied.', 'LOW');
+  speakText(buildScanSpeechText(r), 'HIGH', {
+    cooldownKey: `denied:${r.userId || 'unknown'}:${String(r.message || '').toLowerCase()}`,
+    cooldownMs: 4000,
+    userId: r.userId,
+  });
   setScanState('denied', 'Access Denied', r.message || detail, r.name ? 'Face Found' : 'No Match');
 }
 
@@ -3131,12 +3343,20 @@ function tickSessionTimers() {
     if (!sess.announced5 && remaining <= 5 * 60 * 1000 && remaining > 0) {
       sess.announced5 = true;
       dirty = true;
-      speakText(`${sess.name}, your time is ending in 5 minutes`, 'MEDIUM');
+      speakText(buildSessionSpeechText(sess, 'warning'), 'LOW', {
+        cooldownKey: `session-warning:${sess.sessionId || userId}`,
+        cooldownMs: 60000,
+        userId,
+      });
     }
     if (!sess.announcedEnd && remaining <= 0) {
       sess.announcedEnd = true;
       dirty = true;
-      speakText(`${sess.name}, your time is over`, 'HIGH');
+      speakText(buildSessionSpeechText(sess, 'ended'), 'MEDIUM', {
+        cooldownKey: `session-ended:${sess.sessionId || userId}`,
+        cooldownMs: 60000,
+        userId,
+      });
     }
   });
 
@@ -3264,44 +3484,51 @@ function pickSpeechVoice(voices) {
       const lang = String(voice?.lang || '').toLowerCase();
       const name = String(voice?.name || '').toLowerCase();
       let score = 0;
-      if (lang === 'en-in') score += 120;
-      if (lang === 'hi-in') score += 110;
-      if (lang.startsWith('en')) score += 80;
-      if (lang.startsWith('hi')) score += 70;
-      if (name.includes('india') || name.includes('hindi')) score += 25;
-      if (name.includes('google') || name.includes('microsoft')) score += 20;
-      if (name.includes('natural') || name.includes('online')) score += 10;
+      if (lang === 'en-in') score += 300;
+      else if (lang.startsWith('en')) score += 180;
+      if (name.includes('google')) score += 80;
+      if (name.includes('microsoft')) score += 60;
+      if (name.includes('india') || name.includes('indian')) score += 50;
+      if (name.includes('natural') || name.includes('online') || name.includes('premium')) score += 35;
+      if (name.includes('female')) score += 15;
       if (voice?.default) score += 5;
       return { voice, score };
     })
     .sort((left, right) => right.score - left.score)[0]?.voice || null;
 }
 
-function speakBrowser(text) {
-  if (!('speechSynthesis' in window)) return Promise.resolve(false);
-  stopBrowserSpeech();
+function speakBrowser(text, item = null) {
+  const synth = getSpeechEngine();
+  if (!synth) return Promise.resolve(false);
   return new Promise(resolve => {
     try {
-      const synth = window.speechSynthesis;
       const utterance = new SpeechSynthesisUtterance(text);
-      const voice = pickSpeechVoice(synth.getVoices());
+      const voice = pickSpeechVoice(refreshSpeechVoices());
       utterance.voice = voice || null;
-      utterance.lang = voice?.lang || 'en-IN';
-      utterance.rate = 1;
-      utterance.pitch = 1;
+      utterance.lang = voice?.lang || TTS_PROFILE.lang;
+      utterance.rate = TTS_PROFILE.rate;
+      utterance.pitch = TTS_PROFILE.pitch;
+      utterance.volume = TTS_PROFILE.volume;
 
       const finish = ok => {
         if (activeSpeechResolver !== finish) return;
         activeSpeechResolver = null;
+        activeSpeechItem = null;
         resolve(ok);
       };
 
-      activeSpeechResolver = finish;
+      utterance.onstart = () => {
+        activeSpeechItem = item;
+        setTtsMode('speaking', `Speaking with ${describeSpeechVoice(voice)}.`);
+      };
       utterance.onend = () => finish(true);
       utterance.onerror = () => finish(false);
+      synth.cancel();
+      activeSpeechResolver = finish;
       synth.speak(utterance);
     } catch {
       activeSpeechResolver = null;
+      activeSpeechItem = null;
       resolve(false);
     }
   });
