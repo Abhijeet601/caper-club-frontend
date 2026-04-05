@@ -57,9 +57,180 @@ const S = {
 };
 
 const scannedUsers = new Map();
+const MOJIBAKE_TEXT_REPLACEMENTS = Object.freeze([
+  ['â€¦', '...'],
+  ['â€”', ' - '],
+  ['â€“', '-'],
+  ['â€¢', ' | '],
+  ['Â·', ' | '],
+  ['â‚¹', 'Rs. '],
+  ['Â©', '(c)'],
+  ['â— ', ''],
+  ['â–¶ ', ''],
+  ['âœ… ', ''],
+  ['âœ…', 'OK'],
+  ['âœ“', 'OK'],
+  ['âœ•', 'Close'],
+  ['âœ—', 'X'],
+  ['âš  ', ''],
+  ['âš ', ''],
+  ['âš¡ ', ''],
+  ['âš¡', ''],
+  ['âš™ ', ''],
+  ['âš™', ''],
+  ['â° ', ''],
+  ['â°', ''],
+  ['â˜€ ', ''],
+  ['â˜€', ''],
+  ['â¬‡ ', ''],
+  ['â¬‡', ''],
+  ['ðŸŽ¤ ', ''],
+  ['ðŸŽ¤', ''],
+  ['ðŸ”Š ', ''],
+  ['ðŸ”Š', ''],
+  ['ðŸƒ ', ''],
+  ['ðŸƒ', ''],
+  ['ðŸ” ', ''],
+  ['ðŸ”', ''],
+  ['ðŸ”— ', ''],
+  ['ðŸ”—', ''],
+  ['ðŸ“¸ ', ''],
+  ['ðŸ“¸', ''],
+  ['ðŸ“· ', ''],
+  ['ðŸ“·', ''],
+  ['ðŸ“¤ ', ''],
+  ['ðŸ“¤', ''],
+  ['ðŸ‘¥ ', ''],
+  ['ðŸ‘¥', ''],
+  ['ðŸ”‘ ', ''],
+  ['ðŸ”‘', ''],
+  ['ðŸ§¾ ', ''],
+  ['ðŸ§¾', ''],
+  ['ðŸ“ˆ ', ''],
+  ['ðŸ“ˆ', ''],
+  ['ðŸ•’ ', ''],
+  ['ðŸ•’', ''],
+  ['ðŸ’° ', ''],
+  ['ðŸ’°', ''],
+  ['ðŸ”„ ', ''],
+  ['ðŸ”„', ''],
+  ['ðŸ”´ ', ''],
+  ['ðŸ”´', ''],
+  ['ðŸ§® ', ''],
+  ['ðŸ§®', ''],
+  ['ðŸŸ¢ ', ''],
+  ['ðŸŸ¢', ''],
+  ['ðŸŸ¡ ', ''],
+  ['ðŸŸ¡', ''],
+  ['ðŸ’³ ', ''],
+  ['ðŸ’³', ''],
+  ['âž• ', ''],
+  ['âž•', ''],
+  ['ðŸ’¸ ', ''],
+  ['ðŸ’¸', ''],
+  ['ðŸš« ', ''],
+  ['ðŸš«', ''],
+  ['ðŸ“£ ', ''],
+  ['ðŸ“£', ''],
+  ['ðŸ‘¤ ', ''],
+  ['ðŸ‘¤', ''],
+  ['ðŸ“‚ ', ''],
+  ['ðŸ“‚', ''],
+  ['ðŸ“Š ', ''],
+  ['ðŸ“Š', ''],
+  ['ðŸŒ… ', ''],
+  ['ðŸŒ…', ''],
+  ['ðŸŒ™ ', ''],
+  ['ðŸŒ™', ''],
+]);
+
+let visibleTextSanitizerObserver = null;
+let isSanitizingVisibleText = false;
+
+function sanitizeDisplayText(value) {
+  let text = String(value ?? '');
+  if (!text) return text;
+
+  MOJIBAKE_TEXT_REPLACEMENTS.forEach(([bad, good]) => {
+    if (text.includes(bad)) text = text.split(bad).join(good);
+  });
+
+  return text
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+([,.;!?])/g, '$1')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')');
+}
+
+function sanitizeTextNode(node) {
+  if (!node || node.nodeType !== Node.TEXT_NODE) return;
+  const original = node.nodeValue || '';
+  const sanitized = sanitizeDisplayText(original);
+  if (sanitized !== original) node.nodeValue = sanitized;
+}
+
+function sanitizeElementTextAttrs(element) {
+  if (!element || element.nodeType !== Node.ELEMENT_NODE) return;
+  ['placeholder', 'title', 'aria-label'].forEach(attr => {
+    const original = element.getAttribute(attr);
+    if (original == null) return;
+    const sanitized = sanitizeDisplayText(original);
+    if (sanitized !== original) element.setAttribute(attr, sanitized);
+  });
+}
+
+function sanitizeVisibleDom(root = document.body) {
+  if (!root || isSanitizingVisibleText) return;
+  isSanitizingVisibleText = true;
+  try {
+    if (root.nodeType === Node.TEXT_NODE) {
+      sanitizeTextNode(root);
+      return;
+    }
+
+    if (root.nodeType !== Node.ELEMENT_NODE && root !== document.body) return;
+
+    const element = root.nodeType === Node.ELEMENT_NODE ? root : document.body;
+    sanitizeElementTextAttrs(element);
+
+    const elementWalker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT);
+    while (elementWalker.nextNode()) sanitizeElementTextAttrs(elementWalker.currentNode);
+
+    const textWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    while (textWalker.nextNode()) sanitizeTextNode(textWalker.currentNode);
+  } finally {
+    isSanitizingVisibleText = false;
+  }
+}
+
+function startVisibleTextSanitizer() {
+  sanitizeVisibleDom(document.body);
+  if (visibleTextSanitizerObserver) visibleTextSanitizerObserver.disconnect();
+
+  visibleTextSanitizerObserver = new MutationObserver(mutations => {
+    if (isSanitizingVisibleText) return;
+    mutations.forEach(mutation => {
+      if (mutation.type === 'characterData') {
+        sanitizeVisibleDom(mutation.target);
+        return;
+      }
+      sanitizeVisibleDom(mutation.target);
+      mutation.addedNodes.forEach(node => sanitizeVisibleDom(node));
+    });
+  });
+
+  visibleTextSanitizerObserver.observe(document.body, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['placeholder', 'title', 'aria-label'],
+  });
+}
 
 /* â”€â”€ BOOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 document.addEventListener('DOMContentLoaded', () => {
+  startVisibleTextSanitizer();
   initUi();
   bindEvents();
   bootstrapFaceRecognition();
@@ -385,6 +556,7 @@ function renderAll() {
   renderTts();
   renderScanResult();
   updateAlertBadge();
+  sanitizeVisibleDom(document.body);
 }
 
 /* â”€â”€ TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -2218,12 +2390,12 @@ function isSpeechBusy() {
 }
 
 function normalizeSpeechText(text) {
-  let message = String(text || '').replace(/\s+/g, ' ').trim();
+  let message = sanitizeDisplayText(text).replace(/\s+/g, ' ').trim();
   if (!message) return '';
   message = message.replace(/\s*,\s*/g, ', ');
   message = message.replace(/\s*([.!?])/g, '$1');
-  message = message.replace(/\.{3,}/g, 'â€¦');
-  if (!/[.!?â€¦]$/.test(message)) message += '.';
+  message = message.replace(/\.{3,}/g, '...');
+  if (!/[.!?]$/.test(message)) message += '.';
   return message;
 }
 
@@ -2667,7 +2839,7 @@ function meta(l, v) { return `<div class="meta-item"><span class="meta-label">${
 
 /* Toast */
 function toast(msg, type = '') {
-  const t = $('toast'); t.textContent = msg; t.className = `toast show${type?' '+type:''}`;
+  const t = $('toast'); t.textContent = sanitizeDisplayText(msg); t.className = `toast show${type?' '+type:''}`;
   clearTimeout(S.toastTimer); S.toastTimer = setTimeout(() => t.className='toast', 2800);
 }
 
