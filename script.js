@@ -15,6 +15,7 @@ const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 1200;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
+const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;
 
 const TONE_MAP = {
@@ -1868,11 +1869,11 @@ async function runScan(opts = {}) {
     const attendanceRecord = getAttendanceRecord(match.user.id);
     const action = inferAttendanceAction(match.user.id);
 
-    const localCooldown = getCooldownInfo(match.user.id);
+    const localCooldown = getCooldownInfo(match.user.id, action);
     if (localCooldown.remainingMs > 0) {
       const result = buildClientScanResult({
         status: 'cooldown',
-        message: buildCooldownMessage(localCooldown.remainingMs),
+        message: buildCooldownMessage(localCooldown.remainingMs, action),
         name: userRecord?.name || match.user.name,
         confidence: Number(match.confidence || probe.detection.score || 0),
         attendanceAction: action,
@@ -2784,15 +2785,26 @@ function formatCountdown(ms) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function buildCooldownMessage(ms) {
-  return `Please wait ${formatCountdown(ms)} before next action.`;
+function buildCooldownMessage(ms, action = '') {
+  const normalized = normalizeAttendanceAction(action);
+  return normalized === 'OUT'
+    ? `Please wait ${formatCountdown(ms)} before exit.`
+    : `Please wait ${formatCountdown(ms)} before next action.`;
 }
 
-function getCooldownInfo(userId) {
+function getCooldownInfo(userId, action = '') {
   const id = String(userId || '');
   const attendanceRecord = getAttendanceRecord(id);
-  if (attendanceRecord?.active || attendanceRecord?.completed) {
-    return { until: 0, remainingMs: 0 };
+  const normalizedAction = normalizeAttendanceAction(action);
+  if (attendanceRecord?.active) {
+    if (normalizedAction !== 'OUT') {
+      return { until: 0, remainingMs: 0 };
+    }
+    const until = Date.parse(attendanceRecord.timestamp || '') + MIN_EXIT_BEFORE_CHECKOUT_MS;
+    return {
+      until,
+      remainingMs: Math.max(0, until - Date.now()),
+    };
   }
 
   const cached = normalizeCooldownRecord(S.cooldowns[id]);
@@ -2863,10 +2875,10 @@ function syncCooldownFromResult(result, fallbackAction) {
 
 function refreshCooldownUi() {
   if (!S.scanResult?.userId || S.scanResult.status !== 'cooldown') return;
-  const info = getCooldownInfo(S.scanResult.userId);
+  const info = getCooldownInfo(S.scanResult.userId, S.scanResult.attendanceAction);
   if (info.remainingMs > 0) {
     S.scanResult.cooldownRemainingSeconds = Math.ceil(info.remainingMs / 1000);
-    S.scanResult.message = buildCooldownMessage(info.remainingMs);
+    S.scanResult.message = buildCooldownMessage(info.remainingMs, S.scanResult.attendanceAction);
     renderScanResult();
     renderConsole();
     return;
