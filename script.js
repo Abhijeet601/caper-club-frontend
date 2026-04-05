@@ -1,9 +1,9 @@
-'use strict';
+﻿'use strict';
 
-/* ═══════════════════════════════════════════════
-   CAPPER SPORTS CLUB — script.js
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   CAPPER SPORTS CLUB â€” script.js
    Enhanced UI: Tab system + Voice + Reports
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const STORAGE_KEYS = {
   apiBase: 'capper-api-base',
@@ -26,7 +26,7 @@ const TONE_MAP = {
   amber:'tone-amber', warning:'tone-amber', pending:'tone-amber', duplicate:'tone-amber', retry:'tone-amber', cooldown:'tone-amber', ended:'tone-amber',
 };
 
-/* ── STATE ─────────────────────────────────────── */
+/* â”€â”€ STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const S = {
   apiBase: norm(localStorage.getItem(STORAGE_KEYS.apiBase) || DEFAULT_API_BASE),
   token: sessionStorage.getItem(STORAGE_KEYS.token) || '',
@@ -58,7 +58,7 @@ const S = {
 
 const scannedUsers = new Map();
 
-/* ── BOOT ──────────────────────────────────────── */
+/* â”€â”€ BOOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 document.addEventListener('DOMContentLoaded', () => {
   initUi();
   bindEvents();
@@ -243,7 +243,7 @@ async function ensureRecognitionReady() {
   return true;
 }
 
-/* ── SESSION RESTORE ───────────────────────────── */
+/* â”€â”€ SESSION RESTORE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function restoreSession() {
   await ensureBackendConnection();
   startHealthPoll();
@@ -256,7 +256,7 @@ async function restoreSession() {
   } catch (err) { handleErr(err, { toast: true, logout: true }); }
 }
 
-/* ── API CONFIG ─────────────────────────────────── */
+/* â”€â”€ API CONFIG â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function handleApiSave(e) {
   e.preventDefault();
   setApiBase($('apiBaseInput')?.value || DEFAULT_API_BASE);
@@ -266,7 +266,7 @@ async function handleApiSave(e) {
   else toast('Backend URL saved, but the health check failed.', 'warning');
 }
 
-/* ── AUTH ───────────────────────────────────────── */
+/* â”€â”€ AUTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function handleLogin(e) {
   e.preventDefault();
   try {
@@ -285,7 +285,7 @@ function setAuth(user) {
   const ok = Boolean(user && S.token);
   const cameraAccess = ok && isAdmin();
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
-  $('authText').textContent = ok ? `${user.role?.toUpperCase()} • ${user.name}` : 'Signed out';
+  $('authText').textContent = ok ? `${user.role?.toUpperCase()} â€¢ ${user.name}` : 'Signed out';
 
   // Login form vs account display
   $('loginForm').hidden = ok;
@@ -314,7 +314,7 @@ function setAuth(user) {
 
 function logout() { clearSess(); toast('Signed out.', 'success'); }
 
-/* ── REFRESH ────────────────────────────────────── */
+/* â”€â”€ REFRESH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function refreshAll(opts = {}) {
   await pingHealth();
   if (!S.currentUser || !S.token) { renderAll(); return; }
@@ -354,16 +354,16 @@ async function loadMember() {
   S.memberHistory = toArr(history); S.memberPayments = toArr(payments); S.memberNotifications = toArr(notifs);
 }
 
-/* ── HEALTH ─────────────────────────────────────── */
+/* â”€â”€ HEALTH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function pingHealth() {
   S.healthOk = await probeHealth(S.apiBase);
   updateHealthUi();
   return S.healthOk;
 }
 
-/* ════════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    RENDER ALL
-   ════════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 function renderAll() {
   setAuth(S.currentUser);
   populateSelects();
@@ -387,7 +387,7 @@ function renderAll() {
   updateAlertBadge();
 }
 
-/* ── TABS ───────────────────────────────────────── */
+/* â”€â”€ TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function openTab(id) {
   S.activeTab = id;
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
@@ -395,7 +395,7 @@ function openTab(id) {
   if (id === 'reportsTab') renderReportsAll();
 }
 
-/* ── CONSOLE STATE ──────────────────────────────── */
+/* â”€â”€ CONSOLE STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderConsole() {
   const live = S.isScanning;
   const cameraReady = streamHasActiveVideo(S.stream);
@@ -405,7 +405,7 @@ function renderConsole() {
   const cooldownActive = false;
 
   $('camStatusPrimary').textContent = live ? 'Live scan active' : (cameraReady ? 'Camera ready' : 'Scanner ready');
-  $('camDetect').textContent = live ? 'Scanning…' : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
+  $('camDetect').textContent = live ? 'Scanningâ€¦' : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
   $('camLastAction').textContent = S.scanResult?.message || 'Waiting';
   $('camSource').textContent = cameraReady ? 'Live camera' : (S.scanImage ? 'Image upload' : 'Camera / Upload');
   $('camArea').textContent = $('scanAreaInput').value || 'Club Entry';
@@ -413,7 +413,7 @@ function renderConsole() {
   const timerBadge = $('sessionTimerBadge');
   if (activeSession && timerBadge) {
     const min = activeSession.remainingMinutes || 0;
-    timerBadge.textContent = `● ${Math.floor(min/60).toString().padStart(2,'0')}:${(min%60).toString().padStart(2,'0')}`;
+    timerBadge.textContent = `â— ${Math.floor(min/60).toString().padStart(2,'0')}:${(min%60).toString().padStart(2,'0')}`;
     timerBadge.hidden = false;
   } else if (timerBadge) { timerBadge.hidden = true; }
 
@@ -426,14 +426,14 @@ function renderConsole() {
   $('captureEnrollmentBtn').disabled = !cameraAccess;
   $('runScanBtn').disabled = S.scanInFlight;
   $('runScanBtn').textContent = S.scanInFlight
-    ? 'Scanning…'
-    : (cooldownActive ? `Wait ${formatCountdown(buttonCooldown.remainingMs)}` : '▶ Run Scan');
+    ? 'Scanningâ€¦'
+    : (cooldownActive ? `Wait ${formatCountdown(buttonCooldown.remainingMs)}` : 'â–¶ Run Scan');
 }
 
-/* ── SCANNER STATUS ─────────────────────────────── */
+/* â”€â”€ SCANNER STATUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function setScanState(mode, title, detail = '', pill = '') {
   S.scanState = mode;
-  S.scanPill = pill || { loading:'Scanning…', granted:'Granted ✓', denied:'Denied ✗', detected:'Face Found' }[mode] || 'Idle';
+  S.scanPill = pill || { loading:'Scanningâ€¦', granted:'Granted âœ“', denied:'Denied âœ—', detected:'Face Found' }[mode] || 'Idle';
   S.scanStatusText = title;
   S.scanStatusDetail = detail;
   renderScannerStatus();
@@ -450,7 +450,7 @@ function renderScannerStatus() {
 
   const shell = $('cameraShell');
   shell.classList.remove('is-scanning','is-granted','is-denied','is-detected');
-  if (S.scanState === 'loading')   { shell.classList.add('is-scanning'); $('faceDetectLabel').textContent = 'Scanning…'; }
+  if (S.scanState === 'loading')   { shell.classList.add('is-scanning'); $('faceDetectLabel').textContent = 'Scanningâ€¦'; }
   else if (S.scanState === 'granted') { shell.classList.add('is-granted'); $('faceDetectLabel').textContent = 'GRANTED'; }
   else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
   else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'FACE FOUND'; }
@@ -476,7 +476,7 @@ function updateFaceBoxOverlay(faceBox) {
   box.style.transform = 'none';
 }
 
-/* ── CLOCK ──────────────────────────────────────── */
+/* â”€â”€ CLOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function startClock() { updateClock(); setInterval(updateClock, 1000); }
 function updateClock() {
   const d = new Date(), pad = n => String(n).padStart(2,'0');
@@ -487,9 +487,9 @@ function updateClock() {
   refreshCooldownUi();
 }
 
-/* ── SUBTITLE LOOP ──────────────────────────────── */
+/* â”€â”€ SUBTITLE LOOP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function startSubtitleLoop() {
-  const lines = ['AI attendance & access control','Browser AI + fast attendance API','Live member & session management','Smart club operations — all in one'];
+  const lines = ['AI attendance & access control','Browser AI + fast attendance API','Live member & session management','Smart club operations â€” all in one'];
   const el = $('typingSubtitle'); let ti = 0, ci = 0, del = false;
   function tick() {
     const t = lines[ti];
@@ -500,9 +500,9 @@ function startSubtitleLoop() {
   setTimeout(tick, 800);
 }
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    RENDER SECTIONS
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function renderSystemStatus() {
   const members = S.users.filter(u => u.role === 'user').length;
@@ -558,7 +558,7 @@ function renderSlots() {
   $('slotsTableBody').innerHTML = S.slots.length
     ? S.slots.map(s => `<tr>
         <td>${esc(s.name)}</td>
-        <td class="t-secondary">${esc(s.startTime||'-')} – ${esc(s.endTime||'-')}</td>
+        <td class="t-secondary">${esc(s.startTime||'-')} â€“ ${esc(s.endTime||'-')}</td>
         <td><div class="table-actions">
           <button class="mini-btn" data-slot-edit="${s.id}">Edit</button>
           <button class="mini-btn del" data-slot-delete="${s.id}">Del</button>
@@ -573,7 +573,7 @@ function renderSessions() {
         <td><div class="t-primary">${esc(s.name||'Unknown')}</div><div class="t-secondary">${esc(s.area||'-')}</div></td>
         <td>${chip(s.status, s.status)}</td>
         <td>${esc(fmtDur(s.durationMinutes))}</td>
-        <td>${s.status==='active' ? `<button class="mini-btn" data-session-end="${s.id}">End</button>` : '—'}</td>
+        <td>${s.status==='active' ? `<button class="mini-btn" data-session-end="${s.id}">End</button>` : 'â€”'}</td>
       </tr>`).join('')
     : `<tr><td colspan="4"><div class="empty-hint">No sessions yet.</div></td></tr>`;
 }
@@ -587,7 +587,7 @@ function renderAnnouncements() {
     </div>`, 'No announcements yet.');
 }
 
-/* ── REPORTS ─────────────────────────────────────── */
+/* â”€â”€ REPORTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderReports() {
   if ($('admissionTableBody')) {
     renderReportsAll();
@@ -645,7 +645,7 @@ function renderReportTable() {
         <td><div class="t-primary">${esc(r.name)}</div><div class="t-secondary">${esc(r.area||'-')}</div></td>
         <td class="t-secondary">${esc(fmtDT(r.time))}</td>
         <td>${chip(r.status||'slate', r.status||'-')}</td>
-        <td class="t-secondary">${r.confidence ? `${Math.round(Number(r.confidence)*100)}%` : '–'}</td>
+        <td class="t-secondary">${r.confidence ? `${Math.round(Number(r.confidence)*100)}%` : 'â€“'}</td>
       </tr>`).join('')
     : `<tr><td colspan="4"><div class="empty-hint">No records found.</div></td></tr>`;
 }
@@ -668,7 +668,7 @@ function showReportDetail(name, report) {
   const detailDrawer = $('reportUserDetail');
   if (!detailName || !detailContent || !detailDrawer) return;
 
-  detailName.textContent = `📊 ${name}`;
+  detailName.textContent = `ðŸ“Š ${name}`;
   detailContent.innerHTML = `
     <div class="meta-grid" style="margin-bottom:8px;">
       <div class="meta-item"><span class="meta-label">Visits</span><span class="meta-value">${esc(String(report?.profile?.visits||0))}</span></div>
@@ -690,7 +690,7 @@ function showReportDetail(name, report) {
   detailDrawer.hidden = false;
 }
 
-/* ── MEMBERSHIP LIST ─────────────────────────────── */
+/* â”€â”€ MEMBERSHIP LIST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderMembershipList() {
   let members = S.users.filter(u => u.role === 'user');
   const now = new Date();
@@ -717,7 +717,7 @@ function renderMembershipList() {
           <div style="width:10px;height:10px;border-radius:50%;background:${statusColor};flex-shrink:0;box-shadow:0 0 0 3px ${statusColor}22;"></div>
           <div class="mem-info">
             <div class="mem-name">${esc(u.name)}</div>
-            <div class="mem-plan">${esc(u.membershipPlan||'Unknown plan')} • ${esc(u.memberId||'-')}</div>
+            <div class="mem-plan">${esc(u.membershipPlan||'Unknown plan')} â€¢ ${esc(u.memberId||'-')}</div>
             <div class="mem-dates">Expires: ${esc(u.membershipExpiry||'Unknown')}</div>
           </div>
           ${chip(status, status)}
@@ -726,9 +726,9 @@ function renderMembershipList() {
     : '<div class="empty-hint">No members found.</div>';
 }
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    REPORTS MODULE
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const RPT = {
   search: '', plan: '', payment: '', date: '', mode: '',
@@ -748,7 +748,7 @@ function initReportsModule() {
   $('admissionTable').addEventListener('click', handleAdmissionRowClick);
   $('rptExportBtn').addEventListener('click', exportReportCSV);
 
-  // Renewal tabs — single registration
+  // Renewal tabs â€” single registration
   document.querySelectorAll('.rpt-rtab').forEach(btn =>
     btn.addEventListener('click', () => {
       document.querySelectorAll('.rpt-rtab').forEach(b => b.classList.remove('active'));
@@ -758,7 +758,7 @@ function initReportsModule() {
     })
   );
 
-  // Quick filter cards — single registration on card grid only
+  // Quick filter cards â€” single registration on card grid only
   document.querySelectorAll('.rpt-quick-card[data-qfilter]').forEach(card =>
     card.addEventListener('click', () => {
       setActiveQuickFilter(card.dataset.qfilter || 'all');
@@ -957,6 +957,10 @@ function getFilteredAdmissions() {
   });
 }
 
+function hasActualCheckout(session) {
+  return String(session?.status || '').toLowerCase() === 'ended' && Boolean(session?.endedAt);
+}
+
 function renderAdmissionTable() {
   const records = getFilteredAdmissions();
   const tableWrap = document.querySelector('.rpt-table-wrap');
@@ -983,7 +987,7 @@ function renderAdmissionTable() {
             <div class="t-secondary">${esc(user.memberId||'-')}</div>
           </td>
           <td class="t-secondary">${esc(fmtDT(s.startedAt))}</td>
-          <td class="t-secondary">${s.endedAt ? esc(fmtDT(s.endedAt)) : '<span class="status-chip tone-green">Active</span>'}</td>
+          <td class="t-secondary">${hasActualCheckout(s) ? esc(fmtDT(s.endedAt)) : (String(s.status || '').toLowerCase() === 'active' ? '<span class="status-chip tone-green">Active</span>' : 'â€“')}</td>
           <td>${chip(user.membershipPlan||'slate', user.membershipPlan||'-')}</td>
 <td class="t-secondary">${esc(user.paymentMode||'-')}</td>
 <td>${chip(user.paymentStatus||'slate', user.paymentStatus||'-')}</td>
@@ -1005,7 +1009,7 @@ function handleAdmissionRowClick(e) {
   const exp = user.membershipExpiry ? new Date(user.membershipExpiry) : null;
   const daysLeft = exp ? Math.ceil((exp - now) / 86400000) : null;
 
-  $('rptDetailTitle').textContent = `📊 ${user.name}`;
+  $('rptDetailTitle').textContent = `ðŸ“Š ${user.name}`;
   $('rptDetailBody').innerHTML = `
     <div class="meta-grid" style="margin-bottom:10px;">
       ${meta('Member ID', user.memberId)} ${meta('Plan', user.membershipPlan)}
@@ -1019,7 +1023,7 @@ function handleAdmissionRowClick(e) {
         <thead><tr><th>Check-in</th><th>Check-out</th><th>Duration</th><th>Status</th></tr></thead>
         <tbody>${userSessions.slice(0,8).map(s=>`<tr>
           <td class="t-secondary">${esc(fmtDT(s.startedAt))}</td>
-          <td class="t-secondary">${s.endedAt ? esc(fmtDT(s.endedAt)) : '–'}</td>
+          <td class="t-secondary">${hasActualCheckout(s) ? esc(fmtDT(s.endedAt)) : '–'}</td>
           <td class="t-secondary">${esc(fmtDur(s.durationMinutes))}</td>
           <td>${chip(s.status, s.status)}</td>
         </tr>`).join('') || `<tr><td colspan="4"><div class="empty-hint">No sessions.</div></td></tr>`}
@@ -1101,10 +1105,10 @@ function renderRenewalList() {
             <span class="alert-name">${esc(u.name)}</span>
             ${chip(u.membershipPlan||'slate', u.membershipPlan||'-')}
           </div>
-          <p class="alert-msg">${esc(u.memberId||'-')} · ${fmtMoney(u.paymentAmount||0)}</p>
+          <p class="alert-msg">${esc(u.memberId||'-')} Â· ${fmtMoney(u.paymentAmount||0)}</p>
           <span class="alert-time">
             Expires: ${esc(u.membershipExpiry||'Unknown')}
-            ${daysLeft !== null ? ` · ${daysLeft < 0 ? Math.abs(daysLeft)+' days ago' : daysLeft+' days left'}` : ''}
+            ${daysLeft !== null ? ` Â· ${daysLeft < 0 ? Math.abs(daysLeft)+' days ago' : daysLeft+' days left'}` : ''}
           </span>
         </div>`;
       }).join('')
@@ -1125,7 +1129,7 @@ function renderAttendanceAnalytics() {
     const slot = h < 12 ? 'Morning' : h < 17 ? 'Afternoon' : 'Evening';
     hourCount[slot] = (hourCount[slot] || 0) + 1;
   });
-  const peak = Object.entries(hourCount).sort((a,b) => b[1]-a[1])[0]?.[0] || '–';
+  const peak = Object.entries(hourCount).sort((a,b) => b[1]-a[1])[0]?.[0] || 'â€“';
 
   $('anaCheckins').textContent  = checkins;
   $('anaCheckouts').textContent = checkouts;
@@ -1178,7 +1182,7 @@ function renderSlotEngagement() {
 
   const maxVal = Math.max(...Object.values(slotMap), 1);
   const colors = { Morning: '#f59e0b', Afternoon: '#6366f1', Evening: '#10b981' };
-  const icons  = { Morning: '🌅', Afternoon: '☀', Evening: '🌙' };
+  const icons  = { Morning: 'ðŸŒ…', Afternoon: 'â˜€', Evening: 'ðŸŒ™' };
 
   $('slotEngagementBars').innerHTML = Object.entries(slotMap).map(([slot, count]) => {
     const pct = Math.round((count / maxVal) * 100);
@@ -1200,7 +1204,7 @@ function exportReportCSV() {
     const u = S.users.find(x => x.id === s.userId) || {};
     return [
       u.name||'', u.memberId||'', fmtDT(s.startedAt),
-      s.endedAt ? fmtDT(s.endedAt) : '',
+      hasActualCheckout(s) ? fmtDT(s.endedAt) : '',
       u.membershipPlan||'', u.paymentStatus||'', u.paymentAmount||0
     ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
   });
@@ -1212,7 +1216,7 @@ function exportReportCSV() {
   toast('Report exported!', 'success');
 }
 
-/* ── PLAN CALCULATOR ─────────────────────────────── */
+/* â”€â”€ PLAN CALCULATOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function calcPlanExpiry() {
   const type = $('planCalcType').value;
   const isCustom = type === 'Custom';
@@ -1233,7 +1237,7 @@ function calcPlanExpiry() {
   const result = $('planCalcResult');
   result.hidden = false;
   $('planCalcBadge').textContent = `${days} days`;
-  $('planCalcText').textContent = `${type} plan · Expires on ${isoDate(expiry)}`;
+  $('planCalcText').textContent = `${type} plan Â· Expires on ${isoDate(expiry)}`;
 
   // Sync with membership form
   $('membershipStartInput').value = startVal;
@@ -1242,7 +1246,7 @@ function calcPlanExpiry() {
 }
 
 
-/* ── ALERTS ──────────────────────────────────────── */
+/* â”€â”€ ALERTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderAlerts() {
   const now = new Date();
   const users = S.users.filter(u => u.role === 'user');
@@ -1265,7 +1269,7 @@ function renderAlerts() {
     const cls = type === 'expired' ? 'alert-error' : type === 'expiring' ? 'alert-warn' : 'alert-info';
     return `<div class="alert-item ${cls}">
       <div class="alert-top"><span class="alert-name">${esc(u.name)}</span>${chip(type,type)}</div>
-      <p class="alert-msg">Plan: ${esc(u.membershipPlan||'-')} • ${esc(u.memberId||'-')}</p>
+      <p class="alert-msg">Plan: ${esc(u.membershipPlan||'-')} â€¢ ${esc(u.memberId||'-')}</p>
       <span class="alert-time">Expires: ${esc(u.membershipExpiry||'Unknown')}</span>
     </div>`;
   };
@@ -1296,7 +1300,7 @@ function updateAlertBadge() {
   else badge.hidden = true;
 }
 
-/* ── SCAN RESULT ─────────────────────────────────── */
+/* â”€â”€ SCAN RESULT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderScanResult() {
   const el = $('scanResult');
   if (!S.scanResult) { el.innerHTML = '<div class="empty-hint">Scan results appear here</div>'; return; }
@@ -1319,7 +1323,7 @@ function renderScanResult() {
   requestAnimationFrame(() => el.classList.add('result-pop'));
 }
 
-/* ── ENROLLMENT GALLERY ─────────────────────────── */
+/* â”€â”€ ENROLLMENT GALLERY â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderEnrollGallery() {
   const count = S.enrollmentImages.length;
   const progress = Math.min(100, (count / 5) * 100);
@@ -1335,10 +1339,10 @@ function renderEnrollGallery() {
           <img src="${img}" alt="Face ${i+1}">
           <span class="thumb-num">${i+1}</span>
         </div>`).join('')
-    : '<div class="empty-hint">Capture 3–5 clear face images</div>';
+    : '<div class="empty-hint">Capture 3â€“5 clear face images</div>';
 }
 
-/* ── MEMBER ─────────────────────────────────────── */
+/* â”€â”€ MEMBER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderMember() {
   const profile = S.memberProfile || S.memberDashboard?.profile;
   if (!profile) return;
@@ -1365,7 +1369,7 @@ function renderMember() {
   renderList($('memberHistoryList'), S.memberHistory, h => `
     <div class="alert-item">
       <div class="alert-top"><span class="alert-name">${esc(h.eventType||'Attendance')}</span>${chip(h.eventType||'blue', h.eventType||'event')}</div>
-      <span class="alert-time">${esc(h.area||'-')} • ${esc(fmtDT(h.occurredAt))}</span>
+      <span class="alert-time">${esc(h.area||'-')} â€¢ ${esc(fmtDT(h.occurredAt))}</span>
     </div>`, 'No history.');
 
   renderList($('memberPaymentsList'), S.memberPayments, p => `
@@ -1381,7 +1385,7 @@ function renderMember() {
     </div>`, 'No notifications.');
 }
 
-/* ── TTS ─────────────────────────────────────────── */
+/* â”€â”€ TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderTts() {
   const map = {
     ready:{label:'READY',cls:'chip-blue'},
@@ -1397,9 +1401,9 @@ function renderTts() {
   $('ttsAudio').hidden = true;
 }
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    CRUD
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 async function handleUserSubmit(e) {
   e.preventDefault();
@@ -1470,7 +1474,7 @@ function beginUserEdit(id) {
   $('userPasswordInput').value = '';
   $('userPasswordInput').required = false;
   $('userPasswordInput').placeholder = 'Leave blank to keep';
-  $('userFormTitle').textContent = `✏ Edit ${u.name}`;
+  $('userFormTitle').textContent = `âœ Edit ${u.name}`;
   $('userSubmitBtn').textContent = 'Update Member';
   syncSlotField();
   syncUserPlanDates();
@@ -1487,7 +1491,7 @@ async function deleteUser(id) {
 function resetUserForm() {
   $('userForm').reset();
   $('userIdInput').value = '';
-  $('userFormTitle').textContent = '➕ Create Member';
+  $('userFormTitle').textContent = 'âž• Create Member';
   $('userSubmitBtn').textContent = 'Create Member';
   $('userRoleInput').value = 'user';
   $('userPlanInput').value = 'Monthly';
@@ -1553,7 +1557,7 @@ function syncUserPlanDates() {
   expiryInput.value = isoDate(addDays(new Date(startValue), days));
 }
 
-/* ── SLOTS ────────────────────────────────────── */
+/* â”€â”€ SLOTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function handleSlotSubmit(e) {
   e.preventDefault();
   if (!ensureAdmin()) return;
@@ -1588,7 +1592,7 @@ function resetSlotForm() {
   $('slotSubmitBtn').textContent = 'Create Slot';
 }
 
-/* ── MEMBERSHIP ────────────────────────────────── */
+/* â”€â”€ MEMBERSHIP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function handleMembershipSubmit(e) {
   e.preventDefault();
   if (!ensureAdmin()) return;
@@ -1604,7 +1608,7 @@ async function handleMembershipSubmit(e) {
   } catch (err) { handleErr(err, { toast: true }); }
 }
 
-/* ── SESSIONS ──────────────────────────────────── */
+/* â”€â”€ SESSIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function handleSessionStart(e) {
   e.preventDefault();
   if (!ensureAdmin()) return;
@@ -1631,7 +1635,7 @@ async function endSession(id) {
   catch (err) { handleErr(err, { toast: true }); }
 }
 
-/* ── ANNOUNCEMENTS ─────────────────────────────── */
+/* â”€â”€ ANNOUNCEMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function handleAnnouncementSubmit(e) {
   e.preventDefault();
   if (!ensureAdmin()) return;
@@ -1646,9 +1650,9 @@ async function handleAnnouncementSubmit(e) {
   } catch (err) { handleErr(err, { toast: true }); }
 }
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    FACE RECOGNITION / LIVE SCAN
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 async function handleLiveScanToggle(e) {
   if (e.target.checked) await startLiveScan({ toast: true });
   else stopLiveScan({ toast: true });
@@ -1664,7 +1668,7 @@ async function startLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer);
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
-  setScanState('loading','Scanning…','Matching in browser and validating membership.');
+  setScanState('loading','Scanningâ€¦','Matching in browser and validating membership.');
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -1733,7 +1737,7 @@ async function handleCameraTrackEnded() {
   if (!S.cameraRequested || S.cameraRestarting) return;
   S.cameraRestarting = true;
   stopCamera({ preserveRequest: true, silent: true });
-  setScanState('loading','Camera reconnecting…','Restoring the live preview.');
+  setScanState('loading','Camera reconnectingâ€¦','Restoring the live preview.');
   const ok = await startCamera();
   S.cameraRestarting = false;
   if (!ok) {
@@ -1833,7 +1837,7 @@ async function runScan(opts = {}) {
   S.scanInFlight = true;
   if (image) S.scanImage = image;
   renderConsole();
-  setScanState('loading','Scanning…','Matching face in browser and validating access.');
+  setScanState('loading','Scanningâ€¦','Matching face in browser and validating access.');
   try {
     const probe = await detectRecognitionProbe({ source, image });
     if (!probe?.detection) {
@@ -1993,9 +1997,9 @@ function inferAttendanceAction(userId) {
 }
 
 function applyScanResultLegacy(r) {
-  const detail = r.name ? `${r.name} — ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
+  const detail = r.name ? `${r.name} â€” ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
   if (r.status === 'granted') {
-    setScanState('granted','Access Granted ✓', detail);
+    setScanState('granted','Access Granted âœ“', detail);
     const isExit = String(r.attendanceAction || '').toUpperCase() === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail);
     speakText(`${isExit ? 'Exit' : 'Entry'} marked successfully for ${r.name || 'the member'}`, 'HIGH');
@@ -2013,11 +2017,11 @@ function applyScanResultLegacy(r) {
   setScanState('denied','Access Denied', r.message||detail, r.name ? 'Face Found' : 'No Match');
 }
 
-/* ── ENROLLMENT ─────────────────────────────────── */
+/* â”€â”€ ENROLLMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function applyScanResultBrowser(r) {
   const detail = r.name ? `${r.name} - ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
   if (r.status === 'granted') {
-    setScanState('granted','Access Granted ✓', detail);
+    setScanState('granted','Access Granted âœ“', detail);
     const isExit = String(r.attendanceAction || '').toUpperCase() === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail);
     speakText(`${isExit ? 'Exit' : 'Entry'} marked successfully for ${r.name || 'the member'}`, 'HIGH');
@@ -2071,9 +2075,9 @@ async function handleFaceUpload(e) {
   } catch (err) { handleErr(err, { toast: true }); }
 }
 
-/* ═══════════════════════════════════════════════
-   VOICE / TTS — Priority System
-   ═══════════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   VOICE / TTS â€” Priority System
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 let ttsQueue = []; let ttsBusy = false;
 
 function legacySpeakText(text, priority = 'LOW') {
@@ -2109,7 +2113,7 @@ async function legacyHandleTts(e) {
     return;
   }
   $('ttsText').value = '';
-  toast('Speaking…', 'success');
+  toast('Speakingâ€¦', 'success');
 }
 
 function legacySpeakBrowser(text) {
@@ -2181,7 +2185,7 @@ async function legacyUnlockAudioPlayback() {
   return S.audioUnlocked;
 }
 
-/* ── SELECTS ─────────────────────────────────────── */
+/* â”€â”€ SELECTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 let activeSpeechResolver = null;
 let lastLowSpeechText = '';
 let lastLowSpeechAt = 0;
@@ -2218,8 +2222,8 @@ function normalizeSpeechText(text) {
   if (!message) return '';
   message = message.replace(/\s*,\s*/g, ', ');
   message = message.replace(/\s*([.!?])/g, '$1');
-  message = message.replace(/\.{3,}/g, '…');
-  if (!/[.!?…]$/.test(message)) message += '.';
+  message = message.replace(/\.{3,}/g, 'â€¦');
+  if (!/[.!?â€¦]$/.test(message)) message += '.';
   return message;
 }
 
@@ -2375,7 +2379,7 @@ async function handleTts(e) {
     return;
   }
   $('ttsText').value = '';
-  toast('Speaking…', 'success');
+  toast('Speakingâ€¦', 'success');
 }
 
 function speakBrowserLegacy(text) {
@@ -2469,7 +2473,7 @@ function ttsPriority(priority) {
 }
 
 function populateSelects() {
-  fillSelect($('userSlotInput'), S.slots, { blank:true, blankLabel:'No slot', label: s=>`${s.name} (${s.startTime}–${s.endTime})` });
+  fillSelect($('userSlotInput'), S.slots, { blank:true, blankLabel:'No slot', label: s=>`${s.name} (${s.startTime}â€“${s.endTime})` });
   const members = S.users.filter(u => u.role === 'user');
   fillSelect($('membershipUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
   fillSelect($('sessionUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
@@ -2488,7 +2492,7 @@ function fillSelect(sel, items, opts = {}) {
   else if (!opts.blank && items.length) sel.value = String(items[0].id);
 }
 
-/* ── API ─────────────────────────────────────────── */
+/* â”€â”€ API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers||{}) };
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
@@ -2520,7 +2524,7 @@ async function api(path, opts = {}) {
   return txt ? JSON.parse(txt) : null;
 }
 
-/* ── HELPERS ─────────────────────────────────────── */
+/* â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function $(id) { return document.getElementById(id); }
 function isAdmin() { return S.currentUser?.role === 'admin'; }
 function ensureAdmin() {
@@ -2622,7 +2626,7 @@ function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return
 function clamp(v,min,max) { return Math.max(min, Math.min(max, v)); }
 function esc(v) { return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function fmtDT(v) {
-  if (!v) return '–';
+  if (!v) return 'â€“';
   const d = new Date(v); if (isNaN(d.getTime())) return String(v);
   return new Intl.DateTimeFormat(undefined, { dateStyle:'medium', timeStyle:'short' }).format(d);
 }
@@ -3057,22 +3061,22 @@ function buildScanSpeechText(result) {
   if (status === 'cooldown') {
     const waitFor = formatSpeechDuration(result?.cooldownRemainingSeconds || 0);
     return action === 'OUT'
-      ? `Please wait ${waitFor}… then you can exit.`
+      ? `Please wait ${waitFor}â€¦ then you can exit.`
       : `Please wait ${waitFor} before trying again.`;
   }
 
   if (status === 'duplicate') {
     if (/exit already/i.test(rawMessage)) return 'Your exit has already been marked for today.';
-    if (/exit is pending/i.test(rawMessage)) return 'You are already checked in… please scan again when you are ready to exit.';
+    if (/exit is pending/i.test(rawMessage)) return 'You are already checked inâ€¦ please scan again when you are ready to exit.';
     return 'Your attendance is already marked.';
   }
 
   if (status === 'retry') {
-    return 'I need a clearer view of your face… please look at the camera and try again.';
+    return 'I need a clearer view of your faceâ€¦ please look at the camera and try again.';
   }
 
   if (status === 'unknown') {
-    return 'I could not recognize your face… please try again.';
+    return 'I could not recognize your faceâ€¦ please try again.';
   }
 
   if (/expired/i.test(rawMessage)) {
@@ -3086,8 +3090,8 @@ function buildSessionSpeechText(session, type) {
   const name = speechName(session?.name);
   if (type === 'warning') {
     return name
-      ? `${name}, your session will end in 5 minutes… please prepare to exit.`
-      : 'Your session will end in 5 minutes… please prepare to exit.';
+      ? `${name}, your session will end in 5 minutesâ€¦ please prepare to exit.`
+      : 'Your session will end in 5 minutesâ€¦ please prepare to exit.';
   }
   return name
     ? `${name}, your session time is over. Please exit now.`
@@ -3181,9 +3185,9 @@ function applyScanResult(r) {
   setScanState('denied', 'Access Denied', r.message || detail, r.name ? 'Face Found' : 'No Match');
 }
 
-/* ═══════════════════════════════════════════════
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    SESSION TIMER ENGINE
-   ═══════════════════════════════════════════════ */
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const SESSION_DURATION_MS = 70 * 60 * 1000;
 const SESSION_TIMER_GRACE_MS = 10 * 60 * 1000;
@@ -3231,15 +3235,34 @@ function snapshotActiveSessions() {
   );
 }
 
+function getBackendActiveSessionsByUser() {
+  return toArr(S.sessions)
+    .filter(session => String(session?.status || '').toLowerCase() === 'active')
+    .reduce((acc, session) => {
+      const userId = String(session?.userId || '').trim();
+      if (!userId) return acc;
+      acc[userId] = session;
+      return acc;
+    }, {});
+}
+
 function restoreMissingActiveSessions(snapshot) {
   const now = Date.now();
+  const backendActiveSessions = getBackendActiveSessionsByUser();
+  const enforceBackendState = isAdmin();
+
   Object.entries(snapshot || {}).forEach(([userId, session]) => {
     if (S.activeSessions[userId]) return;
     if (now >= Number(session?.deadlineTime || 0)) return;
-    S.activeSessions[userId] = {
-      ...session,
-      userId: String(session?.userId || userId),
-    };
+    const backendSession = backendActiveSessions[userId];
+    if (enforceBackendState && !backendSession) return;
+
+    S.activeSessions[userId] = backendSession
+      ? buildActiveSessionState(backendSession, session)
+      : {
+        ...session,
+        userId: String(session?.userId || userId),
+      };
   });
 }
 
@@ -3258,27 +3281,12 @@ function upsertActiveSessionFromBackend(session) {
 }
 
 function syncActiveSessionsFromBackend() {
-  const now = Date.now();
+  const backendActiveSessions = getBackendActiveSessionsByUser();
   const nextSessions = {};
 
-  Object.entries(S.activeSessions).forEach(([userId, session]) => {
-    if (Number(session?.deadlineTime || 0) > now) {
-      nextSessions[userId] = session;
-    }
+  Object.entries(backendActiveSessions).forEach(([userId, session]) => {
+    nextSessions[userId] = buildActiveSessionState(session, S.activeSessions[userId] || null);
   });
-
-  toArr(S.sessions)
-    .filter(session => String(session?.status || '').toLowerCase() === 'active')
-    .forEach(session => {
-      const userId = String(session?.userId || '').trim();
-      if (!userId) return;
-      if (nextSessions[userId]) {
-        nextSessions[userId].sessionId = String(session?.id || '');
-        nextSessions[userId].name = session?.name || nextSessions[userId].name;
-      } else {
-        nextSessions[userId] = buildActiveSessionState(session, null);
-      }
-    });
 
   S.activeSessions = nextSessions;
   persistSessionTimers();
@@ -3294,7 +3302,7 @@ function startSessionTimer(userId, name) {
     || normalizedUserId === 'undefined'
     || normalizedUserId === ''
   ) {
-    console.warn('[SessionTimer] Invalid userId — timer not started:', userId);
+    console.warn('[SessionTimer] Invalid userId â€” timer not started:', userId);
     return;
   }
 
@@ -3472,7 +3480,7 @@ function renderActiveSessionsPanel() {
       <div class="sess-progress-rail">
         <div class="sess-progress-fill" style="width:${Math.round(progress)}%;background:${barColor};transition:width 1s linear;"></div>
       </div>
-      ${isEnding ? `<div style="margin-top:6px;font-family:var(--font-mono);font-size:.62rem;color:var(--amber);text-align:center;animation:badgeBlink 1.4s ease-in-out infinite;">⚠ Ending soon — please wrap up</div>` : ''}
+      ${isEnding ? `<div style="margin-top:6px;font-family:var(--font-mono);font-size:.62rem;color:var(--amber);text-align:center;animation:badgeBlink 1.4s ease-in-out infinite;">âš  Ending soon â€” please wrap up</div>` : ''}
       ${isExpired ? `<div style="margin-top:6px;font-family:var(--font-mono);font-size:.62rem;color:var(--rose);text-align:center;">Session time is over</div>` : ''}
     </div>`;
   }).join('');
@@ -3546,7 +3554,7 @@ function startHealthPoll() {
   S.healthTimer = setInterval(() => pingHealth().catch(console.error), 30000);
 }
 
-/* ── PARTICLES ──────────────────────────────────── */
+/* â”€â”€ PARTICLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function initParticles() {
   const canvas = $('particleCanvas');
   if (!canvas) return;
@@ -3579,3 +3587,4 @@ function initParticles() {
   }
   resize(); window.addEventListener('resize', resize); draw();
 }
+
