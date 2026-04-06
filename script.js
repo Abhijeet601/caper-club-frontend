@@ -1837,6 +1837,7 @@ async function startLiveScan(opts = {}) {
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
+  document.querySelector('.scanner-panel')?.classList.add('is-live');
   clearInterval(S.scanLoopTimer);
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
@@ -1851,6 +1852,7 @@ function stopLiveScan(opts = {}) {
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
+  document.querySelector('.scanner-panel')?.classList.remove('is-live');
   stopCamera();
   setScanState('idle','Live scanner is offline','Enable Live Scan to start.');
   renderConsole();
@@ -3730,33 +3732,90 @@ function startHealthPoll() {
 function initParticles() {
   const canvas = $('particleCanvas');
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let W, H, particles = [];
+  const ctx = canvas.getContext('2d', { alpha: true });
+  if (!ctx) return;
+  let W, H, particles = [], lastTime = 0;
+
+  const TARGET_FPS = 90;
+  const FRAME_MS = 1000 / TARGET_FPS;
+
+  const COLORS = [
+    '99,102,241',
+    '14,165,233',
+    '124,58,237',
+    '5,150,105',
+    '217,119,6',
+    '225,29,72',
+    '59,130,246',
+    '16,185,129',
+  ];
+
   function resize() {
-    W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight;
-    particles = Array.from({ length: Math.floor((W * H) / 14000) }, () => ({
-      x: Math.random()*W, y: Math.random()*H,
-      r: Math.random()*1.3+0.4, vx: (Math.random()-.5)*.3, vy: (Math.random()-.5)*.3,
-      color: ['99,102,241','14,165,233','124,58,237','5,150,105'][Math.floor(Math.random()*4)],
-      alpha: Math.random()*.35+.1,
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    const count = Math.floor((W * H) / 10000);
+    particles = Array.from({ length: count }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.8 + 0.4,
+      vx: (Math.random() - .5) * .4,
+      vy: (Math.random() - .5) * .4,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      alpha: Math.random() * .4 + .1,
+      pulse: Math.random() * Math.PI * 2,
+      pulseSpeed: Math.random() * .02 + .005,
     }));
   }
-  function draw() {
-    ctx.clearRect(0,0,W,H);
-    particles.forEach(p => {
-      p.x += p.vx; p.y += p.vy;
-      if (p.x<0||p.x>W) p.vx=-p.vx;
-      if (p.y<0||p.y>H) p.vy=-p.vy;
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle = `rgba(${p.color},${p.alpha})`; ctx.fill();
-    });
-    for (let i=0;i<particles.length;i++) for (let j=i+1;j<particles.length;j++) {
-      const dx=particles[i].x-particles[j].x, dy=particles[i].y-particles[j].y;
-      const d=Math.sqrt(dx*dx+dy*dy);
-      if (d<85) { ctx.beginPath(); ctx.moveTo(particles[i].x,particles[i].y); ctx.lineTo(particles[j].x,particles[j].y); ctx.strokeStyle=`rgba(99,102,241,${.04*(1-d/85)})`; ctx.lineWidth=.5; ctx.stroke(); }
+
+  function draw(timestamp) {
+    const delta = timestamp - lastTime;
+    if (delta < FRAME_MS) {
+      requestAnimationFrame(draw);
+      return;
     }
+    lastTime = timestamp - (delta % FRAME_MS);
+
+    ctx.clearRect(0, 0, W, H);
+
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.pulse += p.pulseSpeed;
+
+      if (p.x < 0 || p.x > W) p.vx = -p.vx;
+      if (p.y < 0 || p.y > H) p.vy = -p.vy;
+
+      const r = p.r + Math.sin(p.pulse) * 0.4;
+      const a = p.alpha + Math.sin(p.pulse) * 0.05;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.color},${a})`;
+      ctx.fill();
+    });
+
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 100) {
+          const opacity = .06 * (1 - d / 100);
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(${particles[i].color},${opacity})`;
+          ctx.lineWidth = .6;
+          ctx.stroke();
+        }
+      }
+    }
+
     requestAnimationFrame(draw);
   }
-  resize(); window.addEventListener('resize', resize); draw();
+
+  resize();
+  window.addEventListener('resize', resize);
+  requestAnimationFrame(draw);
 }
 
