@@ -610,6 +610,17 @@ table { width: 100%; border-collapse: collapse; }
   gap: 10px;
   flex-wrap: wrap;
 }
+.all-members-filter-bar {
+  padding: 0 0 14px;
+}
+.all-members-filter-bar .rpt-input {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+.all-members-filter-bar .rpt-select {
+  flex: 0 1 160px;
+  min-width: 130px;
+}
 .all-members-panel .mini-search {
   width: min(320px, 100%);
   padding: 9px 14px;

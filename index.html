@@ -707,8 +707,15 @@
               <span class="card-title">👥 All Members</span>
               <div class="btn-row all-members-toolbar">
                 <span class="badge-chip chip-blue" id="allMembersCount">0</span>
-                <input type="search" id="userFilterInput" class="mini-search" placeholder="Filter members…">
               </div>
+            </div>
+            <div class="rpt-filter-bar all-members-filter-bar">
+              <input type="search" id="userFilterInput" placeholder="Search member, email, ID, mobile…" class="rpt-input">
+              <select id="userSportFilterInput" class="rpt-select"></select>
+              <select id="userPlanFilterInput" class="rpt-select"></select>
+              <select id="userStatusFilterInput" class="rpt-select"></select>
+              <select id="userRoleFilterInput" class="rpt-select"></select>
+              <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear</button>
             </div>
             <div class="table-scroll">
               <table class="report-table">

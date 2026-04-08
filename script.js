@@ -90,7 +90,8 @@ const S = {
   enrollmentImages: [],
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
   audioUrl: '', audioContext: null, audioUnlocked: false,
-  ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.', userFilter: '',
+  ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
+  userFilters: { search: '', sport: '', plan: '', status: '', role: '' },
   reportFilter: { search: '', status: '', date: '' },
   membershipFilter: 'all',
 };
@@ -337,7 +338,27 @@ function bindEvents() {
   $('userForm').addEventListener('submit', handleUserSubmit);
   $('userResetBtn').addEventListener('click', resetUserForm);
   if ($('usersTableBody')) $('usersTableBody').addEventListener('click', handleUsersClick);
-  if ($('userFilterInput')) $('userFilterInput').addEventListener('input', e => { S.userFilter = e.target.value; renderUsers(); });
+  if ($('userFilterInput')) $('userFilterInput').addEventListener('input', e => {
+    S.userFilters.search = e.target.value;
+    renderUsers();
+  });
+  if ($('userSportFilterInput')) $('userSportFilterInput').addEventListener('change', e => {
+    S.userFilters.sport = e.target.value;
+    renderUsers();
+  });
+  if ($('userPlanFilterInput')) $('userPlanFilterInput').addEventListener('change', e => {
+    S.userFilters.plan = e.target.value;
+    renderUsers();
+  });
+  if ($('userStatusFilterInput')) $('userStatusFilterInput').addEventListener('change', e => {
+    S.userFilters.status = e.target.value;
+    renderUsers();
+  });
+  if ($('userRoleFilterInput')) $('userRoleFilterInput').addEventListener('change', e => {
+    S.userFilters.role = e.target.value;
+    renderUsers();
+  });
+  if ($('allMembersClearFilters')) $('allMembersClearFilters').addEventListener('click', resetAllMemberFilters);
   if ($('allMemberReportClose')) $('allMemberReportClose').addEventListener('click', closeAllMemberReport);
 
   // Reports filter
@@ -588,6 +609,7 @@ async function pingHealth() {
 function renderAll() {
   setAuth(S.currentUser);
   populateSelects();
+  populateAllMemberFilters();
   renderSystemStatus();
   renderLiveFeed();
   renderActiveSessionsPanel();
@@ -760,9 +782,21 @@ function renderUsers() {
   const tableBody = $('usersTableBody');
   if (!tableBody) return;
 
+  const filters = S.userFilters || { search: '', sport: '', plan: '', status: '', role: '' };
+  const search = String(filters.search || '').trim().toLowerCase();
   const filtered = S.users.filter(u => {
-    if (!S.userFilter.trim()) return true;
-    return [u.name, u.email, u.memberId, u.role].join(' ').toLowerCase().includes(S.userFilter.toLowerCase());
+    const statusValue = getUserStatusValue(u);
+    const searchHaystack = [
+      u.name, u.email, u.memberId, u.role, u.sport, u.membershipLevel,
+      u.membershipPlan, u.paymentStatus, u.mobileNumber, statusValue,
+    ].join(' ').toLowerCase();
+
+    if (search && !searchHaystack.includes(search)) return false;
+    if (filters.sport && String(u.sport || '') !== filters.sport) return false;
+    if (filters.plan && String(u.membershipPlan || '') !== filters.plan) return false;
+    if (filters.status && statusValue !== String(filters.status).toLowerCase()) return false;
+    if (filters.role && String(u.role || '').toLowerCase() !== String(filters.role).toLowerCase()) return false;
+    return true;
   });
   if ($('allMembersCount')) $('allMembersCount').textContent = String(filtered.length);
   tableBody.innerHTML = filtered.length
@@ -785,10 +819,59 @@ function renderUsers() {
     : `<tr><td colspan="4"><div class="empty-hint">No members found.</div></td></tr>`;
 }
 
+function populateAllMemberFilters() {
+  const filters = S.userFilters || { search: '', sport: '', plan: '', status: '', role: '' };
+  const sportValues = uniqueSortedValues(S.users.map(user => user?.sport));
+  const planValues = uniqueSortedValues(S.users.map(user => user?.membershipPlan));
+  const statusValues = uniqueSortedValues(S.users.map(getUserStatusValue));
+  const roleValues = uniqueSortedValues(S.users.map(user => String(user?.role || '').toLowerCase()));
+
+  if ($('userFilterInput')) $('userFilterInput').value = filters.search || '';
+  fillValueSelect($('userSportFilterInput'), sportValues, { blankLabel: 'All Sports', value: filters.sport });
+  fillValueSelect($('userPlanFilterInput'), planValues, { blankLabel: 'All Plans', value: filters.plan });
+  fillValueSelect($('userStatusFilterInput'), statusValues, { blankLabel: 'All Statuses', value: filters.status, label: formatUserStatusLabel });
+  fillValueSelect($('userRoleFilterInput'), roleValues, { blankLabel: 'All Roles', value: filters.role, label: formatUserStatusLabel });
+}
+
+function resetAllMemberFilters() {
+  S.userFilters = { search: '', sport: '', plan: '', status: '', role: '' };
+  populateAllMemberFilters();
+  renderUsers();
+}
+
+function fillValueSelect(sel, values, opts = {}) {
+  if (!sel) return;
+  const uniqueValues = uniqueSortedValues(values);
+  const html = [`<option value="">${esc(opts.blankLabel || 'All')}</option>`];
+  uniqueValues.forEach(value => {
+    const label = opts.label ? opts.label(value) : value;
+    html.push(`<option value="${esc(value)}">${esc(label)}</option>`);
+  });
+  sel.innerHTML = html.join('');
+  sel.value = uniqueValues.includes(opts.value) ? opts.value : '';
+}
+
+function uniqueSortedValues(values) {
+  return Array.from(new Set(toArr(values).map(value => String(value || '').trim()).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function getUserStatusValue(user) {
+  if (String(user?.role || '').toLowerCase() === 'admin') return 'admin';
+  return String(user?.membershipStatus || user?.paymentStatus || 'unknown').toLowerCase();
+}
+
+function formatUserStatusLabel(value) {
+  return String(value || '-')
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function renderUserStatusChip(user) {
-  if (String(user?.role || '').toLowerCase() === 'admin') return chip('blue', 'Admin');
-  const label = user?.membershipStatus || user?.paymentStatus || 'Unknown';
-  return chip(label, label);
+  const statusValue = getUserStatusValue(user);
+  return chip(statusValue, formatUserStatusLabel(statusValue));
 }
 
 function renderSlots() {
@@ -3088,10 +3171,11 @@ function clearSess() {
     token:'', activeTab:'liveOpsTab', currentUser:null, dashboard:null, users:[], slots:[],
     sessions:[], announcements:[], reports:null, memberDashboard:null, memberProfile:null,
     memberHistory:[], memberPayments:[], memberNotifications:[], scanImage:'', scanResult:null,
-    enrollmentImages:[], faceUsers:[], userFilter:'', ttsMode:'ready', ttsStatusText:'Preparing the browser voice assistant.',
+    enrollmentImages:[], faceUsers:[], ttsMode:'ready', ttsStatusText:'Preparing the browser voice assistant.',
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
+    userFilters: { search:'', sport:'', plan:'', status:'', role:'' },
     reportFilter: { search:'', status:'', date:'' }, membershipFilter:'all',
   });
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null; S.isScanning = false; S.scanInFlight = false;
