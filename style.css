@@ -85,18 +85,21 @@
   backface-visibility: hidden;
 }
 
-/* Smooth 90fps scrolling */
-* { scroll-behavior: smooth; }
+/* Scroll performance */
 .right-panel, .single-col-layout, .table-scroll,
 .feed-list, .membership-list, .alert-list {
   -webkit-overflow-scrolling: touch;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
+  overscroll-behavior: contain;
+  contain: layout paint style;
+  will-change: scroll-position;
 }
 html {
   height: 100%;
   overflow: hidden;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  scroll-behavior: smooth;
 }
 body {
   height: 100%;
@@ -125,7 +128,7 @@ table { width: 100%; border-collapse: collapse; }
 }
 .mesh-orb {
   position: absolute; border-radius: 50%;
-  filter: blur(90px); opacity: 0.28;
+  filter: blur(72px); opacity: 0.28;
   animation: orbDrift 26s ease-in-out infinite alternate;
   will-change: transform;
 }
@@ -150,8 +153,8 @@ table { width: 100%; border-collapse: collapse; }
 /* ── GLASS CARD ────────────────────────────────── */
 .glass-card {
   background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
   border: 1px solid rgba(255,255,255,0.75);
   box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255,255,255,0.9);
   transition: box-shadow .3s ease, border-color .3s ease, transform .25s cubic-bezier(.34,1.56,.64,1);
@@ -1137,7 +1140,7 @@ textarea { min-height: 60px; resize: none; }
 }
 .report-table { width: 100%; }
 .report-table th, .report-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.report-table th { font-family: var(--font-mono); font-size: .66rem; letter-spacing: .07em; text-transform: uppercase; color: var(--text3); position: sticky; top: 0; background: rgba(255,255,255,.97); z-index: 1; backdrop-filter: blur(8px); }
+.report-table th { font-family: var(--font-mono); font-size: .66rem; letter-spacing: .07em; text-transform: uppercase; color: var(--text3); position: sticky; top: 0; background: rgba(255,255,255,.97); z-index: 1; }
 .report-table tr:last-child td { border-bottom: none; }
 .report-table tr:hover td { background: rgba(99,102,241,.04); cursor: pointer; transition: background .2s; }
 .t-primary   { font-weight: 600; font-size: .9rem; }
@@ -1569,7 +1572,6 @@ textarea { min-height: 60px; resize: none; }
   font-family: var(--font-mono); font-size: .66rem;
   letter-spacing: .07em; text-transform: uppercase; color: var(--text3);
   position: sticky; top: 0; background: rgba(255,255,255,.97); z-index: 1;
-  backdrop-filter: blur(8px);
 }
 .rpt-row { cursor: pointer; transition: background .15s; }
 .rpt-row:hover td { background: rgba(99,102,241,.05); }

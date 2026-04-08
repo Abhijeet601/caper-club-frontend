@@ -286,8 +286,10 @@ function initUi() {
     apiConfigForm.closest('.panel-card').hidden = true;
   }
   $('scanAreaInput').value = 'Capper Sports Club Entry';
-  $('sessionAreaInput').value = 'Capper Sports Club Floor';
-  $('sessionConfidenceValue').textContent = Number($('sessionConfidenceInput').value).toFixed(2);
+  if ($('sessionAreaInput')) $('sessionAreaInput').value = 'Capper Sports Club Floor';
+  if ($('sessionConfidenceInput') && $('sessionConfidenceValue')) {
+    $('sessionConfidenceValue').textContent = Number($('sessionConfidenceInput').value).toFixed(2);
+  }
 
   const today = isoDate(new Date());
   $('userStartInput').value = today;
@@ -371,11 +373,13 @@ function bindEvents() {
   $('membershipForm').addEventListener('submit', handleMembershipSubmit);
 
   // Sessions
-  $('sessionConfidenceInput').addEventListener('input', () => {
-    $('sessionConfidenceValue').textContent = Number($('sessionConfidenceInput').value).toFixed(2);
-  });
-  $('sessionStartForm').addEventListener('submit', handleSessionStart);
-  $('sessionsTableBody').addEventListener('click', handleSessionsClick);
+  if ($('sessionConfidenceInput') && $('sessionConfidenceValue')) {
+    $('sessionConfidenceInput').addEventListener('input', () => {
+      $('sessionConfidenceValue').textContent = Number($('sessionConfidenceInput').value).toFixed(2);
+    });
+  }
+  if ($('sessionStartForm')) $('sessionStartForm').addEventListener('submit', handleSessionStart);
+  if ($('sessionsTableBody')) $('sessionsTableBody').addEventListener('click', handleSessionsClick);
 
   // Announcements
   $('announcementForm').addEventListener('submit', handleAnnouncementSubmit);
@@ -801,7 +805,9 @@ function renderSlots() {
 }
 
 function renderSessions() {
-  $('sessionsTableBody').innerHTML = S.sessions.length
+  const tableBody = $('sessionsTableBody');
+  if (!tableBody) return;
+  tableBody.innerHTML = S.sessions.length
     ? S.sessions.map(s => `<tr>
         <td><div class="t-primary">${esc(s.name||'Unknown')}</div><div class="t-secondary">${esc(s.area||'-')}</div></td>
         <td>${chip(s.status, s.status)}</td>
@@ -2885,6 +2891,7 @@ function populateSelects() {
 }
 
 function fillSelect(sel, items, opts = {}) {
+  if (!sel) return;
   const cur = sel.value;
   const html = [];
   if (opts.blank || !items.length) html.push(`<option value="">${esc(opts.blankLabel||'Select')}</option>`);
