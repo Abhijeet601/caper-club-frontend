@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    CAPPER SPORTS CLUB â€” script.js
@@ -24,6 +24,45 @@ const TONE_MAP = {
   purple:'tone-purple', violet:'tone-purple',
   red:'tone-red', denied:'tone-red', error:'tone-red', expired:'tone-red', unknown:'tone-red',
   amber:'tone-amber', warning:'tone-amber', pending:'tone-amber', duplicate:'tone-amber', retry:'tone-amber', cooldown:'tone-amber', ended:'tone-amber',
+};
+
+/* ── SPORT MEMBERSHIP LEVELS (from club database) ── */
+const SPORT_LEVELS = {
+  Swimming: [
+    { value: 'Swimming Month',      label: 'Swimming Monthly (1M)',          days: 30  },
+    { value: 'Swimming 2 Month',    label: 'Swimming 2 Month (2M)',           days: 60  },
+    { value: 'Swimming Qty',        label: 'Swimming Quarterly (3M)',         days: 90  },
+    { value: 'Swimming HY',         label: 'Swimming Half-Yearly (6M)',       days: 180 },
+    { value: 'Swimming Y',          label: 'Swimming Yearly (12M)',           days: 365 },
+    { value: 'Swimming Qty 3days',  label: 'Swimming Quarterly (3 days/wk)', days: 90  },
+  ],
+  Cricket: [
+    { value: 'Cricket Month',  label: 'Cricket Monthly (1M)',      days: 30  },
+    { value: 'Cricket Qty',    label: 'Cricket Quarterly (3M)',     days: 90  },
+    { value: 'Cricket HY',     label: 'Cricket Half-Yearly (6M)',   days: 180 },
+    { value: 'Cricket Y',      label: 'Cricket Yearly (12M)',       days: 365 },
+  ],
+  Tennis: [
+    { value: 'Tennis Month',   label: 'Tennis Monthly (1M)',        days: 30  },
+    { value: 'Tennis 2 Month', label: 'Tennis 2 Month (2M)',         days: 60  },
+    { value: 'Tennis Qty',     label: 'Tennis Quarterly (3M)',       days: 90  },
+    { value: 'Tennis HY',      label: 'Tennis Half-Yearly (6M)',     days: 180 },
+    { value: 'Tennis Y',       label: 'Tennis Yearly (12M)',         days: 365 },
+  ],
+  Zumba: [
+    { value: 'Zumba Month',    label: 'Zumba Monthly (1M)',          days: 30  },
+    { value: 'Zumba Qty',      label: 'Zumba Quarterly (3M)',         days: 90  },
+  ],
+  Skating: [
+    { value: 'Skating Month',  label: 'Skating Monthly (1M)',        days: 30  },
+    { value: 'Skating Qty',    label: 'Skating Quarterly (3M)',       days: 90  },
+  ],
+  General: [
+    { value: 'Monthly',        label: 'Monthly (30 days)',            days: 30  },
+    { value: 'Quarterly',      label: 'Quarterly (90 days)',          days: 90  },
+    { value: 'Half-Yearly',    label: 'Half-Yearly (180 days)',       days: 180 },
+    { value: 'Yearly',         label: 'Yearly (365 days)',            days: 365 },
+  ],
 };
 
 /* â”€â”€ STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -285,6 +324,12 @@ function bindEvents() {
     syncSlotField();
     syncUserMemberIdField();
   });
+  if ($('userSportInput')) {
+    $('userSportInput').addEventListener('change', () => {
+      syncUserPlanDates();
+      syncUserMemberIdField();
+    });
+  }
   $('userPlanInput').addEventListener('change', syncUserPlanDates);
   $('userStartInput').addEventListener('input', syncUserPlanDates);
   $('userForm').addEventListener('submit', handleUserSubmit);
@@ -716,7 +761,13 @@ function renderUsers() {
   tableBody.innerHTML = filtered.length
     ? filtered.map(u => `<tr data-user-row="${u.id}">
         <td><div class="t-primary">${esc(u.name)}</div><div class="t-secondary">${esc(u.email)}</div></td>
-        <td>${esc(u.membershipPlan||'-')} ${chip(u.membershipStatus||'slate', u.membershipStatus||'-')}</td>
+        <td>
+          <div class="t-primary">${esc(u.sport||'-')}</div>
+          <div class="t-secondary">${esc([
+            u.membershipLevel || u.membershipPlan || '-',
+            Number(u.dueAmount || 0) > 0 ? `Due ${fmtMoney(u.dueAmount || 0)}` : '',
+          ].filter(Boolean).join(' | '))}</div>
+        </td>
         <td>${chip(u.role, u.role)}</td>
         <td><div class="table-actions">
           <button class="mini-btn" data-user-edit="${u.id}">Edit</button>
@@ -1586,6 +1637,8 @@ async function handleUserSubmit(e) {
   const payload = {
     name: $('userNameInput').value.trim(),
     memberId: resolvedMemberId,
+    sport: $('userSportInput')?.value || 'General',
+    membershipLevel: $('userLevelInput')?.value || '',
     email: $('userEmailInput').value.trim(),
     password: password || null,
     mobileNumber: $('userMobileInput')?.value?.trim() || null,
@@ -1595,6 +1648,7 @@ async function handleUserSubmit(e) {
     membershipStart: $('userStartInput').value,
     membershipExpiry: $('userExpiryInput').value,
     paymentAmount: Number($('userAmountInput').value||0),
+    dueAmount: Number($('userDueAmountInput')?.value||0),
     paymentMode: $('userPaymentModeInput').value,
     paymentStatus: $('userPaymentStatusInput').value,
     note: $('userNoteInput').value.trim(),
@@ -1632,6 +1686,8 @@ function beginUserEdit(id) {
   $('userMemberIdInput').value = u.memberId||'';
   $('userEmailInput').value = u.email||'';
   if ($('userMobileInput')) $('userMobileInput').value = u.mobileNumber||u.mobile_number||'';
+  if ($('userSportInput')) $('userSportInput').value = u.sport || 'General';
+  if ($('userLevelInput')) $('userLevelInput').value = u.membershipLevel || '';
   $('userRoleInput').value = u.role||'user';
   $('userSlotInput').value = u.slotId||'';
   $('userPlanInput').value = u.membershipPlan||'Monthly';
@@ -1640,6 +1696,7 @@ function beginUserEdit(id) {
   $('userMemberIdInput').readOnly = false;
   $('userMemberIdInput').required = true;
   $('userAmountInput').value = String(u.paymentAmount||0);
+  if ($('userDueAmountInput')) $('userDueAmountInput').value = String(u.dueAmount||0);
   $('userPaymentModeInput').value = u.paymentMode||'Cash';
   $('userPaymentStatusInput').value = u.paymentStatus||'Pending';
   $('userNoteInput').value = u.adminNote||u.note||'';
@@ -1672,6 +1729,8 @@ function resetUserForm() {
   $('userStartInput').value = isoDate(new Date());
   $('userExpiryInput').value = isoDate(addDays(new Date(), 30));
   $('userAmountInput').value = '0';
+  if ($('userDueAmountInput')) $('userDueAmountInput').value = '0';
+  if ($('userLevelInput')) $('userLevelInput').value = '';
   $('userPasswordInput').required = true;
   $('userPasswordInput').placeholder = 'Min 8 characters';
   $('userMemberIdInput').placeholder = 'Auto-generated';
@@ -1685,18 +1744,29 @@ function syncSlotField() {
 }
 
 function generateNextMemberId(role = 'user') {
-  const normalizedRole = String(role || 'user').toLowerCase();
-  const prefix = normalizedRole === 'admin' ? 'ADMIN' : 'CSC';
-  const width = prefix === 'ADMIN' ? 4 : 3;
+  const sport = $('userSportInput')?.value || 'General';
+  const prefixMap = {
+    Swimming: 'CAP/SW',
+    Cricket:  'CAP/CR',
+    Tennis:   'CAP/TN',
+    Zumba:    'CAP/ZU',
+    Skating:  'CAP/SK',
+    General:  'CSC',
+  };
+  const prefix = role === 'admin' ? 'ADMIN' : (prefixMap[sport] || 'CSC');
   let highest = 0;
 
   toArr(S.users).forEach(user => {
     const memberId = String(user?.memberId || '').trim().toUpperCase();
-    const match = memberId.match(new RegExp(`^${prefix}-(\\d+)$`));
-    if (match) highest = Math.max(highest, Number(match[1]));
+    const slashMatch = memberId.match(new RegExp(`^${prefix.replace(/\//g, '\\/').toUpperCase()}\/(\\d+)$`));
+    const dashMatch  = memberId.match(new RegExp(`^${prefix.toUpperCase()}-(\\d+)$`));
+    const num = slashMatch ? Number(slashMatch[1]) : dashMatch ? Number(dashMatch[1]) : 0;
+    if (num > highest) highest = num;
   });
 
-  return `${prefix}-${String(highest + 1).padStart(width, '0')}`;
+  const pad = prefix.includes('/') ? 2 : 3;
+  const sep = prefix.includes('/') ? '/' : '-';
+  return `${prefix}${sep}${String(highest + 1).padStart(pad, '0')}`;
 }
 
 function syncUserMemberIdField() {
@@ -1717,16 +1787,26 @@ function syncUserMemberIdField() {
 
 function syncUserPlanDates() {
   const startValue = $('userStartInput').value;
-  const plan = $('userPlanInput').value;
   const expiryInput = $('userExpiryInput');
-  if (!expiryInput) return;
+  if (!expiryInput || !startValue) return;
 
-  const planDays = { Monthly: 30, Quarterly: 90, 'Half-Yearly': 180, Yearly: 365 };
-  const days = planDays[plan];
+  const days = getSportLevelDays();
   expiryInput.readOnly = Boolean(days);
-  if (!startValue || !days) return;
+  if (!days) return;
 
   expiryInput.value = isoDate(addDays(new Date(startValue), days));
+}
+
+function getSportLevelDays() {
+  const planSel  = $('userPlanInput');
+  const planDays = {
+    Monthly: 30,
+    '2 Month': 60,
+    Quarterly: 90,
+    'Half-Yearly': 180,
+    Yearly: 365,
+  };
+  return planDays[planSel?.value] || null;
 }
 
 /* â”€â”€ SLOTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */

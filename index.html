@@ -376,13 +376,31 @@
               </div>
               <div class="form-row">
                 <label class="field-stack">
+                  <span>Sport / Activity</span>
+                  <select id="userSportInput">
+                    <option value="Swimming">🏊 Swimming</option>
+                    <option value="Cricket">🏏 Cricket</option>
+                    <option value="Zumba">💃 Zumba</option>
+                    <option value="Tennis">🎾 Tennis</option>
+                    <option value="Skating">⛸ Skating</option>
+                    <option value="General">🏃 General</option>
+                  </select>
+                </label>
+                <label class="field-stack">
+                  <span>Membership Level</span>
+                  <input type="text" id="userLevelInput" placeholder="Enter membership level">
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field-stack">
                   <span>Plan</span>
                   <select id="userPlanInput">
                     <option value="Monthly">Monthly (30 days)</option>
+                    <option value="2 Month">2 Month (60 days)</option>
                     <option value="Quarterly">Quarterly (90 days)</option>
                     <option value="Half-Yearly">Half-Yearly (180 days)</option>
                     <option value="Yearly">Yearly (365 days)</option>
-                    <option value="Custom">Custom</option>
+                    <option value="Custom">Custom (1–29 days)</option>
                   </select>
                 </label>
                 <label class="field-stack">
@@ -400,14 +418,18 @@
                   <input type="number" id="userAmountInput" min="0" step="0.01" value="0" required>
                 </label>
                 <label class="field-stack">
-                  <span>Pay Status</span>
-                  <select id="userPaymentStatusInput">
-                    <option value="Paid">Paid</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Expired">Expired</option>
-                  </select>
+                  <span>Due Amount (₹)</span>
+                  <input type="number" id="userDueAmountInput" min="0" step="0.01" value="0">
                 </label>
               </div>
+              <label class="field-stack">
+                <span>Pay Status</span>
+                <select id="userPaymentStatusInput">
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Expired">Expired</option>
+                </select>
+              </label>
               <div class="form-row">
                 <label class="field-stack">
                   <span>Start Date</span>
@@ -677,7 +699,7 @@
   </div>
   <div class="table-scroll">
     <table class="report-table">
-      <thead><tr><th>Member</th><th>Plan</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody id="usersTableBody"></tbody>
     </table>
   </div>
