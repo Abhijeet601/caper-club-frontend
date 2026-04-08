@@ -2986,6 +2986,42 @@ function populateSelects() {
   syncSlotField();
 }
 
+function applyEnrollmentMemberSearch(opts = {}) {
+  const input = $('enrollmentUserSearchInput');
+  const query = String(opts.query ?? input?.value ?? '').trim();
+  const allMembers = S.users.filter(u => u.role === 'user');
+  const matches = !query ? allMembers : allMembers.filter(user =>
+    [
+      user.name,
+      user.memberId,
+      user.email,
+      user.mobileNumber,
+      user.mobile_number,
+      user.sport,
+    ].join(' ').toLowerCase().includes(query.toLowerCase())
+  );
+
+  fillSelect($('enrollmentUserInput'), matches, {
+    blank: !matches.length,
+    blankLabel: matches.length ? 'Select member' : 'No member found',
+    label: user => `${user.name} (${user.memberId})`,
+  });
+
+  if (matches.length === 1 && $('enrollmentUserInput')) {
+    $('enrollmentUserInput').value = String(matches[0].id);
+  }
+
+  if ($('enrollmentSearchHint')) {
+    $('enrollmentSearchHint').textContent = query
+      ? `${matches.length} member${matches.length === 1 ? '' : 's'} found.`
+      : `Showing all ${allMembers.length} members.`;
+  }
+
+  if (opts.toastOnEmpty && query && !matches.length) {
+    toast('No member matched the search.', 'warning');
+  }
+}
+
 function fillSelect(sel, items, opts = {}) {
   if (!sel) return;
   const cur = sel.value;
