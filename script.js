@@ -336,6 +336,7 @@ function bindEvents() {
   $('userResetBtn').addEventListener('click', resetUserForm);
   if ($('usersTableBody')) $('usersTableBody').addEventListener('click', handleUsersClick);
   if ($('userFilterInput')) $('userFilterInput').addEventListener('input', e => { S.userFilter = e.target.value; renderUsers(); });
+  if ($('allMemberReportClose')) $('allMemberReportClose').addEventListener('click', closeAllMemberReport);
 
   // Reports filter
   if ($('reportSearchInput')) $('reportSearchInput').addEventListener('input', e => { S.reportFilter.search = e.target.value; renderReportTable(); });
@@ -770,13 +771,20 @@ function renderUsers() {
             Number(u.dueAmount || 0) > 0 ? `Due ${fmtMoney(u.dueAmount || 0)}` : '',
           ].filter(Boolean).join(' | '))}</div>
         </td>
-        <td>${chip(u.role, u.role)}</td>
+        <td>${renderUserStatusChip(u)}</td>
         <td><div class="table-actions">
+          <button class="mini-btn" data-user-report="${u.id}">Report</button>
           <button class="mini-btn" data-user-edit="${u.id}">Edit</button>
           <button class="mini-btn del" data-user-delete="${u.id}">Del</button>
         </div></td>
       </tr>`).join('')
     : `<tr><td colspan="4"><div class="empty-hint">No members found.</div></td></tr>`;
+}
+
+function renderUserStatusChip(user) {
+  if (String(user?.role || '').toLowerCase() === 'admin') return chip('blue', 'Admin');
+  const label = user?.membershipStatus || user?.paymentStatus || 'Unknown';
+  return chip(label, label);
 }
 
 function renderSlots() {
@@ -1675,8 +1683,146 @@ function showFormSuccess(id) {
 }
 
 async function handleUsersClick(e) {
+  if (e.target.dataset.userReport) await openAllMemberReport(e.target.dataset.userReport);
   if (e.target.dataset.userEdit)   beginUserEdit(e.target.dataset.userEdit);
   if (e.target.dataset.userDelete) deleteUser(e.target.dataset.userDelete);
+}
+
+async function openAllMemberReport(id) {
+  if (!ensureAdmin()) return;
+
+  const reportDrawer = $('allMemberReportDrawer');
+  const reportTitle = $('allMemberReportTitle');
+  const reportSubtitle = $('allMemberReportSubtitle');
+  const reportBody = $('allMemberReportBody');
+  const user = S.users.find(x => x.id === id) || {};
+
+  if (!reportDrawer || !reportTitle || !reportSubtitle || !reportBody) return;
+
+  reportTitle.textContent = `${user.name || 'Member'} Report`;
+  reportSubtitle.textContent = 'Loading full member report...';
+  reportBody.innerHTML = '<div class="empty-hint">Loading report...</div>';
+  reportDrawer.hidden = false;
+
+  try {
+    const report = await api(`/admin/user/${id}/report`);
+    renderAllMemberReport(report, user);
+    reportDrawer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    reportSubtitle.textContent = 'Unable to load the member report.';
+    reportBody.innerHTML = '<div class="empty-hint">Report could not be loaded right now.</div>';
+    handleErr(err, { toast: true });
+  }
+}
+
+function closeAllMemberReport() {
+  if ($('allMemberReportDrawer')) $('allMemberReportDrawer').hidden = true;
+}
+
+function renderAllMemberReport(report, fallbackUser = {}) {
+  const reportDrawer = $('allMemberReportDrawer');
+  const reportTitle = $('allMemberReportTitle');
+  const reportSubtitle = $('allMemberReportSubtitle');
+  const reportBody = $('allMemberReportBody');
+  if (!reportDrawer || !reportTitle || !reportSubtitle || !reportBody) return;
+
+  const profile = report?.profile || fallbackUser || {};
+  const sessions = toArr(report?.sessions);
+  const timelines = toArr(report?.timelines);
+  const payments = toArr(report?.payments);
+  const totalPaid = sumPaymentAmounts(payments);
+  const note = profile.adminNote || profile.note || '';
+  const lastAction = [
+    profile.lastAction ? String(profile.lastAction).toUpperCase() : '',
+    profile.lastActionAt ? fmtDT(profile.lastActionAt) : '',
+  ].filter(Boolean).join(' | ');
+
+  reportTitle.textContent = `${profile.name || 'Member'} Report`;
+  reportSubtitle.textContent = [
+    profile.memberId || '',
+    profile.email || '',
+    profile.sport || '',
+  ].filter(Boolean).join(' | ') || 'Full member report';
+
+  reportBody.innerHTML = `
+    <div class="meta-grid">
+      ${meta('Member ID', profile.memberId)}
+      ${meta('Role', profile.role)}
+      ${meta('Sport', profile.sport)}
+      ${meta('Level', profile.membershipLevel)}
+      ${meta('Plan', profile.membershipPlan)}
+      ${meta('Status', profile.membershipStatus || profile.status)}
+      ${meta('Payment', profile.paymentStatus)}
+      ${meta('Due Amount', fmtMoney(profile.dueAmount || 0))}
+      ${meta('Paid Total', fmtMoney(totalPaid))}
+      ${meta('Visits', String(profile.visits ?? 0))}
+      ${meta('Face Images', String(profile.faceImageCount || profile.imageCount || 0))}
+      ${meta('Slot', profile.slotName)}
+      ${meta('Mobile', profile.mobileNumber || profile.mobile_number)}
+      ${meta('Start', profile.membershipStart || profile.startDate)}
+      ${meta('Expiry', profile.membershipExpiry || profile.expiry)}
+      ${meta('Days Left', profile.daysLeft !== undefined && profile.daysLeft !== null ? String(profile.daysLeft) : '-')}
+      ${meta('Last Action', lastAction || '-')}
+    </div>
+    ${note ? `<div class="all-member-report-note">${esc(note)}</div>` : ''}
+    <div class="all-member-report-section">
+      <div class="card-sub-head">Session History</div>
+      <div class="table-scroll">
+        <table class="report-table">
+          <thead><tr><th>Check-in</th><th>Check-out</th><th>Area</th><th>Status</th><th>Duration</th></tr></thead>
+          <tbody>${sessions.length ? sessions.map(s => `<tr>
+            <td class="t-secondary">${esc(fmtDT(s.startedAt))}</td>
+            <td class="t-secondary">${hasActualCheckout(s) ? esc(fmtDT(s.endedAt)) : '-'}</td>
+            <td class="t-secondary">${esc(s.area || '-')}</td>
+            <td>${chip(s.status || 'unknown', s.status || '-')}</td>
+            <td class="t-secondary">${esc(fmtDur(s.durationMinutes))}</td>
+          </tr>`).join('') : `<tr><td colspan="5"><div class="empty-hint">No session history.</div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="all-member-report-section">
+      <div class="card-sub-head">Attendance Timeline</div>
+      <div class="table-scroll">
+        <table class="report-table">
+          <thead><tr><th>Event</th><th>Area</th><th>Time</th><th>Total</th><th>Note</th></tr></thead>
+          <tbody>${timelines.length ? timelines.map(item => `<tr>
+            <td>${chip(item.eventType || 'blue', formatTimelineEvent(item.eventType))}</td>
+            <td class="t-secondary">${esc(item.area || '-')}</td>
+            <td class="t-secondary">${esc(fmtDT(item.occurredAt))}</td>
+            <td class="t-secondary">${esc(item.totalMinutes ? fmtDur(item.totalMinutes) : '-')}</td>
+            <td class="t-secondary">${esc(item.note || '-')}</td>
+          </tr>`).join('') : `<tr><td colspan="5"><div class="empty-hint">No attendance timeline.</div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="all-member-report-section">
+      <div class="card-sub-head">Payment History</div>
+      <div class="table-scroll">
+        <table class="report-table">
+          <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Mode</th><th>Status</th><th>Period</th><th>Source</th></tr></thead>
+          <tbody>${payments.length ? payments.map(payment => `<tr>
+            <td class="t-secondary">${esc(fmtDT(payment.createdAt))}</td>
+            <td class="t-secondary">${esc(payment.plan || '-')}</td>
+            <td class="t-secondary">${fmtMoney(payment.amount || 0)}</td>
+            <td class="t-secondary">${esc(payment.paymentMode || '-')}</td>
+            <td>${chip(payment.paymentStatus || 'unknown', payment.paymentStatus || '-')}</td>
+            <td class="t-secondary">${esc([
+              payment.membershipStart || '-',
+              payment.membershipExpiry || '-',
+            ].join(' to '))}</td>
+            <td class="t-secondary">${esc(payment.source || '-')}</td>
+          </tr>`).join('') : `<tr><td colspan="7"><div class="empty-hint">No payment history.</div></td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  reportDrawer.hidden = false;
+}
+
+function formatTimelineEvent(value) {
+  return String(value || '-')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, ch => ch.toUpperCase());
 }
 
 function beginUserEdit(id) {
@@ -2945,6 +3091,7 @@ function clearSess() {
   clearInterval(S.sessionTimerLoop); S.sessionTimerLoop = null; S.activeSessions = {};
   localStorage.removeItem(STORAGE_KEYS.sessionTimers);
   stopBrowserSpeech(); clearAudio(); stopCamera(); clearDataPoll();
+  closeAllMemberReport();
   if ($('lastSyncText')) $('lastSyncText').textContent = 'Never';
   openTab('liveOpsTab');
   renderAll();
