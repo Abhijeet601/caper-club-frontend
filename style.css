@@ -1031,6 +1031,15 @@ table { width: 100%; border-collapse: collapse; }
 
 /* ── FORMS ─────────────────────────────────────── */
 .compact-form { display: flex; flex-direction: column; gap: 8px; }
+.enrollment-search-row { display: flex; gap: 8px; align-items: center; }
+.enrollment-search-row input { flex: 1 1 auto; min-width: 0; }
+.enrollment-search-hint {
+  font-size: .72rem;
+  color: var(--text3);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
 .user-form    { display: flex; flex-direction: column; gap: 8px; position: relative; }
 .form-row     { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .field-stack  { display: flex; flex-direction: column; gap: 4px; }
@@ -1298,6 +1307,7 @@ textarea { min-height: 60px; resize: none; }
   .status-pills   { gap: 4px; }
   .scan-meta-row  { grid-template-columns: repeat(2, 1fr); }
   .form-row       { grid-template-columns: 1fr; }
+  .enrollment-search-row { flex-direction: column; align-items: stretch; }
   .sys-status-grid { grid-template-columns: 1fr 1fr; }
   .all-members-layout {
     height: auto;

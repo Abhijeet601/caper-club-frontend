@@ -469,6 +469,14 @@
             <div class="card-head"><span class="card-title">📤 Enroll Faces</span></div>
             <form id="faceUploadForm">
               <label class="field-stack">
+                <span>Search Member</span>
+                <div class="enrollment-search-row">
+                  <input type="search" id="enrollmentUserSearchInput" placeholder="Search by name, member ID, email, mobile">
+                  <button type="button" class="btn-ghost btn-sm" id="enrollmentUserSearchBtn">Search</button>
+                </div>
+                <span class="enrollment-search-hint" id="enrollmentSearchHint">Showing all members.</span>
+              </label>
+              <label class="field-stack">
                 <span>Member</span>
                 <select id="enrollmentUserInput"></select>
               </label>

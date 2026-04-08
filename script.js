@@ -416,6 +416,19 @@ function bindEvents() {
   $('clearEnrollmentBtn').addEventListener('click', clearEnrollmentImages);
   $('enrollmentFilesInput').addEventListener('change', handleEnrollFiles);
   $('faceUploadForm').addEventListener('submit', handleFaceUpload);
+  if ($('enrollmentUserSearchBtn')) {
+    $('enrollmentUserSearchBtn').addEventListener('click', () => applyEnrollmentMemberSearch({ toastOnEmpty: true }));
+  }
+  if ($('enrollmentUserSearchInput')) {
+    $('enrollmentUserSearchInput').addEventListener('input', e => {
+      applyEnrollmentMemberSearch({ query: e.target.value, toastOnEmpty: false });
+    });
+    $('enrollmentUserSearchInput').addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      applyEnrollmentMemberSearch({ toastOnEmpty: true });
+    });
+  }
 
   // TTS
   $('ttsForm').addEventListener('submit', handleTts);
@@ -2968,7 +2981,7 @@ function populateSelects() {
   const members = S.users.filter(u => u.role === 'user');
   fillSelect($('membershipUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
   fillSelect($('sessionUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
-  fillSelect($('enrollmentUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
+  applyEnrollmentMemberSearch({ query: $('enrollmentUserSearchInput')?.value || '' });
   fillSelect($('announcementUserInput'), members, { blank:true, blankLabel:'All members', label: u=>`${u.name} (${u.memberId})` });
   syncSlotField();
 }
