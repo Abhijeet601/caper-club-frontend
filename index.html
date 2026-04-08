@@ -95,6 +95,10 @@
           <span class="nav-tab-dot violet"></span>
           Reports
         </button>
+        <button class="nav-tab" data-tab="allMembersTab">
+          <span class="nav-tab-dot slate"></span>
+          All Members
+        </button>
         <button class="nav-tab" data-tab="membershipTab">
           <span class="nav-tab-dot amber"></span>
           Membership
@@ -691,22 +695,29 @@
       </div>
     </div>
 
-  <!-- Add inside reportsTab, after the renewal tracker card -->
-<div class="panel-card glass-card">
-  <div class="card-head">
-    <span class="card-title">👥 All Members</span>
-    <input type="search" id="userFilterInput" class="mini-search" placeholder="Filter…">
-  </div>
-  <div class="table-scroll">
-    <table class="report-table">
-      <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Actions</th></tr></thead>
-      <tbody id="usersTableBody"></tbody>
-    </table>
-  </div>
-</div>
-
   </div>
 
+      </div>
+
+      <!-- ══ ALL MEMBERS TAB ══ -->
+      <div class="tab-page" id="allMembersTab">
+        <div class="single-col-layout">
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">👥 All Members</span>
+              <div class="btn-row">
+                <span class="badge-chip chip-blue" id="allMembersCount">0</span>
+                <input type="search" id="userFilterInput" class="mini-search" placeholder="Filter members…">
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="report-table">
+                <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="usersTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ══ MEMBERSHIP TAB ══ -->

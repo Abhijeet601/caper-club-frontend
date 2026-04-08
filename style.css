@@ -464,17 +464,17 @@ table { width: 100%; border-collapse: collapse; }
    ════════════════════════════════════════════════ */
 .tab-nav {
   flex-shrink: 0;
-  height: var(--tabnav-h);
+  min-height: var(--tabnav-h);
+  height: auto;
   border-radius: var(--r-md);
   display: flex; align-items: center;
   padding: 0 clamp(6px, 1vw, 14px);
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;
   scrollbar-width: none;
   animation: slideDown .5s var(--ease-spring) .06s both;
 }
 .tab-nav::-webkit-scrollbar { display: none; }
-.tab-nav-inner { display: flex; gap: 6px; align-items: center; }
+.tab-nav-inner { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .nav-tab {
   display: inline-flex; align-items: center; gap: 7px;
   padding: clamp(5px, 0.5vh, 8px) clamp(10px, 1.2vw, 18px); border-radius: var(--r-sm);

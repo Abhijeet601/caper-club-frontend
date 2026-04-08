@@ -610,6 +610,7 @@ function openTab(id) {
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === id));
   if (id === 'reportsTab') renderReportsAll();
+  if (id === 'allMembersTab') renderUsers();
 }
 
 /* â”€â”€ CONSOLE STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -758,6 +759,7 @@ function renderUsers() {
     if (!S.userFilter.trim()) return true;
     return [u.name, u.email, u.memberId, u.role].join(' ').toLowerCase().includes(S.userFilter.toLowerCase());
   });
+  if ($('allMembersCount')) $('allMembersCount').textContent = String(filtered.length);
   tableBody.innerHTML = filtered.length
     ? filtered.map(u => `<tr data-user-row="${u.id}">
         <td><div class="t-primary">${esc(u.name)}</div><div class="t-secondary">${esc(u.email)}</div></td>
