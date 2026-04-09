@@ -1745,10 +1745,10 @@ async function handleUserSubmit(e) {
   if (!ensureAdmin()) return;
   const editId = $('userIdInput').value.trim();
   const password = $('userPasswordInput').value.trim();
-  const resolvedMemberId = $('userMemberIdInput').value.trim() || generateNextMemberId($('userRoleInput').value);
+  const isEditMode = Boolean(editId);
   const payload = {
     name: $('userNameInput').value.trim(),
-    memberId: resolvedMemberId,
+    memberId: isEditMode ? $('userMemberIdInput').value.trim() || null : null,
     sport: $('userSportInput')?.value || 'General',
     membershipLevel: $('userLevelInput')?.value || '',
     email: $('userEmailInput').value.trim(),
@@ -2032,7 +2032,7 @@ function syncUserMemberIdField() {
 
   memberIdInput.readOnly = true;
   memberIdInput.required = false;
-  memberIdInput.value = generateNextMemberId($('userRoleInput').value);
+  memberIdInput.value = '';
 }
 
 function syncUserPlanDates() {
