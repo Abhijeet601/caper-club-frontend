@@ -801,7 +801,7 @@ function renderUsers() {
     const statusValue = getUserStatusValue(u);
     const searchHaystack = [
       u.name, u.email, u.memberId, u.role, u.sport, u.membershipLevel,
-      u.membershipPlan, u.paymentStatus, u.mobileNumber, statusValue,
+      u.membershipPlan, u.paymentStatus, u.mobileNumber || u.mobile_number, statusValue,
     ].join(' ').toLowerCase();
 
     if (search && !searchHaystack.includes(search)) return false;
