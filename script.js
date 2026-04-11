@@ -392,6 +392,7 @@ function bindEvents() {
 
   // Membership
   $('membershipForm').addEventListener('submit', handleMembershipSubmit);
+  if ($('membershipUserSearchInput')) $('membershipUserSearchInput').addEventListener('input', () => applyMembershipUserSearch());
 
   // Sessions
   if ($('sessionConfidenceInput') && $('sessionConfidenceValue')) {
@@ -2978,12 +2979,35 @@ function ttsPriority(priority) {
 
 function populateSelects() {
   fillSelect($('userSlotInput'), S.slots, { blank:true, blankLabel:'No slot', label: s=>`${s.name} (${s.startTime}â€“${s.endTime})` });
+  applyMembershipUserSearch();
   const members = S.users.filter(u => u.role === 'user');
-  fillSelect($('membershipUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
   fillSelect($('sessionUserInput'), members, { label: u=>`${u.name} (${u.memberId})` });
   applyEnrollmentMemberSearch({ query: $('enrollmentUserSearchInput')?.value || '' });
   fillSelect($('announcementUserInput'), members, { blank:true, blankLabel:'All members', label: u=>`${u.name} (${u.memberId})` });
   syncSlotField();
+}
+
+function applyMembershipUserSearch() {
+  const query = String($('membershipUserSearchInput')?.value || '').trim().toLowerCase();
+  const allMembers = S.users.filter(u => u.role === 'user');
+  const matches = !query ? allMembers : allMembers.filter(user =>
+    [
+      user.name,
+      user.memberId,
+      user.email,
+      user.mobileNumber || user.mobile_number,
+    ].join(' ').toLowerCase().includes(query)
+  );
+
+  fillSelect($('membershipUserInput'), matches, {
+    blank: !matches.length,
+    blankLabel: matches.length ? 'Select member' : 'No member found',
+    label: user => `${user.name} (${user.memberId})`,
+  });
+
+  if (matches.length === 1 && $('membershipUserInput')) {
+    $('membershipUserInput').value = String(matches[0].id);
+  }
 }
 
 function applyEnrollmentMemberSearch(opts = {}) {
