@@ -4010,8 +4010,7 @@ function renderActiveSessionsPanel() {
     const elapsed = Math.max(0, now - startTime);
     const remaining = Math.max(0, deadlineTime - now);
     const progress = Math.min(100, (elapsed / duration) * 100);
-    const elapsedStr = msToMMSS(elapsed);
-    const remainStr = msToMMSS(remaining);
+    const remainStr = formatSessionRemainingLabel(remaining);
     const isEnding = remaining <= 5 * 60 * 1000 && remaining > 0;
     const isExpired = remaining <= 0;
     const endAction = sess.sessionId
@@ -4029,19 +4028,15 @@ function renderActiveSessionsPanel() {
         <div class="sess-avatar">${esc((sess.name || '?')[0].toUpperCase())}</div>
         <div class="sess-info">
           <div class="sess-name">${esc(sess.name)}</div>
-          <div class="sess-id">Started ${msToMMSS(Math.max(0, now - Number(sess.startTime || now)))} ago</div>
+          <div class="sess-id">Session window: 70 min</div>
         </div>
         <span class="status-chip ${statusTone}">${statusLabel}</span>
         <button class="mini-btn del" onclick='${endAction}'>${endLabel}</button>
       </div>
       <div class="sess-times">
-        <div class="sess-time-block">
-          <span class="sess-time-label">ELAPSED</span>
-          <span class="sess-time-value">${elapsedStr}</span>
-        </div>
-        <div class="sess-time-block">
+        <div class="sess-time-block full">
           <span class="sess-time-label">REMAINING</span>
-          <span class="sess-time-value ${isExpired ? 'expired-text' : isEnding ? 'ending-text' : ''}">${isExpired ? 'OVER' : remainStr}</span>
+          <span class="sess-time-value ${isExpired ? 'expired-text' : isEnding ? 'ending-text' : ''}">${remainStr}</span>
         </div>
       </div>
       <div class="sess-progress-rail">
@@ -4058,6 +4053,11 @@ function msToMMSS(ms) {
   const m = Math.floor(total / 60);
   const s = total % 60;
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function formatSessionRemainingLabel(ms) {
+  if (Number(ms || 0) <= 0) return 'OVER';
+  return `${Math.max(1, Math.ceil(Number(ms || 0) / 60000))} min`;
 }
 
 function pickSpeechVoice(voices) {
@@ -4211,4 +4211,3 @@ function initParticles() {
   window.addEventListener('resize', resize);
   requestAnimationFrame(draw);
 }
-
