@@ -1003,13 +1003,19 @@ function showReportDetail(name, report) {
   const detailContent = $('reportDetailContent');
   const detailDrawer = $('reportUserDetail');
   if (!detailName || !detailContent || !detailDrawer) return;
+  const profile = report?.profile || {};
+  const membershipVisitsUsed = String(profile.membershipVisitsUsed ?? profile.visits ?? 0);
+  const membershipVisitsAllowed = String(profile.membershipVisitsAllowed ?? 0);
+  const membershipVisitsRemaining = String(profile.membershipVisitsRemaining ?? 0);
 
   detailName.textContent = `ðŸ“Š ${name}`;
   detailContent.innerHTML = `
     <div class="meta-grid" style="margin-bottom:8px;">
-      <div class="meta-item"><span class="meta-label">Visits</span><span class="meta-value">${esc(String(report?.profile?.visits||0))}</span></div>
+      <div class="meta-item"><span class="meta-label">Visits Used</span><span class="meta-value">${esc(membershipVisitsUsed)}</span></div>
+      <div class="meta-item"><span class="meta-label">Visit Limit</span><span class="meta-value">${esc(membershipVisitsAllowed)}</span></div>
+      <div class="meta-item"><span class="meta-label">Visits Left</span><span class="meta-value">${esc(membershipVisitsRemaining)}</span></div>
       <div class="meta-item"><span class="meta-label">Sessions</span><span class="meta-value">${toArr(report?.sessions).length}</span></div>
-      <div class="meta-item"><span class="meta-label">Faces</span><span class="meta-value">${esc(String(report?.profile?.faceImageCount||0))}</span></div>
+      <div class="meta-item"><span class="meta-label">Faces</span><span class="meta-value">${esc(String(profile.faceImageCount||0))}</span></div>
     </div>
     <div class="table-scroll" style="max-height:120px;">
       <table class="report-table">
@@ -1682,6 +1688,9 @@ function renderEnrollGallery() {
 function renderMember() {
   const profile = S.memberProfile || S.memberDashboard?.profile;
   if (!profile) return;
+  const membershipVisitsUsed = String(profile.membershipVisitsUsed ?? profile.visits ?? 0);
+  const membershipVisitsAllowed = String(profile.membershipVisitsAllowed ?? 0);
+  const membershipVisitsRemaining = String(profile.membershipVisitsRemaining ?? 0);
 
   const myAcc = $('myAccountSection');
   const myRec = $('myRecordsSection');
@@ -1693,13 +1702,17 @@ function renderMember() {
       ${meta('Plan', profile.membershipPlan||'-')}
       ${meta('Status', profile.membershipStatus||'-')}
       ${meta('Slot', profile.slotName||'None')}
-      ${meta('Visits', profile.visits||'0')}
+      ${meta('Visit Limit', membershipVisitsAllowed)}
+      ${meta('Visits Used', membershipVisitsUsed)}
+      ${meta('Visits Left', membershipVisitsRemaining)}
     </div>`;
 
   $('memberProfileCard').innerHTML = `<div class="detail-grid">
     ${dRow('Name', profile.name)} ${dRow('Email', profile.email)}
     ${dRow('Member ID', profile.memberId)} ${dRow('Plan', profile.membershipPlan)}
-    ${dRow('Expires', profile.membershipExpiry||'-')} ${dRow('Payment', profile.paymentStatus||'-')}
+    ${dRow('Visit Limit', membershipVisitsAllowed)} ${dRow('Visits Used', membershipVisitsUsed)}
+    ${dRow('Visits Left', membershipVisitsRemaining)} ${dRow('Expires', profile.membershipExpiry||'-')}
+    ${dRow('Payment', profile.paymentStatus||'-')} ${dRow('Total Visits', String(profile.visits ?? 0))}
   </div>`;
 
   renderList($('memberHistoryList'), S.memberHistory, h => `
@@ -1760,6 +1773,7 @@ async function handleUserSubmit(e) {
     membershipPlan: $('userPlanInput').value,
     membershipStart: $('userStartInput').value,
     membershipExpiry: $('userExpiryInput').value,
+    visitLimit: parseOptionalNonNegativeInt($('userVisitLimitInput')?.value),
     paymentAmount: Number($('userAmountInput').value||0),
     dueAmount: Number($('userDueAmountInput')?.value||0),
     paymentMode: $('userPaymentModeInput').value,
@@ -1839,6 +1853,9 @@ function renderAllMemberReport(report, fallbackUser = {}) {
     profile.lastAction ? String(profile.lastAction).toUpperCase() : '',
     profile.lastActionAt ? fmtDT(profile.lastActionAt) : '',
   ].filter(Boolean).join(' | ');
+  const membershipVisitsUsed = String(profile.membershipVisitsUsed ?? profile.visits ?? 0);
+  const membershipVisitsAllowed = String(profile.membershipVisitsAllowed ?? 0);
+  const membershipVisitsRemaining = String(profile.membershipVisitsRemaining ?? 0);
 
   reportTitle.textContent = `${profile.name || 'Member'} Report`;
   reportSubtitle.textContent = [
@@ -1858,7 +1875,10 @@ function renderAllMemberReport(report, fallbackUser = {}) {
       ${meta('Payment', profile.paymentStatus)}
       ${meta('Due Amount', fmtMoney(profile.dueAmount || 0))}
       ${meta('Paid Total', fmtMoney(totalPaid))}
-      ${meta('Visits', String(profile.visits ?? 0))}
+      ${meta('Visit Limit', membershipVisitsAllowed)}
+      ${meta('Visits Used', membershipVisitsUsed)}
+      ${meta('Visits Left', membershipVisitsRemaining)}
+      ${meta('Total Visits', String(profile.visits ?? 0))}
       ${meta('Face Images', String(profile.faceImageCount || profile.imageCount || 0))}
       ${meta('Slot', profile.slotName)}
       ${meta('Mobile', profile.mobileNumber || profile.mobile_number)}
@@ -1948,6 +1968,7 @@ function beginUserEdit(id) {
   $('userMemberIdInput').required = true;
   $('userAmountInput').value = String(u.paymentAmount||0);
   if ($('userDueAmountInput')) $('userDueAmountInput').value = String(u.dueAmount||0);
+  if ($('userVisitLimitInput')) $('userVisitLimitInput').value = u.visitLimit != null ? String(u.visitLimit) : '';
   $('userPaymentModeInput').value = u.paymentMode||'Cash';
   $('userPaymentStatusInput').value = u.paymentStatus||'Pending';
   $('userNoteInput').value = u.adminNote||u.note||'';
@@ -1981,6 +2002,7 @@ function resetUserForm() {
   $('userExpiryInput').value = isoDate(addDays(new Date(), 30));
   $('userAmountInput').value = '0';
   if ($('userDueAmountInput')) $('userDueAmountInput').value = '0';
+  if ($('userVisitLimitInput')) $('userVisitLimitInput').value = '';
   if ($('userLevelInput')) $('userLevelInput').value = '';
   $('userPasswordInput').required = true;
   $('userPasswordInput').placeholder = 'Min 8 characters';
@@ -2103,10 +2125,12 @@ async function handleMembershipSubmit(e) {
     await api('/admin/create-membership', { method:'POST', body: {
       userId: $('membershipUserInput').value, plan: $('membershipPlanInput').value,
       startDate: $('membershipStartInput').value, expiryDate: $('membershipExpiryInput').value,
+      visitLimit: parseOptionalNonNegativeInt($('membershipVisitLimitInput')?.value),
       paymentAmount: Number($('membershipAmountInput').value||0),
       paymentMode: $('membershipModeInput').value, paymentStatus: $('membershipStatusInput').value,
       source: $('membershipSourceInput').value.trim(),
     }});
+    if ($('membershipVisitLimitInput')) $('membershipVisitLimitInput').value = '';
     toast('Membership created.','success'); await refreshAll();
   } catch (err) { handleErr(err, { toast: true }); }
 }
@@ -3190,6 +3214,14 @@ function isoDate(d) { return d.toISOString().slice(0,10); }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
 function clamp(v,min,max) { return Math.max(min, Math.min(max, v)); }
 function esc(v) { return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function parseOptionalNonNegativeInt(value) {
+  if (value == null) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const parsed = Number.parseInt(text, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
 function fmtDT(v) {
   if (!v) return 'â€“';
   const d = new Date(v); if (isNaN(d.getTime())) return String(v);

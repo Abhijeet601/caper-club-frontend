@@ -427,6 +427,10 @@
                 </label>
               </div>
               <label class="field-stack">
+                <span>Visit Limit Override</span>
+                <input type="number" id="userVisitLimitInput" min="0" step="1" placeholder="Blank = plan default, e.g. 5">
+              </label>
+              <label class="field-stack">
                 <span>Pay Status</span>
                 <select id="userPaymentStatusInput">
                   <option value="Paid">Paid</option>
@@ -835,6 +839,7 @@
             <option value="Expired">Expired</option>
           </select>
         </div>
+        <input type="number" id="membershipVisitLimitInput" min="0" step="1" placeholder="Visit limit override (blank = plan default)">
         <input type="text" id="membershipSourceInput" value="Frontend renewal">
         <button type="submit" class="btn-primary btn-sm full-w">Create Membership</button>
       </form>
