@@ -17,6 +17,42 @@ const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;
+const CAMERA_SEARCH_PREVIEW_ZOOM = 1.08;
+const MAX_PREVIEW_ZOOM = 2.6;
+const CAMERA_CONSTRAINT_SETS = Object.freeze([
+  {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      aspectRatio: { ideal: 16 / 9 },
+      frameRate: { ideal: 30, max: 30 },
+    },
+  },
+  {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'user' },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+      aspectRatio: { ideal: 16 / 9 },
+      frameRate: { ideal: 30, max: 30 },
+    },
+  },
+  {
+    audio: false,
+    video: {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 24, max: 30 },
+    },
+  },
+  {
+    audio: false,
+    video: true,
+  },
+]);
 
 const TONE_MAP = {
   green:'tone-green', valid:'tone-green', granted:'tone-green', active:'tone-green', paid:'tone-green', user:'tone-green',
@@ -78,6 +114,7 @@ const S = {
   scanImage: '', scanResult: null,
   isScanning: false, scanLoopTimer: null, scanInFlight: false,
   cameraRequested: false, cameraRestarting: false,
+  liveDetection: null, cameraZoom: 1,
   faceModelsReady: false, faceModelsLoading: false, faceModelsError: '',
   faceUsers: [], recognitionThreshold: window.FaceAi?.DEFAULT_THRESHOLD || 0.56,
   scanState: 'idle', scanPill: 'Idle',
@@ -662,9 +699,10 @@ function renderConsole() {
   const activeSession = S.sessions?.find(s => s.status === 'active');
   const buttonCooldown = { remainingMs: 0 };
   const cooldownActive = false;
+  const zoomLabel = S.cameraZoom > 1.05 ? ` | ${formatZoomLabel(S.cameraZoom)}` : '';
 
   $('camStatusPrimary').textContent = live ? 'Live scan active' : (cameraReady ? 'Camera ready' : 'Scanner ready');
-  $('camDetect').textContent = live ? 'Scanningâ€¦' : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
+  $('camDetect').textContent = live ? `Scanning...${zoomLabel}` : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
   $('camLastAction').textContent = S.scanResult?.message || 'Waiting';
   $('camSource').textContent = cameraReady ? 'Live camera' : (S.scanImage ? 'Image upload' : 'Camera / Upload');
   $('camArea').textContent = $('scanAreaInput').value || 'Club Entry';
@@ -685,8 +723,8 @@ function renderConsole() {
   $('captureEnrollmentBtn').disabled = !cameraAccess;
   $('runScanBtn').disabled = S.scanInFlight;
   $('runScanBtn').textContent = S.scanInFlight
-    ? 'Scanningâ€¦'
-    : (cooldownActive ? `Wait ${formatCountdown(buttonCooldown.remainingMs)}` : 'â–¶ Run Scan');
+    ? 'Scanning...'
+    : (cooldownActive ? `Wait ${formatCountdown(buttonCooldown.remainingMs)}` : 'Run Scan');
 }
 
 /* â”€â”€ SCANNER STATUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -705,7 +743,7 @@ function renderScannerStatus() {
   $('scanStatusText').textContent = S.scanStatusText;
   $('scanStatusDetail').textContent = S.scanStatusDetail;
   $('scannerStatusLoader').hidden = S.scanState !== 'loading';
-  updateFaceBoxOverlay(S.scanResult?.faceBox || null);
+  updateFaceBoxOverlay(S.liveDetection?.faceBox || S.scanResult?.faceBox || null);
 
   const shell = $('cameraShell');
   shell.classList.remove('is-scanning','is-granted','is-denied','is-detected');
@@ -713,6 +751,7 @@ function renderScannerStatus() {
   else if (S.scanState === 'granted') { shell.classList.add('is-granted'); $('faceDetectLabel').textContent = 'GRANTED'; }
   else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
   else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'FACE FOUND'; }
+  renderCameraAssistBadge();
 }
 
 function updateFaceBoxOverlay(faceBox) {
@@ -733,6 +772,90 @@ function updateFaceBoxOverlay(faceBox) {
   box.style.width = `${clamp(Number(faceBox.width || 0.2), 0.08, 0.9) * 100}%`;
   box.style.height = `${clamp(Number(faceBox.height || 0.2), 0.1, 0.9) * 100}%`;
   box.style.transform = 'none';
+}
+
+function formatZoomLabel(zoom) {
+  return `${Number(zoom || 1).toFixed(1)}x`;
+}
+
+function formatHintLabel(value, fallback = '') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  return text
+    .split('-')
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function buildDetectionAssistDetail(detection) {
+  if (!detection) {
+    return S.isScanning
+      ? 'Long-range scan is searching the center lane.'
+      : 'Ready to scan.';
+  }
+
+  const rangeLabel = formatHintLabel(detection.distanceHint, 'Face');
+  const captureMode = formatHintLabel(detection.captureMode, 'Full Frame');
+  const zoomLabel = formatZoomLabel(detection.recommendedZoom || 1);
+  return `${rangeLabel} face lock | ${captureMode} assist | ${zoomLabel}`;
+}
+
+function applyPreviewFocus(zoom = 1, faceBox = null) {
+  const preview = $('cameraPreview');
+  const shell = $('cameraShell');
+  if (!preview || !shell) return;
+
+  const scale = clamp(Number(zoom || 1), 1, MAX_PREVIEW_ZOOM);
+  const centerX = faceBox
+    ? clamp(Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2), 0.18, 0.82)
+    : 0.5;
+  const centerY = faceBox
+    ? clamp(Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2), 0.18, 0.78)
+    : 0.46;
+
+  preview.style.setProperty('--camera-scale', scale.toFixed(3));
+  preview.style.setProperty('--camera-focus-x', `${(centerX * 100).toFixed(1)}%`);
+  preview.style.setProperty('--camera-focus-y', `${(centerY * 100).toFixed(1)}%`);
+  shell.classList.toggle('has-face-lock', Boolean(faceBox));
+  S.cameraZoom = scale;
+}
+
+function renderCameraAssistBadge() {
+  const badge = $('cameraAssistBadge');
+  if (!badge) return;
+
+  if (!streamHasActiveVideo(S.stream)) {
+    badge.textContent = 'Search mode | 1.0x';
+    return;
+  }
+
+  if (!S.liveDetection?.faceBox) {
+    badge.textContent = `${S.isScanning ? 'Search mode' : 'Camera ready'} | ${formatZoomLabel(S.cameraZoom)}`;
+    return;
+  }
+
+  const prefix = S.liveDetection.distanceHint === 'long-range'
+    ? 'Long range lock'
+    : (S.liveDetection.distanceHint === 'mid-range' ? 'Mid range lock' : 'Face lock');
+  badge.textContent = `${prefix} | ${formatZoomLabel(S.cameraZoom)}`;
+}
+
+function setLiveDetection(detection, opts = {}) {
+  if (!detection) {
+    S.liveDetection = null;
+    applyPreviewFocus(opts.keepSearchZoom && S.isScanning ? CAMERA_SEARCH_PREVIEW_ZOOM : 1, null);
+    renderCameraAssistBadge();
+    return;
+  }
+
+  const normalizedDetection = {
+    ...detection,
+    recommendedZoom: clamp(Number(detection.recommendedZoom || 1), 1, MAX_PREVIEW_ZOOM),
+  };
+  S.liveDetection = normalizedDetection;
+  applyPreviewFocus(normalizedDetection.recommendedZoom, normalizedDetection.faceBox || null);
+  renderCameraAssistBadge();
 }
 
 /* â”€â”€ CLOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -1649,6 +1772,9 @@ function renderScanResult() {
   const r = S.scanResult;
   const actionLabel = actionLabelFor(r.attendanceAction);
   const waitText = r.cooldownRemainingSeconds ? `Wait ${formatCountdown(r.cooldownRemainingSeconds * 1000)}` : '';
+  const zoomText = r.zoomFactor > 1 ? `Zoom: ${formatZoomLabel(r.zoomFactor)}` : '';
+  const rangeText = r.distanceHint ? formatHintLabel(r.distanceHint) : '';
+  const modeText = r.captureMode ? formatHintLabel(r.captureMode) : '';
   el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
       <strong style="font-family:var(--font-display);font-size:.86rem;">${esc(r.name||'Unknown face')}</strong>
@@ -1659,6 +1785,9 @@ function renderScanResult() {
       <span>Conf: ${Math.round(Number(r.confidence||0)*100)}%</span>
       <span>Action: ${esc(actionLabel||'Scan')}</span>
       ${waitText ? `<span>${esc(waitText)}</span>` : ''}
+      ${rangeText ? `<span>${esc(rangeText)}</span>` : ''}
+      ${modeText ? `<span>${esc(modeText)}</span>` : ''}
+      ${zoomText ? `<span>${esc(zoomText)}</span>` : ''}
       <span>${esc(fmtDT(r.scannedAt))}</span>
     </div>`;
   el.classList.remove('result-pop');
@@ -2192,11 +2321,12 @@ async function startLiveScan(opts = {}) {
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
+  setLiveDetection(null, { keepSearchZoom: true });
   document.querySelector('.scanner-panel')?.classList.add('is-live');
   clearInterval(S.scanLoopTimer);
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
-  setScanState('loading','Scanningâ€¦','Matching in browser and validating membership.');
+  setScanState('loading','Scanning...','Matching in browser and validating membership.');
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -2207,11 +2337,28 @@ function stopLiveScan(opts = {}) {
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
+  setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
   stopCamera();
   setScanState('idle','Live scanner is offline','Enable Live Scan to start.');
   renderConsole();
   if (opts.toast) toast('Live scan stopped.');
+}
+
+async function requestPreferredCameraStream() {
+  let lastError = null;
+
+  for (const constraints of CAMERA_CONSTRAINT_SETS) {
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      lastError = err;
+      const blocked = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
+      if (blocked) break;
+    }
+  }
+
+  throw lastError || new Error('Cannot start camera.');
 }
 
 async function startCamera() {
@@ -2226,6 +2373,7 @@ async function startCamera() {
       return false;
     }
     $('cameraShell').classList.add('has-stream');
+    setLiveDetection(null, { keepSearchZoom: S.isScanning || S.cameraRequested });
     renderConsole();
     return true;
   }
@@ -2240,7 +2388,7 @@ async function startCamera() {
     return false;
   }
   try {
-    S.stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' }, audio:false });
+    S.stream = await requestPreferredCameraStream();
     preview.srcObject = S.stream;
     S.stream.getVideoTracks().forEach(track => {
       track.addEventListener('ended', handleCameraTrackEnded, { once: true });
@@ -2249,6 +2397,7 @@ async function startCamera() {
     const ready = await waitVideoReady(preview);
     if (!ready) throw new Error('Camera preview did not become ready.');
     $('cameraShell').classList.add('has-stream');
+    setLiveDetection(null, { keepSearchZoom: S.isScanning || S.cameraRequested });
     renderConsole(); return true;
   } catch (err) { toast(getCameraErrorMessage(err),'error'); renderConsole(); return false; }
 }
@@ -2257,6 +2406,7 @@ function stopCamera(opts = {}) {
   if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
   $('cameraPreview').srcObject = null;
   $('cameraShell').classList.remove('has-stream');
+  setLiveDetection(null);
   if (!opts.preserveRequest) S.cameraRequested = false;
   if (!opts.silent) S.cameraRestarting = false;
   renderConsole();
@@ -2266,7 +2416,7 @@ async function handleCameraTrackEnded() {
   if (!S.cameraRequested || S.cameraRestarting) return;
   S.cameraRestarting = true;
   stopCamera({ preserveRequest: true, silent: true });
-  setScanState('loading','Camera reconnectingâ€¦','Restoring the live preview.');
+  setScanState('loading','Camera reconnecting...','Restoring the live preview.');
   const ok = await startCamera();
   S.cameraRestarting = false;
   if (!ok) {
@@ -2366,9 +2516,15 @@ async function runScan(opts = {}) {
   S.scanInFlight = true;
   if (image) S.scanImage = image;
   renderConsole();
-  setScanState('loading','Scanningâ€¦','Matching face in browser and validating access.');
+  setScanState('loading', 'Scanning...', 'Matching face in browser and validating access.');
   try {
     const probe = await detectRecognitionProbe({ source, image });
+    if (source === 'camera') {
+      setLiveDetection(probe?.detection || null, { keepSearchZoom: true });
+      if (probe?.detection) {
+        setScanState('loading', 'Face locked', buildDetectionAssistDetail(probe.detection), 'Face Lock');
+      }
+    }
     if (!probe?.detection) {
       const result = buildClientScanResult({
         status: 'retry',
@@ -2394,6 +2550,9 @@ async function runScan(opts = {}) {
         message: 'Unknown face. No enrolled member matched this scan.',
         confidence: match?.confidence || probe.detection.score || 0,
         faceBox: probe.detection.faceBox,
+        distanceHint: probe.detection.distanceHint,
+        captureMode: probe.detection.captureMode,
+        zoomFactor: probe.detection.recommendedZoom,
         source,
       });
       S.scanResult = result;
@@ -2420,6 +2579,9 @@ async function runScan(opts = {}) {
         attendanceAction: action,
         cooldownRemainingSeconds: Math.ceil(localCooldown.remainingMs / 1000),
         faceBox: probe.detection.faceBox,
+        distanceHint: probe.detection.distanceHint,
+        captureMode: probe.detection.captureMode,
+        zoomFactor: probe.detection.recommendedZoom,
         source,
         userId: match.user.id,
       });
@@ -2449,6 +2611,9 @@ async function runScan(opts = {}) {
       scannedAt: backendResult?.scannedAt,
       cooldownRemainingSeconds: Number(backendResult?.cooldownRemainingSeconds || 0),
       faceBox: probe.detection.faceBox,
+      distanceHint: probe.detection.distanceHint,
+      captureMode: probe.detection.captureMode,
+      zoomFactor: probe.detection.recommendedZoom,
       source,
       userId: match.user.id || match.user?.userId || null,
     });
@@ -2475,7 +2640,7 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    setScanState('denied','Access Denied', err?.message||'Scan failed.');
+    setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
@@ -2514,6 +2679,9 @@ function buildClientScanResult(opts = {}) {
     scannedAt: opts.scannedAt || new Date().toISOString(),
     cooldownRemainingSeconds: Number(opts.cooldownRemainingSeconds || 0),
     faceBox: opts.faceBox || null,
+    distanceHint: opts.distanceHint || '',
+    captureMode: opts.captureMode || '',
+    zoomFactor: Number(opts.zoomFactor || 0),
     source: opts.source || 'camera',
     userId: opts.userId || null,
     ttsMessage: opts.ttsMessage || '',
@@ -3278,6 +3446,7 @@ function clearSess() {
     memberHistory:[], memberPayments:[], memberNotifications:[], scanImage:'', scanResult:null,
     enrollmentImages:[], faceUsers:[], ttsMode:'ready', ttsStatusText:'Preparing the browser voice assistant.',
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
+    liveDetection:null, cameraZoom:1,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
     userFilters: { search:'', sport:'', plan:'', status:'', role:'' },
@@ -3764,6 +3933,7 @@ function applyScanResult(r) {
     return;
   }
   if (r.status === 'retry') {
+    if (S.isScanning) setLiveDetection(null, { keepSearchZoom: true });
     setScanState(S.isScanning ? 'loading' : 'detected', 'Scanning...', r.message || 'Ready for the next face.', 'Scanning');
     return;
   }
