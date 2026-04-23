@@ -91,6 +91,10 @@
           <span class="nav-tab-dot blue"></span>
           New User
         </button>
+        <button class="nav-tab" data-tab="faceEnrollmentTab">
+          <span class="nav-tab-dot blue"></span>
+          Face Enrollment
+        </button>
         <button class="nav-tab" data-tab="reportsTab">
           <span class="nav-tab-dot violet"></span>
           Reports
@@ -330,6 +334,29 @@
             <div id="enrollmentGallery" class="thumb-grid">
               <div class="empty-hint">Capture 3–5 clear face images</div>
             </div>
+            <div class="cam-viewport camera-shell enrollment-cam-viewport" id="enrollmentCameraShell">
+              <video id="enrollmentCameraPreview" autoplay muted playsinline></video>
+              <div class="camera-assist-badge" id="enrollmentCameraBadge">Live preview | 1.0x</div>
+              <div class="cam-placeholder" id="enrollmentCameraPlaceholder">
+                <div class="eye-anim">
+                  <div class="eye-ring outer"></div>
+                  <div class="eye-ring mid"></div>
+                  <div class="eye-ring inner"></div>
+                  <div class="eye-pupil"></div>
+                  <div class="eye-scan-line"></div>
+                </div>
+                <p>Live camera preview appears here</p>
+                <span class="placeholder-sub">Check framing before capture</span>
+              </div>
+            </div>
+            <div class="enrollment-zoom-row mt8">
+              <span class="enrollment-zoom-label">Capture Zoom</span>
+              <div class="enrollment-zoom-actions">
+                <button type="button" class="btn-ghost btn-sm" id="enrollmentZoomOutBtn">Zoom Out</button>
+                <span class="enrollment-zoom-value" id="enrollmentZoomValue">1.0x</span>
+                <button type="button" class="btn-ghost btn-sm" id="enrollmentZoomInBtn">Zoom In</button>
+              </div>
+            </div>
             <div class="btn-row mt8">
               <button type="button" class="btn-capture" id="captureEnrollmentBtn">📷 Capture</button>
               <button type="button" class="btn-ghost btn-sm" id="clearEnrollmentBtn">Clear</button>
@@ -492,6 +519,8 @@
       </div>
 
       <!-- ══ REPORTS TAB ══ -->
+      <div class="tab-page" id="faceEnrollmentTab"></div>
+
       <div class="tab-page" id="reportsTab">
         <div class="single-col-layout">
 

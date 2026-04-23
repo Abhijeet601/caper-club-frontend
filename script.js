@@ -19,6 +19,9 @@ const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;
 const CAMERA_SEARCH_PREVIEW_ZOOM = 1.08;
 const MAX_PREVIEW_ZOOM = 2.6;
+const ENROLLMENT_ZOOM_STEP = 0.2;
+const DEFAULT_CAMERA_FOCUS_X = 0.5;
+const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const CAMERA_CONSTRAINT_SETS = Object.freeze([
   {
     audio: false,
@@ -125,6 +128,7 @@ const S = {
   activeSessions: {},        // { userId: { sessionId, startTime, deadlineTime, duration, name, announced5, announcedEnd } }
   sessionTimerLoop: null,
   enrollmentImages: [],
+  enrollmentZoom: 1,
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
   audioUrl: '', audioContext: null, audioUnlocked: false,
   ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
@@ -319,6 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function initUi() {
   updateApiBaseUi();
   registerMediaUnlock();
+  relocateFaceEnrollmentUi();
   const apiConfigForm = $('apiConfigForm');
   if (apiConfigForm?.closest('.panel-card')) {
     apiConfigForm.closest('.panel-card').hidden = true;
@@ -342,6 +347,27 @@ function initUi() {
   openTab('liveOpsTab');
   restoreSessionTimers();
   initReportsModule();
+}
+
+function relocateFaceEnrollmentUi() {
+  const faceTab = $('faceEnrollmentTab');
+  if (!faceTab) return;
+
+  let layout = faceTab.querySelector('.single-col-layout');
+  if (!layout) {
+    layout = document.createElement('div');
+    layout.className = 'single-col-layout';
+    faceTab.appendChild(layout);
+  }
+
+  const captureCard = $('captureEnrollmentBtn')?.closest('.panel-card');
+  const uploadCard = $('faceUploadForm')?.closest('.panel-card');
+
+  [captureCard, uploadCard].forEach(card => {
+    if (card && card.parentElement !== layout) {
+      layout.appendChild(card);
+    }
+  });
 }
 
 function bindEvents() {
@@ -450,6 +476,8 @@ function bindEvents() {
   $('runScanBtn').addEventListener('click', handleManualScan);
 
   // Enrollment
+  if ($('enrollmentZoomOutBtn')) $('enrollmentZoomOutBtn').addEventListener('click', () => adjustEnrollmentZoom(-1));
+  if ($('enrollmentZoomInBtn')) $('enrollmentZoomInBtn').addEventListener('click', () => adjustEnrollmentZoom(1));
   $('captureEnrollmentBtn').addEventListener('click', captureEnrollFrame);
   $('clearEnrollmentBtn').addEventListener('click', clearEnrollmentImages);
   $('enrollmentFilesInput').addEventListener('change', handleEnrollFiles);
@@ -673,6 +701,8 @@ function renderAll() {
   renderAlerts();
   renderReportsAll();
   renderEnrollGallery();
+  renderEnrollmentZoomControls();
+  renderEnrollmentCameraBadge();
   renderMember();
   renderScannerStatus();
   renderConsole();
@@ -687,6 +717,10 @@ function openTab(id) {
   S.activeTab = id;
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === id));
+  syncIdleCameraPreview();
+  renderEnrollmentZoomControls();
+  renderEnrollmentCameraBadge();
+  if (id === 'faceEnrollmentTab') ensureEnrollmentLivePreview().catch(console.error);
   if (id === 'reportsTab') renderReportsAll();
   if (id === 'allMembersTab') renderUsers();
 }
@@ -725,6 +759,8 @@ function renderConsole() {
   $('runScanBtn').textContent = S.scanInFlight
     ? 'Scanning...'
     : (cooldownActive ? `Wait ${formatCountdown(buttonCooldown.remainingMs)}` : 'Run Scan');
+  renderEnrollmentZoomControls();
+  renderEnrollmentCameraBadge();
 }
 
 /* â”€â”€ SCANNER STATUS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -802,23 +838,37 @@ function buildDetectionAssistDetail(detection) {
 }
 
 function applyPreviewFocus(zoom = 1, faceBox = null) {
-  const preview = $('cameraPreview');
-  const shell = $('cameraShell');
-  if (!preview || !shell) return;
-
   const scale = clamp(Number(zoom || 1), 1, MAX_PREVIEW_ZOOM);
   const centerX = faceBox
     ? clamp(Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2), 0.18, 0.82)
-    : 0.5;
+    : DEFAULT_CAMERA_FOCUS_X;
   const centerY = faceBox
     ? clamp(Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2), 0.18, 0.78)
-    : 0.46;
+    : DEFAULT_CAMERA_FOCUS_Y;
 
-  preview.style.setProperty('--camera-scale', scale.toFixed(3));
-  preview.style.setProperty('--camera-focus-x', `${(centerX * 100).toFixed(1)}%`);
-  preview.style.setProperty('--camera-focus-y', `${(centerY * 100).toFixed(1)}%`);
-  shell.classList.toggle('has-face-lock', Boolean(faceBox));
+  getCameraPreviewTargets().forEach(({ preview, shell }) => {
+    preview.style.setProperty('--camera-scale', scale.toFixed(3));
+    preview.style.setProperty('--camera-focus-x', `${(centerX * 100).toFixed(1)}%`);
+    preview.style.setProperty('--camera-focus-y', `${(centerY * 100).toFixed(1)}%`);
+    shell.classList.toggle('has-face-lock', Boolean(faceBox));
+  });
   S.cameraZoom = scale;
+}
+
+function getCameraPreviewTargets() {
+  return [
+    { preview: $('cameraPreview'), shell: $('cameraShell') },
+    { preview: $('enrollmentCameraPreview'), shell: $('enrollmentCameraShell') },
+  ].filter(target => target.preview && target.shell);
+}
+
+function syncCameraPreviewStreams() {
+  const hasStream = streamHasActiveVideo(S.stream);
+  getCameraPreviewTargets().forEach(({ preview, shell }) => {
+    preview.srcObject = hasStream ? S.stream : null;
+    shell.classList.toggle('has-stream', hasStream);
+    if (hasStream) preview.play().catch(() => {});
+  });
 }
 
 function renderCameraAssistBadge() {
@@ -839,6 +889,81 @@ function renderCameraAssistBadge() {
     ? 'Long range lock'
     : (S.liveDetection.distanceHint === 'mid-range' ? 'Mid range lock' : 'Face lock');
   badge.textContent = `${prefix} | ${formatZoomLabel(S.cameraZoom)}`;
+}
+
+function renderEnrollmentCameraBadge() {
+  const badge = $('enrollmentCameraBadge');
+  if (!badge) return;
+
+  if (!streamHasActiveVideo(S.stream)) {
+    badge.textContent = 'Preview offline | 1.0x';
+    return;
+  }
+
+  const modeLabel = S.isScanning ? 'Shared live camera' : 'Live preview';
+  badge.textContent = `${modeLabel} | ${formatZoomLabel(getEnrollmentZoom())}`;
+}
+
+function getEnrollmentZoom() {
+  return clamp(Number(S.enrollmentZoom || 1), 1, MAX_PREVIEW_ZOOM);
+}
+
+function syncIdleCameraPreview() {
+  if (S.isScanning || S.liveDetection?.faceBox) return;
+  applyPreviewFocus(S.activeTab === 'faceEnrollmentTab' ? getEnrollmentZoom() : 1, null);
+  renderCameraAssistBadge();
+  renderEnrollmentCameraBadge();
+}
+
+function renderEnrollmentZoomControls() {
+  const valueEl = $('enrollmentZoomValue');
+  const zoomOutBtn = $('enrollmentZoomOutBtn');
+  const zoomInBtn = $('enrollmentZoomInBtn');
+  if (!valueEl && !zoomOutBtn && !zoomInBtn) return;
+
+  const zoom = getEnrollmentZoom();
+  const cameraAccess = Boolean(S.currentUser && S.token && isAdmin());
+  const controlsLocked = !cameraAccess || S.isScanning;
+
+  if (valueEl) valueEl.textContent = formatZoomLabel(zoom);
+  if (zoomOutBtn) zoomOutBtn.disabled = controlsLocked || zoom <= 1.001;
+  if (zoomInBtn) zoomInBtn.disabled = controlsLocked || zoom >= (MAX_PREVIEW_ZOOM - 0.001);
+}
+
+async function adjustEnrollmentZoom(direction) {
+  if (!ensureAdmin()) return;
+  if (S.isScanning) {
+    toast('Turn off Live Scan before adjusting face enrollment zoom.', 'warning');
+    return;
+  }
+
+  const currentZoom = getEnrollmentZoom();
+  const nextZoom = clamp(currentZoom + (direction * ENROLLMENT_ZOOM_STEP), 1, MAX_PREVIEW_ZOOM);
+  if (Math.abs(nextZoom - currentZoom) < 0.001) {
+    renderEnrollmentZoomControls();
+    return;
+  }
+
+  const ready = await ensureCameraReadyForCapture();
+  if (!ready) return;
+
+  S.enrollmentZoom = nextZoom;
+  syncIdleCameraPreview();
+  renderEnrollmentZoomControls();
+}
+
+async function ensureEnrollmentLivePreview() {
+  if (S.activeTab !== 'faceEnrollmentTab') return;
+  if (!S.currentUser || !S.token || !isAdmin()) {
+    renderEnrollmentCameraBadge();
+    return;
+  }
+  if (streamHasActiveVideo(S.stream)) {
+    syncCameraPreviewStreams();
+    syncIdleCameraPreview();
+    return;
+  }
+  await startCamera();
 }
 
 function setLiveDetection(detection, opts = {}) {
@@ -1889,6 +2014,7 @@ async function handleUserSubmit(e) {
   const editId = $('userIdInput').value.trim();
   const password = $('userPasswordInput').value.trim();
   const isEditMode = Boolean(editId);
+  let createdUserId = '';
   const payload = {
     name: $('userNameInput').value.trim(),
     memberId: isEditMode ? $('userMemberIdInput').value.trim() || null : null,
@@ -1914,12 +2040,24 @@ async function handleUserSubmit(e) {
       await api(`/admin/update-user/${editId}`, { method:'PUT', body: payload });
       toast('Member updated.', 'success');
     } else {
-      await api('/users', { method:'POST', body: payload });
+      const createdUser = await api('/users', { method:'POST', body: payload });
+      createdUserId = String(createdUser?.id || '');
       toast('Member created!', 'success');
       showFormSuccess('userFormSuccess');
     }
     resetUserForm(); await refreshAll();
+    if (createdUserId) focusFaceEnrollmentUser(createdUserId);
   } catch (err) { handleErr(err, { toast: true }); }
+}
+
+function focusFaceEnrollmentUser(userId) {
+  const normalizedUserId = String(userId || '').trim();
+  if (!normalizedUserId) return;
+
+  if ($('enrollmentUserSearchInput')) $('enrollmentUserSearchInput').value = '';
+  applyEnrollmentMemberSearch({ query: '' });
+  if ($('enrollmentUserInput')) $('enrollmentUserInput').value = normalizedUserId;
+  openTab('faceEnrollmentTab');
 }
 
 function showFormSuccess(id) {
@@ -2364,7 +2502,7 @@ async function requestPreferredCameraStream() {
 async function startCamera() {
   const preview = $('cameraPreview');
   if (streamHasActiveVideo(S.stream)) {
-    preview.srcObject = S.stream;
+    syncCameraPreviewStreams();
     await preview.play().catch(()=>{});
     const ready = await waitVideoReady(preview);
     if (!ready) {
@@ -2372,8 +2510,8 @@ async function startCamera() {
       renderConsole();
       return false;
     }
-    $('cameraShell').classList.add('has-stream');
     setLiveDetection(null, { keepSearchZoom: S.isScanning || S.cameraRequested });
+    syncIdleCameraPreview();
     renderConsole();
     return true;
   }
@@ -2389,23 +2527,22 @@ async function startCamera() {
   }
   try {
     S.stream = await requestPreferredCameraStream();
-    preview.srcObject = S.stream;
+    syncCameraPreviewStreams();
     S.stream.getVideoTracks().forEach(track => {
       track.addEventListener('ended', handleCameraTrackEnded, { once: true });
     });
     await preview.play().catch(()=>{});
     const ready = await waitVideoReady(preview);
     if (!ready) throw new Error('Camera preview did not become ready.');
-    $('cameraShell').classList.add('has-stream');
     setLiveDetection(null, { keepSearchZoom: S.isScanning || S.cameraRequested });
+    syncIdleCameraPreview();
     renderConsole(); return true;
   } catch (err) { toast(getCameraErrorMessage(err),'error'); renderConsole(); return false; }
 }
 
 function stopCamera(opts = {}) {
   if (S.stream) { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
-  $('cameraPreview').srcObject = null;
-  $('cameraShell').classList.remove('has-stream');
+  syncCameraPreviewStreams();
   setLiveDetection(null);
   if (!opts.preserveRequest) S.cameraRequested = false;
   if (!opts.silent) S.cameraRestarting = false;
@@ -2462,12 +2599,26 @@ async function runLiveCycle() {
   await runScan({ source: 'camera', showToast: false });
 }
 
-function grabFrame() {
+function grabFrame(opts = {}) {
   const v = $('cameraPreview');
   if (!v.videoWidth || !v.videoHeight) return '';
   const c = document.createElement('canvas');
   c.width = v.videoWidth; c.height = v.videoHeight;
-  c.getContext('2d').drawImage(v, 0, 0);
+  const ctx = c.getContext('2d');
+  if (!ctx) return '';
+
+  const zoom = clamp(Number(opts.zoom || 1), 1, MAX_PREVIEW_ZOOM);
+  if (zoom > 1.001) {
+    const focusX = clamp(Number(opts.focusX ?? DEFAULT_CAMERA_FOCUS_X), 0.1, 0.9);
+    const focusY = clamp(Number(opts.focusY ?? DEFAULT_CAMERA_FOCUS_Y), 0.1, 0.9);
+    const cropWidth = v.videoWidth / zoom;
+    const cropHeight = v.videoHeight / zoom;
+    const sourceX = clamp((focusX * v.videoWidth) - (cropWidth / 2), 0, v.videoWidth - cropWidth);
+    const sourceY = clamp((focusY * v.videoHeight) - (cropHeight / 2), 0, v.videoHeight - cropHeight);
+    ctx.drawImage(v, sourceX, sourceY, cropWidth, cropHeight, 0, 0, c.width, c.height);
+  } else {
+    ctx.drawImage(v, 0, 0);
+  }
   return c.toDataURL('image/jpeg', 0.92);
 }
 
@@ -2734,7 +2885,12 @@ function applyScanResultBrowser(r) {
 
 async function captureEnrollFrame() {
   if (!await ensureCameraReadyForCapture()) return;
-  const f = grabFrame();
+  syncIdleCameraPreview();
+  const f = grabFrame({
+    zoom: getEnrollmentZoom(),
+    focusX: DEFAULT_CAMERA_FOCUS_X,
+    focusY: DEFAULT_CAMERA_FOCUS_Y,
+  });
   if (!f) { toast('Camera preview is not ready yet.','error'); return; }
   if (S.enrollmentImages.length >= 5) { toast('Max 5 images.','success'); return; }
   S.enrollmentImages.push(f); renderEnrollGallery();
@@ -3445,6 +3601,7 @@ function clearSess() {
     sessions:[], announcements:[], reports:null, memberDashboard:null, memberProfile:null,
     memberHistory:[], memberPayments:[], memberNotifications:[], scanImage:'', scanResult:null,
     enrollmentImages:[], faceUsers:[], ttsMode:'ready', ttsStatusText:'Preparing the browser voice assistant.',
+    enrollmentZoom:1,
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',

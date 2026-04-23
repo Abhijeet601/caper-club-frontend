@@ -770,13 +770,24 @@ table { width: 100%; border-collapse: collapse; }
   transition: all .35s var(--ease-smooth);
   box-shadow: inset 0 2px 8px rgba(99,102,241,0.06);
 }
+.enrollment-cam-viewport {
+  min-height: clamp(220px, 34vh, 340px);
+  margin-top: 10px;
+}
+#faceEnrollmentTab .panel-card:has(#enrollmentCameraShell) {
+  width: min(100%, 780px);
+}
+#faceEnrollmentTab .enrollment-cam-viewport {
+  min-height: clamp(280px, 36vh, 380px);
+}
 .camera-shell {
   position: relative;
   --camera-scale: 1;
   --camera-focus-x: 50%;
   --camera-focus-y: 46%;
 }
-#cameraPreview {
+#cameraPreview,
+#enrollmentCameraPreview {
   width: 100%; height: 100%; object-fit: cover;
   object-position: var(--camera-focus-x) var(--camera-focus-y);
   transform: scale(var(--camera-scale));
@@ -785,7 +796,8 @@ table { width: 100%; border-collapse: collapse; }
   border-radius: inherit; background: transparent;
 }
 .camera-shell.has-stream .cam-placeholder { display: none; }
-.camera-shell.has-face-lock #cameraPreview {
+.camera-shell.has-face-lock #cameraPreview,
+.camera-shell.has-face-lock #enrollmentCameraPreview {
   filter: saturate(1.05) contrast(1.04);
 }
 .camera-shell.is-granted  { box-shadow: inset 0 0 0 3px var(--emerald), 0 0 40px rgba(5,150,105,.35); }
@@ -1076,6 +1088,40 @@ table { width: 100%; border-collapse: collapse; }
 
 /* ── FORMS ─────────────────────────────────────── */
 .compact-form { display: flex; flex-direction: column; gap: 8px; }
+.enrollment-zoom-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.enrollment-zoom-label {
+  font-family: var(--font-mono);
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text3);
+}
+.enrollment-zoom-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.enrollment-zoom-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(99,102,241,.18);
+  background: rgba(255,255,255,.86);
+  color: var(--text2);
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  letter-spacing: .04em;
+}
 .enrollment-search-row { display: flex; gap: 8px; align-items: center; }
 .enrollment-search-row input { flex: 1 1 auto; min-width: 0; }
 .enrollment-search-hint {
@@ -1353,6 +1399,7 @@ textarea { min-height: 60px; resize: none; }
   .scan-meta-row  { grid-template-columns: repeat(2, 1fr); }
   .form-row       { grid-template-columns: 1fr; }
   .enrollment-search-row { flex-direction: column; align-items: stretch; }
+  #faceEnrollmentTab .enrollment-cam-viewport { min-height: clamp(240px, 42vh, 320px); }
   .sys-status-grid { grid-template-columns: 1fr 1fr; }
   .all-members-layout {
     height: auto;
@@ -1416,6 +1463,7 @@ textarea { min-height: 60px; resize: none; }
   .table-scroll  { max-height: 180px; }
   .rpt-table-wrap { max-height: 220px; }
   .cam-viewport  { min-height: 160px; }
+  #faceEnrollmentTab .enrollment-cam-viewport { min-height: 220px; }
 }
 
 /* ═══════════════════════════════════════════════
