@@ -720,10 +720,14 @@ function openTab(id) {
   syncIdleCameraPreview();
   renderEnrollmentZoomControls();
   renderEnrollmentCameraBadge();
-  if (id === 'faceEnrollmentTab') ensureEnrollmentLivePreview().catch(console.error);
+  if (id === 'faceEnrollmentTab') {
+    loadFaceEnrollmentStatus();
+    ensureEnrollmentLivePreview().catch(console.error);
+  }
   if (id === 'reportsTab') renderReportsAll();
   if (id === 'allMembersTab') renderUsers();
 }
+
 
 /* â”€â”€ CONSOLE STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderConsole() {
@@ -4135,9 +4139,15 @@ function ensureSessionTimerLoop() {
 
 function buildActiveSessionState(session, existing = null) {
   const startedAtMs = parseTimestampMs(session?.startedAt);
+  const backendRemainingMs = Math.max(0, Number(session?.remainingSeconds || 0)) * 1000;
   const startTime = startedAtMs || Number(existing?.startTime) || Date.now();
-  const deadlineTime = parseTimestampMs(session?.slotEndAt)
-    || (startedAtMs ? (startTime + SESSION_DURATION_MS) : 0)
+  const slotDeadlineTime = parseTimestampMs(session?.slotEndAt);
+  const limitDeadlineTime = startTime + SESSION_DURATION_MS;
+  const cappedSlotDeadlineTime = slotDeadlineTime
+    ? Math.min(slotDeadlineTime, limitDeadlineTime)
+    : limitDeadlineTime;
+  const deadlineTime = (backendRemainingMs ? (Date.now() + backendRemainingMs) : 0)
+    || cappedSlotDeadlineTime
     || Number(existing?.deadlineTime)
     || (startTime + SESSION_DURATION_MS);
   const duration = Math.max(1000, deadlineTime - startTime);
@@ -4369,6 +4379,8 @@ function renderActiveSessionsPanel() {
     const elapsed = Math.max(0, now - startTime);
     const remaining = Math.max(0, deadlineTime - now);
     const progress = Math.min(100, (elapsed / duration) * 100);
+    const windowStr = formatSessionWindowLabel(duration);
+    const elapsedStr = formatSessionElapsedLabel(elapsed);
     const remainStr = formatSessionRemainingLabel(remaining);
     const isEnding = remaining <= 5 * 60 * 1000 && remaining > 0;
     const isExpired = remaining <= 0;
@@ -4387,7 +4399,7 @@ function renderActiveSessionsPanel() {
         <div class="sess-avatar">${esc((sess.name || '?')[0].toUpperCase())}</div>
         <div class="sess-info">
           <div class="sess-name">${esc(sess.name)}</div>
-          <div class="sess-id">Session window: 70 min</div>
+          <div class="sess-id">Window: ${esc(windowStr)} | Elapsed: ${esc(elapsedStr)}</div>
         </div>
         <span class="status-chip ${statusTone}">${statusLabel}</span>
         <button class="mini-btn del" onclick='${endAction}'>${endLabel}</button>
@@ -4417,6 +4429,17 @@ function msToMMSS(ms) {
 function formatSessionRemainingLabel(ms) {
   if (Number(ms || 0) <= 0) return 'OVER';
   return `${Math.max(1, Math.ceil(Number(ms || 0) / 60000))} min`;
+}
+
+function formatSessionWindowLabel(ms) {
+  const totalMinutes = Math.max(1, Math.ceil(Number(ms || 0) / 60000));
+  return fmtDur(totalMinutes);
+}
+
+function formatSessionElapsedLabel(ms) {
+  const totalMinutes = Math.floor(Math.max(0, Number(ms || 0)) / 60000);
+  if (!totalMinutes) return '<1 min';
+  return fmtDur(totalMinutes);
 }
 
 function pickSpeechVoice(voices) {

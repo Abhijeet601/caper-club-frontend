@@ -1,0 +1,200 @@
+<div class="single-col-layout">
+  <!-- Face Enrollment Status Summary -->
+  <div class="panel-card glass-card">
+    <div class="card-head">
+      <span class="card-title">👁️ Face Enrollment Status</span>
+      <div class="status-pills">
+        <span class="status-pill" id="faceStatusSummary">
+          <span class="status-dot" id="faceEnrollDot"></span>
+          <span id="faceEnrollText">Loading...</span>
+        </span>
+      </div>
+    </div>
+    <div class="face-stats-grid">
+      <div class="face-stat-card enrolled">
+        <div class="face-stat-number" id="enrolledCount">0</div>
+        <div class="face-stat-label">Enrolled</div>
+        <div class="face-stat-sub">Users with face data</div>
+      </div>
+      <div class="face-stat-card pending">
+        <div class="face-stat-number" id="pendingCount">0</div>
+        <div class="face-stat-label">Pending</div>
+        <div class="face-stat-sub">Users without faces</div>
+      </div>
+      <div class="face-stat-card total">
+        <div class="face-stat-number" id="totalUsersCount">0</div>
+        <div class="face-stat-label">Total</div>
+        <div class="face-stat-sub" id="enrollPercentage">--%</div>
+      </div>
+    </div>
+    <div class="btn-row mt8">
+      <button class="btn-primary btn-sm" id="refreshFaceStatusBtn">↻ Refresh</button>
+      <button class="btn-ghost btn-sm" id="exportFaceStatusBtn">⬇ Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Enrolled Users Table -->
+  <div class="panel-card glass-card">
+    <div class="card-head">
+      <span class="card-title">✅ Enrolled Users (Recent)</span>
+      <span class="badge-chip chip-green" id="enrolledListCount">0</span>
+    </div>
+    <div class="table-scroll">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Name / ID</th>
+            <th>Sport / Slot</th>
+            <th>Face Images</th>
+            <th>Status</th>
+            <th>Last Updated</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="enrolledUsersTableBody">
+          <tr><td colspan="6"><div class="empty-hint">No enrolled users yet.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pending Enrollment Table -->
+  <div class="panel-card glass-card">
+    <div class="card-head">
+      <span class="card-title">⏳ Pending Enrollment</span>
+      <span class="badge-chip chip-amber" id="pendingListCount">0</span>
+    </div>
+    <div class="table-scroll">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th>Name / ID</th>
+            <th>Sport / Slot</th>
+            <th>Membership</th>
+            <th>Created</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="pendingUsersTableBody">
+          <tr><td colspan="5"><div class="empty-hint">No pending users.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function renderFaceEnrollmentStatus() {
+  const data = S.faceEnrollmentStatus;
+  if (!data) return;
+  
+  // Summary
+  const total = data.total_users || 0;
+  const enrolled = data.enrolled_count || 0;
+  const pending = data.pending_count || 0;
+  const pct = total > 0 ? Math.round((enrolled / total) * 100) : 0;
+  
+  $('enrolledCount').textContent = enrolled;
+  $('pendingCount').textContent = pending;
+  $('totalUsersCount').textContent = total;
+  $('enrollPercentage').textContent = `${pct}%`;
+  $('faceEnrollText').textContent = `${enrolled}/${total} enrolled (${pct}%)`;
+  $('faceEnrollDot').className = `status-dot ${pct >= 80 ? 'online' : pct >= 50 ? 'warning' : 'alert'}`;
+  
+  $('enrolledListCount').textContent = data.enrolled?.length || 0;
+  $('pendingListCount').textContent = data.pending?.length || 0;
+  
+  // Enrolled table
+  const enrolledBody = $('enrolledUsersTableBody');
+  enrolledBody.innerHTML = (data.enrolled || []).length 
+    ? data.enrolled.map(u => `
+      <tr>
+        <td>
+          <div class="t-primary">${esc(u.name)}</div>
+          <div class="t-secondary">${esc(u.memberId)}</div>
+        </td>
+        <td>
+          <div>${esc(u.sport)}</div>
+          <div class="t-secondary">${esc(u.slotName || 'No slot')}</div>
+        </td>
+        <td><span class="badge-chip chip-green">${u.faceImageCount || 0}</span></td>
+        <td>${renderUserStatusChip(u)}</td>
+        <td class="t-secondary">${esc(fmtDT(u.updatedAt))}</td>
+        <td>
+          <div class="table-actions">
+            <button class="mini-btn" onclick="beginUserEdit('${u.id}')">Edit</button>
+            <button class="mini-btn" onclick="openAllMemberReport('${u.id}')">Report</button>
+          </div>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="6"><div class="empty-hint">No recently enrolled users.</div></td></tr>';
+  
+  // Pending table  
+  const pendingBody = $('pendingUsersTableBody');
+  pendingBody.innerHTML = (data.pending || []).length 
+    ? data.pending.map(u => `
+      <tr>
+        <td>
+          <div class="t-primary">${esc(u.name)}</div>
+          <div class="t-secondary">${esc(u.memberId)}</div>
+        </td>
+        <td>
+          <div>${esc(u.sport)}</div>
+          <div class="t-secondary">${esc(u.slotName || 'No slot')}</div>
+        </td>
+        <td>${chip(u.membershipStatus || 'amber', u.membershipPlan || 'Pending')}</td>
+        <td class="t-secondary">${esc(fmtDT(u.createdAt))}</td>
+        <td>
+          <button class="mini-btn primary" onclick="beginFaceEnrollmentForUser('${u.id}')">
+            Enroll Face
+          </button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="5"><div class="empty-hint">All users have face enrollment completed!</div></td></tr>';
+}
+
+async function loadFaceEnrollmentStatus() {
+  if (!isAdmin()) return;
+  try {
+    S.faceEnrollmentStatus = await api('/admin/face-enrollment-status');
+    renderFaceEnrollmentStatus();
+  } catch (err) {
+    console.error('Face status load failed:', err);
+    toast('Could not load enrollment status.', 'error');
+  }
+}
+
+function beginFaceEnrollmentForUser(userId) {
+  focusFaceEnrollmentUser(userId);
+  openTab('newUserTab');
+}
+
+$('refreshFaceStatusBtn')?.addEventListener('click', loadFaceEnrollmentStatus);
+$('exportFaceStatusBtn')?.addEventListener('click', exportFaceStatusCSV);
+
+function exportFaceStatusCSV() {
+  const data = S.faceEnrollmentStatus;
+  if (!data) return;
+  
+  const headers = ['Status','Name','Member ID','Email','Sport','Face Count','Slot','Status','Updated','Created'];
+  const rows = [];
+  
+  (data.enrolled || []).forEach(u => {
+    rows.push([
+      'Enrolled', u.name, u.memberId, u.email, u.sport, 
+      u.faceImageCount, u.slotName, u.membershipStatus, u.updatedAt, u.createdAt
+    ]);
+  });
+  
+  (data.pending || []).forEach(u => {
+    rows.push([
+      'Pending', u.name, u.memberId, u.email, u.sport, 
+      0, u.slotName, u.membershipStatus, u.updatedAt, u.createdAt
+    ]);
+  });
+  
+  const csv = [headers, ...rows.map(row => row.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(','))].join('\n');
+  downloadCsv('face-enrollment-status.csv', csv);
+}
+</script>
+
