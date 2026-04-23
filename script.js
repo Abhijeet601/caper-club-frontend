@@ -4121,6 +4121,7 @@ function applyScanResult(r) {
 
 const SESSION_DURATION_MS = 70 * 60 * 1000;
 const SESSION_TIMER_GRACE_MS = 10 * 60 * 1000;
+const ACTIVE_SESSION_BACKEND_MISS_GRACE_MS = 2 * 60 * 1000;
 
 function parseTimestampMs(value) {
   const parsed = Date.parse(String(value || ''));
@@ -4140,6 +4141,7 @@ function ensureSessionTimerLoop() {
 function buildActiveSessionState(session, existing = null) {
   const startedAtMs = parseTimestampMs(session?.startedAt);
   const backendRemainingMs = Math.max(0, Number(session?.remainingSeconds || 0)) * 1000;
+  const now = Date.now();
   const startTime = startedAtMs || Number(existing?.startTime) || Date.now();
   const slotDeadlineTime = parseTimestampMs(session?.slotEndAt);
   const limitDeadlineTime = startTime + SESSION_DURATION_MS;
@@ -4162,6 +4164,7 @@ function buildActiveSessionState(session, existing = null) {
     name: session?.name || existing?.name || 'Member',
     announced5: sameSession ? Boolean(existing?.announced5) : false,
     announcedEnd: sameSession ? Boolean(existing?.announcedEnd) : false,
+    lastSeenAt: now,
   };
 }
 
@@ -4182,16 +4185,24 @@ function getBackendActiveSessionsByUser() {
     }, {});
 }
 
+function shouldPreserveMissingActiveSession(session, now = Date.now()) {
+  const startTime = Number(session?.startTime || now);
+  const duration = Math.max(1000, Number(session?.duration || SESSION_DURATION_MS));
+  const deadlineTime = Number(session?.deadlineTime || (startTime + duration));
+  const lastSeenAt = Number(session?.lastSeenAt || startTime);
+
+  if (now >= deadlineTime) return false;
+  return (now - lastSeenAt) <= ACTIVE_SESSION_BACKEND_MISS_GRACE_MS;
+}
+
 function restoreMissingActiveSessions(snapshot) {
   const now = Date.now();
   const backendActiveSessions = getBackendActiveSessionsByUser();
-  const enforceBackendState = isAdmin();
 
   Object.entries(snapshot || {}).forEach(([userId, session]) => {
     if (S.activeSessions[userId]) return;
-    if (now >= Number(session?.deadlineTime || 0)) return;
+    if (!shouldPreserveMissingActiveSession(session, now)) return;
     const backendSession = backendActiveSessions[userId];
-    if (enforceBackendState && !backendSession) return;
 
     S.activeSessions[userId] = backendSession
       ? buildActiveSessionState(backendSession, session)
@@ -4217,11 +4228,22 @@ function upsertActiveSessionFromBackend(session) {
 }
 
 function syncActiveSessionsFromBackend() {
+  const snapshot = snapshotActiveSessions();
   const backendActiveSessions = getBackendActiveSessionsByUser();
   const nextSessions = {};
+  const now = Date.now();
 
   Object.entries(backendActiveSessions).forEach(([userId, session]) => {
     nextSessions[userId] = buildActiveSessionState(session, S.activeSessions[userId] || null);
+  });
+
+  Object.entries(snapshot).forEach(([userId, session]) => {
+    if (nextSessions[userId]) return;
+    if (!shouldPreserveMissingActiveSession(session, now)) return;
+    nextSessions[userId] = {
+      ...session,
+      userId: String(session?.userId || userId),
+    };
   });
 
   S.activeSessions = nextSessions;
@@ -4258,6 +4280,7 @@ function startSessionTimer(userId, name) {
     announced5: false,
     announcedEnd: false,
     name: name || 'Member',
+    lastSeenAt: Date.now(),
   };
   toast(`Session timer started for ${name || 'Member'}`, 'success');
 
@@ -4345,6 +4368,7 @@ function restoreSessionTimers() {
           startTime,
           duration,
           deadlineTime,
+          lastSeenAt: Number(sess?.lastSeenAt || startTime),
           name: sess?.name || 'Member',
           announced5: Boolean(sess?.announced5),
           announcedEnd: Boolean(sess?.announcedEnd),
