@@ -115,6 +115,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* Prevent horizontal scroll */
+  box-sizing: border-box;
 }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
@@ -1436,12 +1438,57 @@ textarea { min-height: 60px; resize: none; }
   .scan-btns    { width: 100%; }
   .scan-btns button { flex: 1; }
   .sess-times   { grid-template-columns: 1fr 1fr; }
+  /* Increase button sizes for touch */
+  .btn-primary { padding: 12px 20px; font-size: .85rem; min-height: 44px; }
+  .btn-sm { padding: 10px 16px; font-size: .8rem; min-height: 40px; }
+  .btn-ghost { padding: 10px 16px; min-height: 40px; }
+  .btn-capture { padding: 10px 16px; min-height: 40px; }
+  .btn-scan { padding: 10px 18px; min-height: 40px; }
+  .icon-btn { padding: 8px 12px; min-width: 44px; min-height: 44px; }
+  /* Improve spacing */
+  .form-row { gap: 12px; }
+  .btn-row { gap: 8px; }
+  .single-col-layout { padding: 0 8px 12px; }
+  .panel-card { padding: 16px; }
+  .card-head { margin-bottom: 12px; }
+  /* Tables */
+  .report-table th, .report-table td { padding: 8px 6px; font-size: .75rem; }
+  .rpt-table th, .rpt-table td { padding: 6px 4px; font-size: .7rem; }
+  /* Inputs */
+  input, select, textarea { font-size: 16px; } /* Prevent zoom on iOS */
+}
+
+/* Tablet adjustments */
+@media (max-width: 820px) and (min-width: 601px) {
+  .btn-primary { padding: 10px 18px; min-height: 42px; }
+  .btn-sm { padding: 8px 14px; min-height: 38px; }
+  .btn-ghost { padding: 8px 14px; min-height: 38px; }
+  .btn-capture { padding: 8px 14px; min-height: 38px; }
+  .btn-scan { padding: 8px 16px; min-height: 38px; }
+  .icon-btn { padding: 6px 10px; min-width: 42px; min-height: 42px; }
+  .single-col-layout { padding: 0 12px 12px; }
+  .panel-card { padding: 18px; }
+  input, select, textarea { font-size: 15px; }
 }
 
 @media (max-width: 400px) {
   .sys-status-grid { grid-template-columns: 1fr; }
   .scan-meta-row   { grid-template-columns: 1fr 1fr; }
   .thumb-grid      { grid-template-columns: repeat(3, 1fr); }
+  /* Even smaller buttons if needed */
+  .btn-primary { padding: 14px 22px; }
+  .btn-sm { padding: 12px 18px; }
+  .btn-ghost { padding: 12px 18px; }
+  .btn-capture { padding: 12px 18px; }
+  .btn-scan { padding: 12px 20px; }
+  .icon-btn { padding: 10px 14px; }
+  /* Hide more elements */
+  .brand-powered { display: none; }
+  .top-bar { padding: 6px 8px; }
+  .nav-tab { padding: 6px 12px; font-size: .65rem; }
+  .scanner-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .scanner-title { font-size: .8rem; }
+  .scanner-badges { align-self: flex-end; }
 }
 
 /* ── TALL SCREENS (reduce wasted space) ─────────── */
@@ -1464,6 +1511,52 @@ textarea { min-height: 60px; resize: none; }
   .rpt-table-wrap { max-height: 220px; }
   .cam-viewport  { min-height: 160px; }
   #faceEnrollmentTab .enrollment-cam-viewport { min-height: 220px; }
+}
+
+/* ── VERY LARGE SCREENS ──────────────────────────── */
+@media (min-width: 1600px) {
+  .app-shell { max-width: 1800px; margin: 0 auto; }
+  .single-col-layout > * { max-width: 1400px; }
+  .liveops-layout { grid-template-columns: 1.2fr 1fr; }
+  .scanner-panel { max-height: 800px; }
+  .cam-viewport { max-height: 600px; }
+}
+
+/* ── ULTRA-WIDE SCREENS ─────────────────────────── */
+@media (min-width: 2000px) {
+  .app-shell { max-width: 2200px; }
+  .single-col-layout > * { max-width: 1600px; }
+  .liveops-layout { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── ORIENTATION: LANDSCAPE MOBILE ──────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .app-shell { height: 100vh; overflow: hidden; }
+  .top-bar { min-height: 40px; padding: 4px 8px; }
+  .tab-nav { min-height: 32px; }
+  .nav-tab { padding: 4px 10px; font-size: .6rem; }
+  .scanner-panel { min-height: 200px; max-height: 300px; }
+  .cam-viewport { min-height: 150px; max-height: 250px; }
+  .right-panel { max-height: 300px; overflow-y: auto; }
+  .single-col-layout { padding: 0 4px 8px; }
+  .panel-card { padding: 12px; }
+  .btn-primary { padding: 8px 16px; font-size: .75rem; min-height: 36px; }
+  .btn-sm { padding: 6px 12px; font-size: .7rem; min-height: 32px; }
+  .table-scroll { max-height: 120px; }
+}
+
+/* ── PRINT STYLES (hide interactive elements) ───── */
+@media print {
+  .top-bar, .tab-nav, .btn-primary, .btn-ghost, .btn-capture, .btn-scan,
+  .scan-controls, .enrollment-zoom-row, .btn-row, .nav-tab,
+  .liveops-layout .right-panel, .app-footer { display: none !important; }
+  .main-area-full { overflow: visible; }
+  .tab-page { display: block !important; height: auto; }
+  .single-col-layout { height: auto; overflow: visible; }
+  .panel-card { break-inside: avoid; page-break-inside: avoid; }
+  .table-scroll { overflow: visible; max-height: none; }
+  .report-table { font-size: 12px; }
+  .report-table th, .report-table td { padding: 6px 8px; }
 }
 
 /* ═══════════════════════════════════════════════
