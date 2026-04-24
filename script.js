@@ -142,6 +142,7 @@ const S = {
   ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
   scanMissStreak: 0,
   userFilters: { search: '', sport: '', plan: '', status: '', role: '' },
+  userPage: 1,
   reportFilter: { search: '', status: '', date: '' },
   membershipFilter: 'all',
 };
@@ -444,24 +445,33 @@ function bindEvents() {
   $('userForm').addEventListener('submit', handleUserSubmit);
   $('userResetBtn').addEventListener('click', resetUserForm);
   if ($('usersTableBody')) $('usersTableBody').addEventListener('click', handleUsersClick);
-  if ($('userFilterInput')) $('userFilterInput').addEventListener('input', e => {
-    S.userFilters.search = e.target.value;
-    renderUsers();
-  });
+  if ($('userFilterInput')) {
+    let searchTimeout;
+    $('userFilterInput').addEventListener('input', e => {
+      clearTimeout(searchTimeout);
+      S.userFilters.search = e.target.value;
+      S.userPage = 1; // Reset to first page when search changes
+      searchTimeout = setTimeout(() => renderUsers(), 300); // Debounce search by 300ms
+    });
+  }
   if ($('userSportFilterInput')) $('userSportFilterInput').addEventListener('change', e => {
     S.userFilters.sport = e.target.value;
+    S.userPage = 1; // Reset to first page when filter changes
     renderUsers();
   });
   if ($('userPlanFilterInput')) $('userPlanFilterInput').addEventListener('change', e => {
     S.userFilters.plan = e.target.value;
+    S.userPage = 1;
     renderUsers();
   });
   if ($('userStatusFilterInput')) $('userStatusFilterInput').addEventListener('change', e => {
     S.userFilters.status = e.target.value;
+    S.userPage = 1;
     renderUsers();
   });
   if ($('userRoleFilterInput')) $('userRoleFilterInput').addEventListener('change', e => {
     S.userFilters.role = e.target.value;
+    S.userPage = 1;
     renderUsers();
   });
   if ($('allMembersClearFilters')) $('allMembersClearFilters').addEventListener('click', resetAllMemberFilters);
@@ -499,6 +509,8 @@ function bindEvents() {
   // Membership
   $('membershipForm').addEventListener('submit', handleMembershipSubmit);
   if ($('membershipUserSearchInput')) $('membershipUserSearchInput').addEventListener('input', () => applyMembershipUserSearch());
+  if ($('membershipPlanInput')) $('membershipPlanInput').addEventListener('change', syncMembershipPlanDates);
+  if ($('membershipStartInput')) $('membershipStartInput').addEventListener('input', syncMembershipPlanDates);
 
   // Sessions
   if ($('sessionConfidenceInput') && $('sessionConfidenceValue')) {
@@ -698,8 +710,9 @@ function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
   if (opts.force) return true;
   switch (key) {
     case 'users':
+      return activeTab === 'allMembersTab' || activeTab === 'newUserTab' || activeTab === 'membershipTab' || activeTab === 'reportsTab' || activeTab === 'alertsTab' || activeTab === 'settingsTab';
     case 'slots':
-      return true;
+      return activeTab === 'settingsTab' || activeTab === 'membershipTab';
     case 'dashboard':
       return activeTab === 'liveOpsTab';
     case 'sessions':
@@ -709,7 +722,7 @@ function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
     case 'announcements':
       return activeTab === 'alertsTab';
     case 'embeddings':
-      return S.isScanning || activeTab === 'faceEnrollmentTab';
+      return S.isScanning || activeTab === 'faceEnrollmentTab' || activeTab === 'allMembersTab';
     default:
       return false;
   }
@@ -751,12 +764,16 @@ async function loadAdmin(opts = {}) {
     if (key === 'sessions') S.sessions = toArr(result);
     if (key === 'reports') S.reports = result || null;
     if (key === 'announcements') S.announcements = toArr(result);
-    if (key === 'embeddings') S.faceUsers = toArr(result);
+    if (key === 'embeddings') {
+      S.faceUsers = toArr(result);
+      S.faceCountCache = new Map(); // Clear face count cache when embeddings are updated
+    }
   });
 
   if (fetched.users) {
     syncCooldownStoreFromUsers(S.users);
     syncUserMemberIdField();
+    S.usersChanged = true; // Mark users as changed for filter cache invalidation
   }
   if (fetched.users || fetched.sessions) {
     syncActiveSessionsFromBackend();
@@ -1190,34 +1207,75 @@ function renderUsers() {
 
   const filters = S.userFilters || { search: '', sport: '', plan: '', status: '', role: '' };
   const search = String(filters.search || '').trim().toLowerCase();
-  const filtered = S.users.filter(u => {
-    const statusValue = getUserStatusValue(u);
-    const searchHaystack = [
-      u.name, u.email, u.memberId, u.role, u.sport, u.membershipLevel,
-      u.membershipPlan, u.paymentStatus, u.mobileNumber || u.mobile_number, statusValue,
-    ].join(' ').toLowerCase();
 
-    if (search && !searchHaystack.includes(search)) return false;
-    if (filters.sport && String(u.sport || '') !== filters.sport) return false;
-    if (filters.plan && String(u.membershipPlan || '') !== filters.plan) return false;
-    if (filters.status && statusValue !== String(filters.status).toLowerCase()) return false;
-    if (filters.role && String(u.role || '').toLowerCase() !== String(filters.role).toLowerCase()) return false;
-    return true;
-  });
-  if ($('allMembersCount')) $('allMembersCount').textContent = String(filtered.length);
+  // Show loading state for large datasets
+  if (S.users.length > 100) {
+    tableBody.innerHTML = '<tr><td colspan="5"><div class="empty-hint">Loading members...</div></td></tr>';
+  }
 
-  const members = filtered.filter(u => u.role === 'user');
-  const faceEnrolledCount = members.filter(u => getFaceCount(u) > 0).length;
-  const facePendingCount = members.filter(u => getFaceCount(u) === 0).length;
-  renderFaceEnrollSummary(faceEnrolledCount, facePendingCount, members.length);
+  // Use requestAnimationFrame for better performance on large lists
+  requestAnimationFrame(() => {
+    const startTime = performance.now();
 
-  tableBody.innerHTML = filtered.length
-    ? filtered.map(u => {
+    let filtered = S.users.filter(u => {
+      const statusValue = getUserStatusValue(u);
+      const searchHaystack = [
+        u.name, u.email, u.memberId, u.role, u.sport, u.membershipLevel,
+        u.membershipPlan, u.paymentStatus, u.mobileNumber || u.mobile_number, statusValue,
+      ].join(' ').toLowerCase();
+
+      if (search && !searchHaystack.includes(search)) return false;
+      if (filters.sport && String(u.sport || '') !== filters.sport) return false;
+      if (filters.plan && String(u.membershipPlan || '') !== filters.plan) return false;
+      if (filters.status && statusValue !== String(filters.status).toLowerCase()) return false;
+      if (filters.role && String(u.role || '').toLowerCase() !== String(filters.role).toLowerCase()) return false;
+      return true;
+    });
+
+    // Implement pagination for very large lists (>500 users)
+    const PAGE_SIZE = 100;
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const currentPage = S.userPage || 1;
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+
+    if (filtered.length > PAGE_SIZE) {
+      filtered = filtered.slice(startIndex, endIndex);
+    }
+
+    if ($('allMembersCount')) {
+      const totalFiltered = S.users.filter(u => {
+        const statusValue = getUserStatusValue(u);
+        const searchHaystack = [
+          u.name, u.email, u.memberId, u.role, u.sport, u.membershipLevel,
+          u.membershipPlan, u.paymentStatus, u.mobileNumber || u.mobile_number, statusValue,
+        ].join(' ').toLowerCase();
+
+        if (search && !searchHaystack.includes(search)) return false;
+        if (filters.sport && String(u.sport || '') !== filters.sport) return false;
+        if (filters.plan && String(u.membershipPlan || '') !== filters.plan) return false;
+        if (filters.status && statusValue !== String(filters.status).toLowerCase()) return false;
+        if (filters.role && String(u.role || '').toLowerCase() !== String(filters.role).toLowerCase()) return false;
+        return true;
+      }).length;
+      $('allMembersCount').textContent = String(totalFiltered);
+    }
+
+    const members = filtered.filter(u => u.role === 'user');
+    const faceEnrolledCount = members.filter(u => getFaceCount(u) > 0).length;
+    const facePendingCount = members.filter(u => getFaceCount(u) === 0).length;
+    renderFaceEnrollSummary(faceEnrolledCount, facePendingCount, members.length);
+
+    // Optimize HTML generation for large lists
+    const htmlParts = [];
+    if (filtered.length) {
+      for (const u of filtered) {
         const fc = getFaceCount(u);
         const faceChip = fc > 0
           ? `<span class="face-enroll-chip enrolled" title="${fc} face image${fc > 1 ? 's' : ''} enrolled">&#10004; Enrolled (${fc})</span>`
           : `<span class="face-enroll-chip pending" title="No face images enrolled">&#10008; Not Enrolled</span>`;
-        return `<tr data-user-row="${u.id}">
+
+        htmlParts.push(`<tr data-user-row="${u.id}">
           <td>
             <div class="t-primary">${esc(u.name)}</div>
             <div class="t-secondary">${esc(u.email)}</div>
@@ -1236,27 +1294,61 @@ function renderUsers() {
             <button class="mini-btn" data-user-edit="${u.id}">Edit</button>
             <button class="mini-btn del" data-user-delete="${u.id}">Del</button>
           </div></td>
-        </tr>`;
-      }).join('')
-    : `<tr><td colspan="5"><div class="empty-hint">No members found.</div></td></tr>`;
+        </tr>`);
+      }
+
+      // Add pagination controls if needed
+      if (totalPages > 1) {
+        htmlParts.push(`<tr><td colspan="5" style="text-align: center; padding: 16px;">
+          <div class="pagination-controls">
+            <button class="btn-ghost btn-sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="changeUserPage(${currentPage - 1})">Previous</button>
+            <span>Page ${currentPage} of ${totalPages}</span>
+            <button class="btn-ghost btn-sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="changeUserPage(${currentPage + 1})">Next</button>
+          </div>
+        </td></tr>`);
+      }
+    } else {
+      htmlParts.push(`<tr><td colspan="5"><div class="empty-hint">No members found.</div></td></tr>`);
+    }
+
+    tableBody.innerHTML = htmlParts.join('');
+
+    const renderTime = performance.now() - startTime;
+    if (renderTime > 100) {
+      console.log(`Users render took ${renderTime.toFixed(2)}ms for ${filtered.length} users`);
+    }
+  });
 }
 
 function populateAllMemberFilters() {
   const filters = S.userFilters || { search: '', sport: '', plan: '', status: '', role: '' };
-  const sportValues = uniqueSortedValues(S.users.map(user => user?.sport));
-  const planValues = uniqueSortedValues(S.users.map(user => user?.membershipPlan));
-  const statusValues = uniqueSortedValues(S.users.map(getUserStatusValue));
-  const roleValues = uniqueSortedValues(S.users.map(user => String(user?.role || '').toLowerCase()));
+
+  // Cache filter options to avoid recalculating on every tab switch
+  if (!S.cachedFilterOptions || S.usersChanged) {
+    S.cachedFilterOptions = {
+      sport: uniqueSortedValues(S.users.map(user => user?.sport)),
+      plan: uniqueSortedValues(S.users.map(user => user?.membershipPlan)),
+      status: uniqueSortedValues(S.users.map(getUserStatusValue)),
+      role: uniqueSortedValues(S.users.map(user => String(user?.role || '').toLowerCase()))
+    };
+    S.usersChanged = false;
+  }
 
   if ($('userFilterInput')) $('userFilterInput').value = filters.search || '';
-  fillValueSelect($('userSportFilterInput'), sportValues, { blankLabel: 'All Sports', value: filters.sport });
-  fillValueSelect($('userPlanFilterInput'), planValues, { blankLabel: 'All Plans', value: filters.plan });
-  fillValueSelect($('userStatusFilterInput'), statusValues, { blankLabel: 'All Statuses', value: filters.status, label: formatUserStatusLabel });
-  fillValueSelect($('userRoleFilterInput'), roleValues, { blankLabel: 'All Roles', value: filters.role, label: formatUserStatusLabel });
+  fillValueSelect($('userSportFilterInput'), S.cachedFilterOptions.sport, { blankLabel: 'All Sports', value: filters.sport });
+  fillValueSelect($('userPlanFilterInput'), S.cachedFilterOptions.plan, { blankLabel: 'All Plans', value: filters.plan });
+  fillValueSelect($('userStatusFilterInput'), S.cachedFilterOptions.status, { blankLabel: 'All Statuses', value: filters.status, label: formatUserStatusLabel });
+  fillValueSelect($('userRoleFilterInput'), S.cachedFilterOptions.role, { blankLabel: 'All Roles', value: filters.role, label: formatUserStatusLabel });
+}
+
+function changeUserPage(page) {
+  S.userPage = Math.max(1, page);
+  renderUsers();
 }
 
 function resetAllMemberFilters() {
   S.userFilters = { search: '', sport: '', plan: '', status: '', role: '' };
+  S.userPage = 1; // Reset to first page when clearing filters
   populateAllMemberFilters();
   renderUsers();
 }
@@ -1285,10 +1377,19 @@ function getUserStatusValue(user) {
 
 function getFaceCount(user) {
   if (user.faceImageCount != null) return Number(user.faceImageCount || 0);
-  const entry = S.faceUsers.find(f => String(f.id) === String(user.id));
-  if (entry?.descriptors?.length) return entry.descriptors.length;
-  if (entry?.embeddings?.length) return entry.embeddings.length;
-  return 0;
+
+  // Cache face counts to avoid repeated lookups
+  if (!S.faceCountCache) S.faceCountCache = new Map();
+  const cacheKey = String(user.id);
+  if (S.faceCountCache.has(cacheKey)) return S.faceCountCache.get(cacheKey);
+
+  const entry = S.faceUsers.find(f => String(f.id) === cacheKey);
+  let count = 0;
+  if (entry?.descriptors?.length) count = entry.descriptors.length;
+  else if (entry?.embeddings?.length) count = entry.embeddings.length;
+
+  S.faceCountCache.set(cacheKey, count);
+  return count;
 }
 
 function renderFaceEnrollSummary(enrolled, pending, total) {
@@ -1519,7 +1620,7 @@ function renderMembershipList() {
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 const RPT = {
-  search: '', plan: '', payment: '', date: '', mode: '',
+  search: '', plan: '', payment: '', date: '', mode: '', enrollment: '',
   renewalTab: 'expiring',
   quickFilter: 'all',
 };
@@ -1530,6 +1631,7 @@ function initReportsModule() {
   $('rptFilterPlan').addEventListener('change', e => { RPT.plan = e.target.value; renderReportsAll(); });
   $('rptFilterPayment').addEventListener('change', e => { RPT.payment = e.target.value; renderReportsAll(); });
   $('rptFilterMode') && $('rptFilterMode').addEventListener('change', e => { RPT.mode = e.target.value; renderReportsAll(); });
+  $('rptFilterEnrollment') && $('rptFilterEnrollment').addEventListener('change', e => { RPT.enrollment = e.target.value; renderReportsAll(); });
   $('rptFilterDate').addEventListener('change', e => { RPT.date = e.target.value; renderReportsAll(); });
   $('rptClearFilters').addEventListener('click', clearRptFilters);
   $('rptDetailClose').addEventListener('click', () => { $('rptDetailDrawer').hidden = true; });
@@ -1564,10 +1666,11 @@ function initReportsModule() {
 }
 
 function clearRptFilters() {
-  RPT.search = ''; RPT.plan = ''; RPT.payment = ''; RPT.date = ''; RPT.mode = '';
+  RPT.search = ''; RPT.plan = ''; RPT.payment = ''; RPT.date = ''; RPT.mode = ''; RPT.enrollment = '';
   $('rptSearch').value = ''; $('rptFilterPlan').value = '';
   $('rptFilterPayment').value = ''; $('rptFilterDate').value = '';
   $('rptFilterMode') && ($('rptFilterMode').value = '');
+  $('rptFilterEnrollment') && ($('rptFilterEnrollment').value = '');
   setActiveQuickFilter('all');
   renderReportsAll();
 }
@@ -1684,7 +1787,7 @@ function renderQuickFilterCards() {
   const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
 
   if ($('qcardAll')) $('qcardAll').textContent = String(S.sessions.length);
-  if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length || todaySessions.length);
+  if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length);
   if ($('qcardTodayRenewals')) $('qcardTodayRenewals').textContent = String(todayRenewals.length);
   if ($('qcardTodayCheckins')) $('qcardTodayCheckins').textContent = String(todaySessions.length);
   if ($('qcardCash')) $('qcardCash').textContent = fmtMoney(sumPaymentAmounts(cashToday));
@@ -1735,6 +1838,8 @@ function getFilteredAdmissions() {
     if (RPT.plan && user.membershipPlan !== RPT.plan) return false;
     if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
     if (RPT.mode && user.paymentMode !== RPT.mode) return false;
+    if (RPT.enrollment === 'enrolled' && getFaceCount(user) === 0) return false;
+    if (RPT.enrollment === 'not-enrolled' && getFaceCount(user) > 0) return false;
     if (RPT.date && !localDateKey(s.startedAt).startsWith(RPT.date)) return false;
     if (RPT.quickFilter === 'today-admissions' && !userTodayPayments.some(isAdmissionPayment)) return false;
     if (RPT.quickFilter === 'today-renewals' && !userTodayPayments.some(payment => !isAdmissionPayment(payment))) return false;
@@ -1753,7 +1858,7 @@ function renderAdmissionTable() {
   const records = getFilteredAdmissions();
   const tableWrap = document.querySelector('.rpt-table-wrap');
   if (tableWrap) {
-    const isFiltered = Boolean(RPT.search || RPT.plan || RPT.payment || RPT.date || RPT.mode || RPT.quickFilter !== 'all');
+    const isFiltered = Boolean(RPT.search || RPT.plan || RPT.payment || RPT.date || RPT.mode || RPT.enrollment || RPT.quickFilter !== 'all');
     tableWrap.classList.toggle('is-filtered', isFiltered);
   }
   $('rptAdmissionCount').textContent = records.length;
@@ -2553,6 +2658,28 @@ function syncUserPlanDates() {
   if (!days) return;
 
   expiryInput.value = isoDate(addDays(new Date(startValue), days));
+}
+
+function syncMembershipPlanDates() {
+  const startValue = $('membershipStartInput')?.value;
+  const planInput = $('membershipPlanInput');
+  const expiryInput = $('membershipExpiryInput');
+  if (!planInput || !expiryInput || !startValue) return;
+
+  const plan = planInput.value;
+  const daysMap = { Monthly: 30, Quarterly: 90, 'Half-Yearly': 180, Yearly: 365 };
+  const days = daysMap[plan] ?? null;
+
+  expiryInput.readOnly = Boolean(days);
+  if (days !== null) {
+    expiryInput.value = isoDate(addDays(new Date(startValue), days));
+  }
+
+  if ($('planCalcType')) $('planCalcType').value = plan;
+  if ($('planCalcStart')) $('planCalcStart').value = startValue;
+  if (plan !== 'Custom' && $('planCalcType') && $('planCalcStart')) {
+    calcPlanExpiry();
+  }
 }
 
 function getSportLevelDays() {

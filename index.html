@@ -589,7 +589,7 @@
         <span class="rpt-quick-card-label">Card Today</span>
         <span class="rpt-quick-card-value" id="qcardCard">₹0</span>
       </button>
-      <button class="rpt-quick-card" data-qfilter="all">
+      <button type="button" class="rpt-quick-card rpt-quick-card-static">
         <span class="rpt-quick-card-label">Total Revenue</span>
         <span class="rpt-quick-card-value" id="qcardTotalRevenue">₹0</span>
       </button>
@@ -617,6 +617,11 @@
         <option value="Cash">Cash</option>
         <option value="UPI">UPI</option>
         <option value="Card">Card</option>
+      </select>
+      <select id="rptFilterEnrollment" class="rpt-select">
+        <option value="">All Enrollment</option>
+        <option value="enrolled">Enrolled</option>
+        <option value="not-enrolled">Not Enrolled</option>
       </select>
       <input type="date" id="rptFilterDate" class="rpt-date">
       <button class="btn-ghost btn-sm" id="rptClearFilters">Clear</button>
