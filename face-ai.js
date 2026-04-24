@@ -6,19 +6,32 @@
     Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
     Object.freeze({ inputSize: 320, scoreThreshold: 0.4, label: 'balanced' }),
   ]);
+  const VIDEO_FULL_FRAME_PASSES = Object.freeze([
+    Object.freeze({ inputSize: 256, scoreThreshold: 0.42, label: 'video-fast' }),
+    Object.freeze({ inputSize: 320, scoreThreshold: 0.36, label: 'video-balanced' }),
+  ]);
   const CENTER_CROP_PASSES = Object.freeze([
     Object.freeze({ inputSize: 416, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
     Object.freeze({ inputSize: 512, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
+  ]);
+  const VIDEO_CENTER_CROP_PASSES = Object.freeze([
+    Object.freeze({ inputSize: 320, scoreThreshold: 0.3, zoom: 1.45, offsetX: 0, offsetY: -0.04, label: 'video-center-1.45x' }),
   ]);
   const FOCUS_PASS = Object.freeze({
     inputSize: 512,
     scoreThreshold: 0.24,
     label: 'focus-zoom',
   });
+  const VIDEO_FOCUS_PASS = Object.freeze({
+    inputSize: 384,
+    scoreThreshold: 0.24,
+    label: 'video-focus',
+  });
   const SMALL_FACE_RATIO = 0.18;
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
   const MAX_RECOMMENDED_ZOOM = 2.6;
+  const DETECTOR_OPTIONS_CACHE = new Map();
 
   function ensureFaceApi() {
     if (!global.faceapi) {
@@ -217,12 +230,30 @@
     });
   }
 
-  async function detectWithPass(input, pass) {
+  function getDetectorOptions(pass) {
+    const inputSize = Number(pass?.inputSize || 320);
+    const scoreThreshold = Number(pass?.scoreThreshold || 0.4);
+    const cacheKey = `${inputSize}:${scoreThreshold}`;
+    if (!DETECTOR_OPTIONS_CACHE.has(cacheKey)) {
+      const faceapi = ensureFaceApi();
+      DETECTOR_OPTIONS_CACHE.set(cacheKey, new faceapi.TinyFaceDetectorOptions({
+        inputSize,
+        scoreThreshold,
+      }));
+    }
+    return DETECTOR_OPTIONS_CACHE.get(cacheKey);
+  }
+
+  async function detectWithPass(input, pass, opts = {}) {
     const faceapi = ensureFaceApi();
-    const options = new faceapi.TinyFaceDetectorOptions({
-      inputSize: Number(pass.inputSize || 320),
-      scoreThreshold: Number(pass.scoreThreshold || 0.4),
-    });
+    const options = getDetectorOptions(pass);
+    if (opts.single) {
+      const detection = await faceapi
+        .detectSingleFace(input, options)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      return detection ? [detection] : [];
+    }
     return faceapi
       .detectAllFaces(input, options)
       .withFaceLandmarks()
@@ -262,7 +293,7 @@
     let best = null;
 
     for (const pass of passes || []) {
-      const detections = await detectWithPass(input, pass);
+      const detections = await detectWithPass(input, pass, { single: Boolean(meta.single) });
       const candidate = pickBestDetection(detections, surfaceDimensions.width, surfaceDimensions.height);
       if (!candidate?.detection) continue;
 
@@ -286,16 +317,18 @@
     return best;
   }
 
-  async function detectLongRangeCandidate(input, sourceWidth, sourceHeight) {
+  async function detectLongRangeCandidate(input, sourceWidth, sourceHeight, opts = {}) {
+    const passes = Array.isArray(opts.passes) && opts.passes.length ? opts.passes : CENTER_CROP_PASSES;
     let best = null;
 
-    for (const pass of CENTER_CROP_PASSES) {
+    for (const pass of passes) {
       const region = buildCenterCrop(sourceWidth, sourceHeight, pass);
-      const targetLongEdge = Math.max(720, Number(pass.inputSize || 416) * 2);
+      const targetLongEdge = Math.max(Number(opts.targetLongEdge || 720), Number(pass.inputSize || 416) * 2);
       const surface = drawCropSurface(input, region, targetLongEdge);
       const payload = await detectOnSurface(surface, sourceWidth, sourceHeight, [pass], {
         region,
-        captureMode: 'center-zoom',
+        captureMode: String(opts.captureMode || 'center-zoom'),
+        single: Boolean(opts.single),
       });
       if (!payload) continue;
 
@@ -308,14 +341,16 @@
     return best;
   }
 
-  async function refineSmallFace(input, sourceWidth, sourceHeight, currentDetection) {
+  async function refineSmallFace(input, sourceWidth, sourceHeight, currentDetection, opts = {}) {
     if (!currentDetection?.faceBox) return null;
     const region = buildFocusCrop(currentDetection.faceBox, sourceWidth, sourceHeight);
-    const targetLongEdge = Math.max(800, Number(FOCUS_PASS.inputSize || 512) * 2);
+    const focusPass = opts.pass || FOCUS_PASS;
+    const targetLongEdge = Math.max(Number(opts.targetLongEdge || 800), Number(focusPass.inputSize || 512) * 2);
     const surface = drawCropSurface(input, region, targetLongEdge);
-    const refined = await detectOnSurface(surface, sourceWidth, sourceHeight, [FOCUS_PASS], {
+    const refined = await detectOnSurface(surface, sourceWidth, sourceHeight, [focusPass], {
       region,
-      captureMode: 'focus-zoom',
+      captureMode: String(opts.captureMode || 'focus-zoom'),
+      single: Boolean(opts.single),
     });
     if (!refined) return null;
 
@@ -323,9 +358,52 @@
     return refined;
   }
 
-  async function detectDescriptor(input) {
+  async function detectDescriptor(input, opts = {}) {
     const dimensions = getInputDimensions(input);
     if (!dimensions.width || !dimensions.height) return null;
+
+    if (opts.videoMode) {
+      let detection = null;
+
+      if (opts.hintBox) {
+        detection = await refineSmallFace(input, dimensions.width, dimensions.height, { faceBox: opts.hintBox }, {
+          pass: VIDEO_FOCUS_PASS,
+          targetLongEdge: 640,
+          captureMode: 'focus-lock',
+          single: true,
+        });
+      }
+
+      if (!detection) {
+        detection = await detectOnSurface(input, dimensions.width, dimensions.height, VIDEO_FULL_FRAME_PASSES, {
+          captureMode: 'video-frame',
+          single: true,
+        });
+      }
+
+      if (!detection && opts.allowLongRange !== false) {
+        detection = await detectLongRangeCandidate(input, dimensions.width, dimensions.height, {
+          passes: VIDEO_CENTER_CROP_PASSES,
+          targetLongEdge: 640,
+          captureMode: 'center-zoom',
+          single: true,
+        });
+      }
+
+      if (detection && (detection.faceRatio < SMALL_FACE_RATIO || detection.captureMode !== 'video-frame')) {
+        const refined = await refineSmallFace(input, dimensions.width, dimensions.height, detection, {
+          pass: VIDEO_FOCUS_PASS,
+          targetLongEdge: 640,
+          captureMode: 'focus-lock',
+          single: true,
+        });
+        if (refined && shouldPrefer(refined, detection)) {
+          detection = refined;
+        }
+      }
+
+      return detection || null;
+    }
 
     let detection = await detectOnSurface(input, dimensions.width, dimensions.height, FULL_FRAME_PASSES, {
       captureMode: 'full-frame',
@@ -345,9 +423,13 @@
     return detection || null;
   }
 
-  async function detectFromVideo(video) {
+  async function detectFromVideo(video, opts = {}) {
     if (!video || !video.videoWidth || !video.videoHeight) return null;
-    return detectDescriptor(video);
+    return detectDescriptor(video, {
+      videoMode: true,
+      hintBox: opts.hintBox || null,
+      allowLongRange: opts.allowLongRange !== false,
+    });
   }
 
   async function detectFromDataUrl(dataUrl) {

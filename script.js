@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 1200;
+const LIVE_SCAN_INTERVAL = 850;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -22,32 +22,33 @@ const MAX_PREVIEW_ZOOM = 2.6;
 const ENROLLMENT_ZOOM_STEP = 0.2;
 const DEFAULT_CAMERA_FOCUS_X = 0.5;
 const DEFAULT_CAMERA_FOCUS_Y = 0.46;
+const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
 const CAMERA_CONSTRAINT_SETS = Object.freeze([
   {
     audio: false,
     video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
       aspectRatio: { ideal: 16 / 9 },
-      frameRate: { ideal: 30, max: 30 },
+      frameRate: { ideal: 24, max: 30 },
     },
   },
   {
     audio: false,
     video: {
       facingMode: { ideal: 'user' },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
       aspectRatio: { ideal: 16 / 9 },
-      frameRate: { ideal: 30, max: 30 },
+      frameRate: { ideal: 24, max: 30 },
     },
   },
   {
     audio: false,
     video: {
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
+      width: { ideal: 960 },
+      height: { ideal: 540 },
       frameRate: { ideal: 24, max: 30 },
     },
   },
@@ -126,12 +127,14 @@ const S = {
   cooldowns: loadCooldownStore(),
   cooldownVoiceAt: {},
   activeSessions: {},        // { userId: { sessionId, startTime, deadlineTime, duration, name, announced5, announcedEnd } }
+  activeSessionsRenderKey: '',
   sessionTimerLoop: null,
   enrollmentImages: [],
   enrollmentZoom: 1,
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
   audioUrl: '', audioContext: null, audioUnlocked: false,
   ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
+  scanMissStreak: 0,
   userFilters: { search: '', sport: '', plan: '', status: '', role: '' },
   reportFilter: { search: '', status: '', date: '' },
   membershipFilter: 'all',
@@ -227,6 +230,8 @@ const MOJIBAKE_TEXT_REPLACEMENTS = Object.freeze([
 
 let visibleTextSanitizerObserver = null;
 let isSanitizingVisibleText = false;
+const pendingSanitizeRoots = new Set();
+let sanitizeVisibleDomFrame = 0;
 
 function sanitizeDisplayText(value) {
   let text = String(value ?? '');
@@ -284,6 +289,19 @@ function sanitizeVisibleDom(root = document.body) {
   }
 }
 
+function queueVisibleDomSanitize(root = document.body) {
+  if (!root) return;
+  if (root !== document.body && root.nodeType !== Node.ELEMENT_NODE && root.nodeType !== Node.TEXT_NODE) return;
+  pendingSanitizeRoots.add(root);
+  if (sanitizeVisibleDomFrame) return;
+  sanitizeVisibleDomFrame = requestAnimationFrame(() => {
+    sanitizeVisibleDomFrame = 0;
+    const roots = Array.from(pendingSanitizeRoots);
+    pendingSanitizeRoots.clear();
+    roots.forEach(node => sanitizeVisibleDom(node));
+  });
+}
+
 function startVisibleTextSanitizer() {
   sanitizeVisibleDom(document.body);
   if (visibleTextSanitizerObserver) visibleTextSanitizerObserver.disconnect();
@@ -292,11 +310,14 @@ function startVisibleTextSanitizer() {
     if (isSanitizingVisibleText) return;
     mutations.forEach(mutation => {
       if (mutation.type === 'characterData') {
-        sanitizeVisibleDom(mutation.target);
+        queueVisibleDomSanitize(mutation.target);
         return;
       }
-      sanitizeVisibleDom(mutation.target);
-      mutation.addedNodes.forEach(node => sanitizeVisibleDom(node));
+      if (mutation.type === 'attributes') {
+        queueVisibleDomSanitize(mutation.target);
+        return;
+      }
+      mutation.addedNodes.forEach(node => queueVisibleDomSanitize(node));
     });
   });
 
@@ -688,28 +709,52 @@ async function pingHealth() {
 function renderAll() {
   setAuth(S.currentUser);
   populateSelects();
-  populateAllMemberFilters();
+  renderActiveTabContent();
+  updateAlertBadge();
+}
+
+function renderLiveOpsContent() {
   renderSystemStatus();
   renderLiveFeed();
   renderActiveSessionsPanel();
-  renderUsers();
-  renderSlots();
-  renderSessions();
-  renderAnnouncements();
   renderReports();
-  renderMembershipList();
-  renderAlerts();
-  renderReportsAll();
-  renderEnrollGallery();
-  renderEnrollmentZoomControls();
-  renderEnrollmentCameraBadge();
-  renderMember();
   renderScannerStatus();
   renderConsole();
   renderTts();
   renderScanResult();
-  updateAlertBadge();
-  sanitizeVisibleDom(document.body);
+}
+
+function renderActiveTabContent() {
+  switch (S.activeTab) {
+    case 'liveOpsTab':
+      renderLiveOpsContent();
+      break;
+    case 'faceEnrollmentTab':
+      renderEnrollGallery();
+      renderEnrollmentZoomControls();
+      renderEnrollmentCameraBadge();
+      break;
+    case 'reportsTab':
+      renderReportsAll();
+      break;
+    case 'allMembersTab':
+      populateAllMemberFilters();
+      renderUsers();
+      break;
+    case 'membershipTab':
+      renderMembershipList();
+      break;
+    case 'alertsTab':
+      renderAlerts();
+      renderAnnouncements();
+      break;
+    case 'settingsTab':
+      renderSlots();
+      renderMember();
+      break;
+    default:
+      break;
+  }
 }
 
 /* â”€â”€ TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -718,14 +763,11 @@ function openTab(id) {
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   document.querySelectorAll('.tab-page').forEach(p => p.classList.toggle('active', p.id === id));
   syncIdleCameraPreview();
-  renderEnrollmentZoomControls();
-  renderEnrollmentCameraBadge();
   if (id === 'faceEnrollmentTab') {
     loadFaceEnrollmentStatus();
     ensureEnrollmentLivePreview().catch(console.error);
   }
-  if (id === 'reportsTab') renderReportsAll();
-  if (id === 'allMembersTab') renderUsers();
+  renderActiveTabContent();
 }
 
 
@@ -1065,24 +1107,40 @@ function renderUsers() {
     return true;
   });
   if ($('allMembersCount')) $('allMembersCount').textContent = String(filtered.length);
+
+  const members = filtered.filter(u => u.role === 'user');
+  const faceEnrolledCount = members.filter(u => getFaceCount(u) > 0).length;
+  const facePendingCount = members.filter(u => getFaceCount(u) === 0).length;
+  renderFaceEnrollSummary(faceEnrolledCount, facePendingCount, members.length);
+
   tableBody.innerHTML = filtered.length
-    ? filtered.map(u => `<tr data-user-row="${u.id}">
-        <td><div class="t-primary">${esc(u.name)}</div><div class="t-secondary">${esc(u.email)}</div></td>
-        <td>
-          <div class="t-primary">${esc(u.sport||'-')}</div>
-          <div class="t-secondary">${esc([
-            u.membershipLevel || u.membershipPlan || '-',
-            Number(u.dueAmount || 0) > 0 ? `Due ${fmtMoney(u.dueAmount || 0)}` : '',
-          ].filter(Boolean).join(' | '))}</div>
-        </td>
-        <td>${renderUserStatusChip(u)}</td>
-        <td><div class="table-actions">
-          <button class="mini-btn" data-user-report="${u.id}">Report</button>
-          <button class="mini-btn" data-user-edit="${u.id}">Edit</button>
-          <button class="mini-btn del" data-user-delete="${u.id}">Del</button>
-        </div></td>
-      </tr>`).join('')
-    : `<tr><td colspan="4"><div class="empty-hint">No members found.</div></td></tr>`;
+    ? filtered.map(u => {
+        const fc = getFaceCount(u);
+        const faceChip = fc > 0
+          ? `<span class="face-enroll-chip enrolled" title="${fc} face image${fc > 1 ? 's' : ''} enrolled">&#10004; Enrolled (${fc})</span>`
+          : `<span class="face-enroll-chip pending" title="No face images enrolled">&#10008; Not Enrolled</span>`;
+        return `<tr data-user-row="${u.id}">
+          <td>
+            <div class="t-primary">${esc(u.name)}</div>
+            <div class="t-secondary">${esc(u.email)}</div>
+          </td>
+          <td>
+            <div class="t-primary">${esc(u.sport||'-')}</div>
+            <div class="t-secondary">${esc([
+              u.membershipLevel || u.membershipPlan || '-',
+              Number(u.dueAmount || 0) > 0 ? `Due ${fmtMoney(u.dueAmount || 0)}` : '',
+            ].filter(Boolean).join(' | '))}</div>
+          </td>
+          <td>${renderUserStatusChip(u)}</td>
+          <td>${faceChip}</td>
+          <td><div class="table-actions">
+            <button class="mini-btn" data-user-report="${u.id}">Report</button>
+            <button class="mini-btn" data-user-edit="${u.id}">Edit</button>
+            <button class="mini-btn del" data-user-delete="${u.id}">Del</button>
+          </div></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="5"><div class="empty-hint">No members found.</div></td></tr>`;
 }
 
 function populateAllMemberFilters() {
@@ -1125,6 +1183,44 @@ function uniqueSortedValues(values) {
 function getUserStatusValue(user) {
   if (String(user?.role || '').toLowerCase() === 'admin') return 'admin';
   return String(user?.membershipStatus || user?.paymentStatus || 'unknown').toLowerCase();
+}
+
+function getFaceCount(user) {
+  if (user.faceImageCount != null) return Number(user.faceImageCount || 0);
+  const entry = S.faceUsers.find(f => String(f.id) === String(user.id));
+  if (entry?.descriptors?.length) return entry.descriptors.length;
+  if (entry?.embeddings?.length) return entry.embeddings.length;
+  return 0;
+}
+
+function renderFaceEnrollSummary(enrolled, pending, total) {
+  let bar = $('faceEnrollSummaryBar');
+  if (!bar) {
+    const panel = document.querySelector('.all-members-panel');
+    if (!panel) return;
+    bar = document.createElement('div');
+    bar.id = 'faceEnrollSummaryBar';
+    bar.className = 'face-enroll-summary-bar';
+    const tableScroll = panel.querySelector('.table-scroll');
+    if (tableScroll) panel.insertBefore(bar, tableScroll);
+    else panel.appendChild(bar);
+  }
+  const pct = total > 0 ? Math.round((enrolled / total) * 100) : 0;
+  bar.innerHTML = `
+    <div class="face-enroll-stat enrolled">
+      <span class="face-enroll-dot"></span>
+      <span><strong>${enrolled}</strong> Face Enrolled</span>
+    </div>
+    <div class="face-enroll-progress-wrap">
+      <div class="face-enroll-progress-track">
+        <div class="face-enroll-progress-fill" style="width:${pct}%"></div>
+      </div>
+      <span class="face-enroll-pct">${pct}%</span>
+    </div>
+    <div class="face-enroll-stat pending">
+      <span class="face-enroll-dot"></span>
+      <span><strong>${pending}</strong> Not Enrolled</span>
+    </div>`;
 }
 
 function formatUserStatusLabel(value) {
@@ -2460,6 +2556,7 @@ async function startLiveScan(opts = {}) {
   if (!await ensureRecognitionReady()) { $('enableCameraInput').checked = false; return false; }
   if (S.isScanning) return true;
   S.cameraRequested = true;
+  S.scanMissStreak = 0;
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
@@ -2479,6 +2576,7 @@ function stopLiveScan(opts = {}) {
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
+  S.scanMissStreak = 0;
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
   stopCamera();
@@ -2774,6 +2872,7 @@ async function runScan(opts = {}) {
     });
     if (result.status === 'granted' && result.attendanceAction) {
       recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
+      updateLocalUserAttendance(match.user.id, result.attendanceAction, result.scannedAt);
     } else if (result.status === 'cooldown') {
       syncCooldownFromResult(result, action);
     } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
@@ -2782,16 +2881,14 @@ async function runScan(opts = {}) {
     S.scanResult = result;
     renderScanResult();
     applyScanResult(result);
+    if (result.session) {
+      upsertSessionLocal(result.session);
+      syncActiveSessionsFromBackend();
+      renderSessions();
+      renderSystemStatus();
+    }
     if (opts.showToast || result.status === 'granted') {
       toast(result.message||'Scan complete.', result.status==='granted'?'success':'warning');
-    }
-    const timerSnapshot = snapshotActiveSessions();
-    if (isAdmin()) {
-      await loadAdmin();
-      restoreMissingActiveSessions(timerSnapshot);
-      persistSessionTimers();
-      ensureSessionTimerLoop();
-      renderAll();
     }
     return result;
   } catch (err) {
@@ -2820,7 +2917,12 @@ async function detectRecognitionProbe(opts = {}) {
     return { detection: null, message: 'Camera preview is not ready yet.' };
   }
 
-  return { source, detection: await window.FaceAi.detectFromVideo(video) };
+  const detection = await window.FaceAi.detectFromVideo(video, {
+    hintBox: S.liveDetection?.faceBox || null,
+    allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
+  });
+  S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
+  return { source, detection };
 }
 
 function buildClientScanResult(opts = {}) {
@@ -2841,6 +2943,40 @@ function buildClientScanResult(opts = {}) {
     userId: opts.userId || null,
     ttsMessage: opts.ttsMessage || '',
   };
+}
+
+function updateLocalUserAttendance(userId, action, scannedAt) {
+  const id = String(userId || '').trim();
+  const normalizedAction = normalizeAttendanceAction(action);
+  const timestamp = normalizeTimestamp(scannedAt) || new Date().toISOString();
+  if (!id || !normalizedAction) return;
+
+  S.users = S.users.map(user => (
+    String(user?.id || '') === id
+      ? { ...user, lastAction: normalizedAction, lastActionAt: timestamp, lastTimestamp: timestamp }
+      : user
+  ));
+  S.faceUsers = S.faceUsers.map(user => (
+    String(user?.id || '') === id
+      ? { ...user, lastAction: normalizedAction, lastActionAt: timestamp }
+      : user
+  ));
+}
+
+function upsertSessionLocal(session) {
+  if (!session?.id) return;
+  const sessionId = String(session.id);
+  const nextSession = { ...session };
+  const index = S.sessions.findIndex(item => String(item?.id || '') === sessionId);
+
+  if (index >= 0) {
+    S.sessions = S.sessions.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, ...nextSession } : item
+    ));
+    return;
+  }
+
+  S.sessions = [nextSession, ...S.sessions];
 }
 
 function inferAttendanceAction(userId) {
@@ -3608,6 +3744,7 @@ function clearSess() {
     enrollmentZoom:1,
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
+    activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
     userFilters: { search:'', sport:'', plan:'', status:'', role:'' },
@@ -3631,7 +3768,10 @@ function handleErr(err, opts={}) {
 function startDataPoll() {
   clearDataPoll();
   if (!S.currentUser || !S.token) return;
-  S.refreshTimer = setInterval(() => refreshAll().catch(console.error), 30000);
+  S.refreshTimer = setInterval(() => {
+    if (document.hidden) return;
+    refreshAll().catch(console.error);
+  }, 30000);
 }
 function clearDataPoll() { clearInterval(S.refreshTimer); S.refreshTimer = null; }
 
@@ -4380,10 +4520,24 @@ function restoreSessionTimers() {
   } catch {}
 }
 
-function renderActiveSessionsPanel() {
+function renderActiveSessionsPanel(force = false) {
   const now = Date.now();
   const sessions = Object.entries(S.activeSessions);
-  console.log('[ActiveSessions] Rendering', sessions.length, 'sessions:', Object.keys(S.activeSessions));
+  const renderKey = sessions.length
+    ? sessions.map(([userId, sess]) => {
+        const deadlineTime = Number(sess?.deadlineTime || 0);
+        const bucket = Math.ceil((deadlineTime - now) / ACTIVE_SESSIONS_RENDER_INTERVAL_MS);
+        return [
+          userId,
+          sess?.sessionId || '',
+          sess?.announced5 ? 1 : 0,
+          sess?.announcedEnd ? 1 : 0,
+          bucket,
+        ].join(':');
+      }).join('|')
+    : 'empty';
+  if (!force && renderKey === S.activeSessionsRenderKey) return;
+  S.activeSessionsRenderKey = renderKey;
 
   const countEl = document.getElementById('activeSessionCount');
   if (countEl) countEl.textContent = String(sessions.length);
@@ -4524,19 +4678,31 @@ function speakBrowser(text, item = null) {
 
 function startHealthPoll() {
   clearInterval(S.healthTimer);
-  S.healthTimer = setInterval(() => pingHealth().catch(console.error), 30000);
+  S.healthTimer = setInterval(() => {
+    if (document.hidden) return;
+    pingHealth().catch(console.error);
+  }, 30000);
 }
 
 /* â”€â”€ PARTICLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function initParticles() {
   const canvas = $('particleCanvas');
   if (!canvas) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    canvas.hidden = true;
+    return;
+  }
   const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) return;
   let W, H, particles = [], lastTime = 0;
 
-  const TARGET_FPS = 90;
+  const TARGET_FPS = 36;
   const FRAME_MS = 1000 / TARGET_FPS;
+  const MAX_PARTICLES = 72;
+  const MIN_PARTICLES = 18;
+  const PARTICLE_DENSITY = 18000;
+  const LINK_DISTANCE = 84;
+  const LINK_DISTANCE_SQ = LINK_DISTANCE * LINK_DISTANCE;
 
   const COLORS = [
     '99,102,241',
@@ -4552,7 +4718,7 @@ function initParticles() {
   function resize() {
     W = canvas.width = window.innerWidth;
     H = canvas.height = window.innerHeight;
-    const count = Math.floor((W * H) / 10000);
+    const count = Math.max(MIN_PARTICLES, Math.min(MAX_PARTICLES, Math.floor((W * H) / PARTICLE_DENSITY)));
     particles = Array.from({ length: count }, () => ({
       x: Math.random() * W,
       y: Math.random() * H,
@@ -4567,6 +4733,12 @@ function initParticles() {
   }
 
   function draw(timestamp) {
+    if (document.hidden) {
+      lastTime = timestamp;
+      requestAnimationFrame(draw);
+      return;
+    }
+
     const delta = timestamp - lastTime;
     if (delta < FRAME_MS) {
       requestAnimationFrame(draw);
@@ -4597,9 +4769,10 @@ function initParticles() {
       for (let j = i + 1; j < particles.length; j++) {
         const dx = particles[i].x - particles[j].x;
         const dy = particles[i].y - particles[j].y;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        if (d < 100) {
-          const opacity = .06 * (1 - d / 100);
+        const distanceSq = (dx * dx) + (dy * dy);
+        if (distanceSq < LINK_DISTANCE_SQ) {
+          const distance = Math.sqrt(distanceSq);
+          const opacity = .05 * (1 - (distance / LINK_DISTANCE));
           ctx.beginPath();
           ctx.moveTo(particles[i].x, particles[i].y);
           ctx.lineTo(particles[j].x, particles[j].y);
