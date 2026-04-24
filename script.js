@@ -1690,7 +1690,7 @@ function applyQuickFilter(filter) {
   $('rptFilterDate').value = '';
   $('rptFilterMode') && ($('rptFilterMode').value = '');
 
-  const today = isoDate(new Date());
+  const today = localDateKey();
   switch (filter) {
     case 'today-admissions':
     case 'today-checkins':
@@ -1752,7 +1752,7 @@ function getPaidReportPayments() {
 }
 
 function getTodayPaidReportPayments() {
-  const today = isoDate(new Date());
+  const today = localDateKey();
   return getPaidReportPayments().filter(payment => localDateKey(payment.createdAt) === today);
 }
 
@@ -1776,7 +1776,7 @@ function renderReportsAll() {
 }
 
 function renderQuickFilterCards() {
-  const today = isoDate(new Date());
+  const today = localDateKey();
   const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
   const todayPayments = getTodayPaidReportPayments();
   const todayAdmissions = todayPayments.filter(isAdmissionPayment);
