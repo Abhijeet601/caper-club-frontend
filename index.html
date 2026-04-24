@@ -6,7 +6,7 @@
   <title>Caper Sports Club | AI Attendance System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 
   <!-- ═══ EXTRA INLINE ENHANCEMENTS ═══ -->
@@ -1424,9 +1424,6 @@
     <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a>
   </footer>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-  <script src="vendor/face-api.min.js"></script>
-  <script src="face-ai.js"></script>
   <script src="script.js"></script>
 
   <!-- ═══ ENHANCEMENT SCRIPTS ═══ -->
@@ -1434,26 +1431,30 @@
   (function() {
     'use strict';
 
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const finePointer = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
+
     /* ── CURSOR SPOTLIGHT ──────────────────── */
     const spotlight = document.getElementById('cursorSpotlight');
-    if (spotlight) {
-      let raf;
+    if (spotlight && finePointer && !reduceMotion) {
+      let raf = 0;
       document.addEventListener('mousemove', e => {
-        cancelAnimationFrame(raf);
+        if (raf) cancelAnimationFrame(raf);
         raf = requestAnimationFrame(() => {
           spotlight.style.left = e.clientX + 'px';
           spotlight.style.top  = e.clientY + 'px';
         });
-      });
+      }, { passive: true });
+    } else if (spotlight) {
+      spotlight.hidden = true;
     }
 
     /* ── RIPPLE EFFECT ON BUTTONS ──────────── */
-    function addRipple(e) {
-      const btn = e.currentTarget;
+    function addRipple(btn, event) {
       const rect = btn.getBoundingClientRect();
       const size = Math.max(rect.width, rect.height);
-      const x = e.clientX - rect.left - size / 2;
-      const y = e.clientY - rect.top  - size / 2;
+      const x = event.clientX - rect.left - size / 2;
+      const y = event.clientY - rect.top  - size / 2;
       const ripple = document.createElement('span');
       ripple.className = 'ripple-wave';
       ripple.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px;position:absolute;`;
@@ -1461,28 +1462,26 @@
       setTimeout(() => ripple.remove(), 700);
     }
 
-    function attachRipples() {
-      document.querySelectorAll('.btn-primary, .btn-scan, .btn-capture').forEach(btn => {
-        if (!btn.dataset.rippleAttached) {
-          btn.dataset.rippleAttached = '1';
-          btn.addEventListener('click', addRipple);
-        }
-      });
-    }
-    attachRipples();
-    new MutationObserver(attachRipples).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('.btn-primary, .btn-scan, .btn-capture');
+      if (!btn) return;
+      addRipple(btn, e);
+    });
 
     /* ── SCAN RIPPLE ON GRANTED ─────────────── */
     const shell = document.getElementById('cameraShell');
-    if (shell) {
+    if (shell && !reduceMotion) {
+      let wasGranted = shell.classList.contains('is-granted');
       const observer = new MutationObserver(() => {
-        if (shell.classList.contains('is-granted')) {
+        const isGranted = shell.classList.contains('is-granted');
+        if (isGranted && !wasGranted) {
           const ripple = document.createElement('div');
           ripple.className = 'scan-ripple';
           ripple.style.cssText = 'width:80px;height:80px;border:3px solid rgba(5,150,105,0.6);left:50%;top:50%;';
           shell.appendChild(ripple);
           setTimeout(() => ripple.remove(), 900);
         }
+        wasGranted = isGranted;
       });
       observer.observe(shell, { attributes: true, attributeFilter: ['class'] });
     }
@@ -1493,13 +1492,12 @@
       if (isNaN(num) || num === 0) return;
       const prefix = String(target).startsWith('₹') ? '₹' : '';
       const isInt = Number.isInteger(num);
-      let start = 0;
       const duration = 900;
       const startTime = performance.now();
       function step(now) {
         const p = Math.min((now - startTime) / duration, 1);
         const eased = 1 - Math.pow(1 - p, 3);
-        const current = start + (num - start) * eased;
+        const current = num * eased;
         el.textContent = prefix + (isInt ? Math.round(current) : current.toFixed(2));
         if (p < 1) requestAnimationFrame(step);
         else el.textContent = target;
@@ -1513,29 +1511,33 @@
       '#rptExpiringSoonVal', '#rptTodayRevenueVal', '#rptTodayCheckinsVal',
       '#qcardAll', '#qcardTodayAdmissions', '#qcardTodayRenewals', '#qcardTodayCheckins'
     ];
-    statSelectors.forEach(sel => {
-      const el = document.querySelector(sel);
-      if (!el) return;
-      const obs = new MutationObserver(() => {
-        animateCounter(el, el.textContent);
+    if (!reduceMotion) {
+      statSelectors.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+        const obs = new MutationObserver(() => {
+          animateCounter(el, el.textContent);
+        });
+        obs.observe(el, { childList: true, characterData: true, subtree: true });
       });
-      obs.observe(el, { childList: true, characterData: true, subtree: true });
-    });
+    }
 
     /* ── GLASS CARD TILT ON MOUSE ────────────── */
-    document.querySelectorAll('.rpt-stat-card, .rpt-quick-card, .stat-mini').forEach(card => {
-      card.addEventListener('mousemove', e => {
-        const rect = card.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
-        const rx = ((e.clientY - cy) / (rect.height / 2)) * 4;
-        const ry = ((e.clientX - cx) / (rect.width / 2)) * -4;
-        card.style.transform = `perspective(600px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(-4px) scale(1.02)`;
+    if (finePointer && !reduceMotion) {
+      document.querySelectorAll('.rpt-stat-card, .rpt-quick-card, .stat-mini').forEach(card => {
+        card.addEventListener('mousemove', e => {
+          const rect = card.getBoundingClientRect();
+          const cx = rect.left + rect.width / 2;
+          const cy = rect.top + rect.height / 2;
+          const rx = ((e.clientY - cy) / (rect.height / 2)) * 4;
+          const ry = ((e.clientX - cx) / (rect.width / 2)) * -4;
+          card.style.transform = `perspective(600px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(-4px) scale(1.02)`;
+        }, { passive: true });
+        card.addEventListener('mouseleave', () => {
+          card.style.transform = '';
+        });
       });
-      card.addEventListener('mouseleave', () => {
-        card.style.transform = '';
-      });
-    });
+    }
 
     /* ── SMOOTH TOAST STACK ──────────────────── */
     /* (toast already handled by script.js, just enhance positioning) */
@@ -1544,7 +1546,7 @@
     document.addEventListener('visibilitychange', () => {
       const canvas = document.getElementById('particleCanvas');
       if (canvas) {
-        canvas.style.opacity = document.hidden ? '0' : '0.38';
+        canvas.style.opacity = document.hidden || canvas.hidden ? '0' : '0.22';
       }
     });
 

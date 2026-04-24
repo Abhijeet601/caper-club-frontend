@@ -2370,3 +2370,36 @@ textarea { min-height: 60px; resize: none; }
   .cam-viewport { min-height: 160px; }
   #faceEnrollmentTab .enrollment-cam-viewport { min-height: 220px; }
 }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  #particleCanvas,
+  .cursor-spotlight,
+  .noise-overlay,
+  .aurora-bar,
+  .mesh-orb {
+    display: none !important;
+  }
+}
+@media (max-width: 900px) {
+  body::before,
+  body::after,
+  .mesh-orb,
+  .cursor-spotlight,
+  .noise-overlay,
+  .aurora-bar {
+    display: none !important;
+  }
+  .glass-card,
+  .status-pill,
+  .sess-time-block,
+  .rpt-pay-card,
+  .rpt-quick-card,
+  .rpt-stat-card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
