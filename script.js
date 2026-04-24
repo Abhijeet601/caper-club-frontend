@@ -23,12 +23,6 @@ const ENROLLMENT_ZOOM_STEP = 0.2;
 const DEFAULT_CAMERA_FOCUS_X = 0.5;
 const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
-const STARTUP_IDLE_TIMEOUT_MS = 1200;
-const LIBRARY_PATHS = Object.freeze({
-  chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
-  faceApi: 'vendor/face-api.min.js',
-  faceAi: 'face-ai.js',
-});
 const CAMERA_CONSTRAINT_SETS = Object.freeze([
   {
     audio: false,
@@ -147,11 +141,6 @@ const S = {
 };
 
 const scannedUsers = new Map();
-const lazyScriptPromises = Object.create(null);
-const selectRenderCache = {
-  usersRef: null,
-  slotsRef: null,
-};
 const MOJIBAKE_TEXT_REPLACEMENTS = Object.freeze([
   ['â€¦', '...'],
   ['â€”', ' - '],
@@ -243,10 +232,6 @@ let visibleTextSanitizerObserver = null;
 let isSanitizingVisibleText = false;
 const pendingSanitizeRoots = new Set();
 let sanitizeVisibleDomFrame = 0;
-let clockTimer = null;
-let subtitleLoopStarted = false;
-let particlesStarted = false;
-let deferredStartupStarted = false;
 
 function sanitizeDisplayText(value) {
   let text = String(value ?? '');
@@ -317,26 +302,6 @@ function queueVisibleDomSanitize(root = document.body) {
   });
 }
 
-function runAfterFirstPaint(callback) {
-  requestAnimationFrame(() => requestAnimationFrame(callback));
-}
-
-function scheduleIdleWork(callback, timeout = STARTUP_IDLE_TIMEOUT_MS) {
-  if (typeof window.requestIdleCallback === 'function') {
-    window.requestIdleCallback(() => callback(), { timeout });
-    return;
-  }
-  setTimeout(callback, Math.min(timeout, 600));
-}
-
-function startDeferredStartup() {
-  if (deferredStartupStarted) return;
-  deferredStartupStarted = true;
-  scheduleIdleWork(() => startVisibleTextSanitizer(), 900);
-  scheduleIdleWork(() => startSubtitleLoop(), 1500);
-  scheduleIdleWork(() => initParticles(), 2200);
-}
-
 function startVisibleTextSanitizer() {
   sanitizeVisibleDom(document.body);
   if (visibleTextSanitizerObserver) visibleTextSanitizerObserver.disconnect();
@@ -344,6 +309,14 @@ function startVisibleTextSanitizer() {
   visibleTextSanitizerObserver = new MutationObserver(mutations => {
     if (isSanitizingVisibleText) return;
     mutations.forEach(mutation => {
+      if (mutation.type === 'characterData') {
+        queueVisibleDomSanitize(mutation.target);
+        return;
+      }
+      if (mutation.type === 'attributes') {
+        queueVisibleDomSanitize(mutation.target);
+        return;
+      }
       mutation.addedNodes.forEach(node => queueVisibleDomSanitize(node));
     });
   });
@@ -351,15 +324,21 @@ function startVisibleTextSanitizer() {
   visibleTextSanitizerObserver.observe(document.body, {
     subtree: true,
     childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['placeholder', 'title', 'aria-label'],
   });
 }
 
 /* â”€â”€ BOOT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 document.addEventListener('DOMContentLoaded', () => {
+  startVisibleTextSanitizer();
   initUi();
   bindEvents();
+  bootstrapFaceRecognition();
   restoreSession();
-  runAfterFirstPaint(startDeferredStartup);
+  startSubtitleLoop();
+  initParticles();
 });
 
 function initUi() {
@@ -384,9 +363,8 @@ function initUi() {
 
   resetUserForm(); resetSlotForm();
   startClock();
-  setAuth(S.currentUser);
-  populateSelects();
-  updateAlertBadge();
+  renderAll();
+  // Set default tab
   openTab('liveOpsTab');
   restoreSessionTimers();
   initReportsModule();
@@ -544,22 +522,23 @@ function bindEvents() {
 }
 
 async function bootstrapFaceRecognition() {
-  if (!S.currentUser || !isAdmin()) return;
-  if (!S.isScanning && S.activeTab !== 'faceEnrollmentTab') return;
   await ensureFaceModelsLoaded();
+  renderAll();
 }
 
 async function ensureFaceModelsLoaded() {
   if (S.faceModelsReady) return true;
   if (S.faceModelsLoading) return false;
+  if (!window.FaceAi) {
+    S.faceModelsError = 'face-api.js failed to load.';
+    return false;
+  }
 
   S.faceModelsLoading = true;
   S.faceModelsError = '';
   renderAll();
 
   try {
-    await ensureFaceAiLibraryLoaded();
-    if (!window.FaceAi) throw new Error('Face recognition library failed to load.');
     await window.FaceAi.loadModels('models');
     S.faceModelsReady = true;
     return true;
@@ -679,11 +658,11 @@ function logout() { clearSess(); toast('Signed out.', 'success'); }
 
 /* â”€â”€ REFRESH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function refreshAll(opts = {}) {
-  if (!S.healthOk) pingHealth().catch(() => {});
+  await pingHealth();
   if (!S.currentUser || !S.token) { renderAll(); return; }
   const timerSnapshot = snapshotActiveSessions();
   try {
-    await refreshActiveTabData({ activeTab: opts.activeTab || S.activeTab, force: Boolean(opts.force) });
+    await Promise.all(isAdmin() ? [loadAdmin(), loadMember()] : [loadMember()]);
     restoreMissingActiveSessions(timerSnapshot);
     persistSessionTimers();
     ensureSessionTimerLoop();
@@ -694,73 +673,18 @@ async function refreshAll(opts = {}) {
   } catch (err) { handleErr(err, { toast: opts.toast, logout: true }); }
 }
 
-function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
-  if (opts.force) return true;
-  switch (key) {
-    case 'users':
-    case 'slots':
-      return true;
-    case 'dashboard':
-      return activeTab === 'liveOpsTab';
-    case 'sessions':
-      return activeTab === 'liveOpsTab' || activeTab === 'reportsTab';
-    case 'reports':
-      return activeTab === 'liveOpsTab' || activeTab === 'reportsTab' || activeTab === 'alertsTab';
-    case 'announcements':
-      return activeTab === 'alertsTab';
-    case 'embeddings':
-      return S.isScanning || activeTab === 'faceEnrollmentTab';
-    default:
-      return false;
-  }
-}
-
-async function refreshActiveTabData(opts = {}) {
-  const activeTab = opts.activeTab || S.activeTab;
-  if (isAdmin()) {
-    const tasks = [loadAdmin({ activeTab, force: opts.force })];
-    if (activeTab === 'settingsTab') tasks.push(loadMember());
-    await Promise.all(tasks);
-    return;
-  }
-  await loadMember();
-}
-
-async function loadAdmin(opts = {}) {
-  const activeTab = opts.activeTab || S.activeTab || 'liveOpsTab';
-  const liveScope = activeTab === 'liveOpsTab' ? '?scope=live' : '';
-  const requests = [];
-
-  if (shouldLoadAdminDataset('dashboard', activeTab, opts)) requests.push(['dashboard', api('/admin/dashboard')]);
-  if (shouldLoadAdminDataset('users', activeTab, opts)) requests.push(['users', api(`/admin/users${liveScope}`)]);
-  if (shouldLoadAdminDataset('slots', activeTab, opts)) requests.push(['slots', api('/admin/slots')]);
-  if (shouldLoadAdminDataset('sessions', activeTab, opts)) requests.push(['sessions', api(`/admin/sessions${liveScope}`)]);
-  if (shouldLoadAdminDataset('reports', activeTab, opts)) requests.push(['reports', api(`/admin/reports${liveScope}`)]);
-  if (shouldLoadAdminDataset('announcements', activeTab, opts)) requests.push(['announcements', api('/admin/announcements')]);
-  if (shouldLoadAdminDataset('embeddings', activeTab, opts)) requests.push(['embeddings', api('/users/embeddings')]);
-
-  const results = await Promise.all(requests.map(([, request]) => request));
-  const fetched = {};
-
-  results.forEach((result, index) => {
-    const key = requests[index][0];
-    fetched[key] = true;
-    if (key === 'dashboard') S.dashboard = result || null;
-    if (key === 'users') S.users = toArr(result);
-    if (key === 'slots') S.slots = toArr(result);
-    if (key === 'sessions') S.sessions = toArr(result);
-    if (key === 'reports') S.reports = result || null;
-    if (key === 'announcements') S.announcements = toArr(result);
-    if (key === 'embeddings') S.faceUsers = toArr(result);
-  });
-
-  if (fetched.users) {
-    syncCooldownStoreFromUsers(S.users);
-    syncUserMemberIdField();
-  }
-  if (fetched.users || fetched.sessions) {
-    syncActiveSessionsFromBackend();
-  }
+async function loadAdmin() {
+  const [dash, users, slots, sessions, reports, ann, embeddings] = await Promise.all([
+    api('/admin/dashboard'), api('/admin/users'), api('/admin/slots'),
+    api('/admin/sessions'), api('/admin/reports'), api('/admin/announcements'),
+    api('/users/embeddings'),
+  ]);
+  S.dashboard = dash || null; S.users = toArr(users); S.slots = toArr(slots);
+  S.sessions = toArr(sessions); S.reports = reports || null; S.announcements = toArr(ann);
+  S.faceUsers = toArr(embeddings);
+  syncCooldownStoreFromUsers(S.users);
+  syncUserMemberIdField();
+  syncActiveSessionsFromBackend();
 }
 
 async function loadMember() {
@@ -842,19 +766,8 @@ function openTab(id) {
   if (id === 'faceEnrollmentTab') {
     loadFaceEnrollmentStatus();
     ensureEnrollmentLivePreview().catch(console.error);
-    bootstrapFaceRecognition().catch(console.error);
   }
   renderActiveTabContent();
-  if (S.currentUser && S.token) {
-    const targetTab = id;
-    refreshActiveTabData({ activeTab: targetTab })
-      .then(() => {
-        if (S.activeTab !== targetTab) return;
-        renderActiveTabContent();
-        updateAlertBadge();
-      })
-      .catch(console.error);
-  }
 }
 
 
@@ -1117,11 +1030,7 @@ function setLiveDetection(detection, opts = {}) {
 }
 
 /* â”€â”€ CLOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-function startClock() {
-  if (clockTimer) return;
-  updateClock();
-  clockTimer = setInterval(updateClock, 1000);
-}
+function startClock() { updateClock(); setInterval(updateClock, 1000); }
 function updateClock() {
   const d = new Date(), pad = n => String(n).padStart(2,'0');
   $('liveTime').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -1135,13 +1044,6 @@ function updateClock() {
 function startSubtitleLoop() {
   const lines = ['AI attendance & access control','Browser AI + fast attendance API','Live member & session management','Smart club operations â€” all in one'];
   const el = $('typingSubtitle'); let ti = 0, ci = 0, del = false;
-  if (subtitleLoopStarted) return;
-  subtitleLoopStarted = true;
-  if (!el) return;
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-    el.textContent = 'AI attendance and access control';
-    return;
-  }
   function tick() {
     const t = lines[ti];
     if (!del) { el.textContent = t.slice(0, ++ci); if (ci === t.length) { del = true; setTimeout(tick, 1600); return; } }
@@ -1932,30 +1834,10 @@ function renderAttendanceAnalytics() {
     counts[new Date(s.startedAt).getDay()]++;
   });
 
+  if (window._weeklyChart) { window._weeklyChart.destroy(); }
   const ctx = document.getElementById('weeklyAttendanceChart');
   if (!ctx) return;
-  if (typeof window.Chart !== 'function') {
-    ensureChartLibraryLoaded()
-      .then(() => {
-        if ($('weeklyAttendanceChart') && S.activeTab === 'reportsTab') renderAttendanceAnalytics();
-      })
-      .catch(console.error);
-    return;
-  }
-
-  if (window._weeklyChart && window._weeklyChart.canvas !== ctx) {
-    window._weeklyChart.destroy();
-    window._weeklyChart = null;
-  }
-
-  if (window._weeklyChart) {
-    window._weeklyChart.data.labels = days;
-    window._weeklyChart.data.datasets[0].data = counts;
-    window._weeklyChart.update('none');
-    return;
-  }
-
-  window._weeklyChart = new window.Chart(ctx, {
+  window._weeklyChart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: days,
@@ -3584,9 +3466,6 @@ function ttsPriority(priority) {
 }
 
 function populateSelects() {
-  if (selectRenderCache.slotsRef === S.slots && selectRenderCache.usersRef === S.users) return;
-  selectRenderCache.slotsRef = S.slots;
-  selectRenderCache.usersRef = S.users;
   fillSelect($('userSlotInput'), S.slots, { blank:true, blankLabel:'No slot', label: s=>`${s.name} (${s.startTime}â€“${s.endTime})` });
   applyMembershipUserSearch();
   const members = S.users.filter(u => u.role === 'user');
@@ -3793,72 +3672,6 @@ async function ensureBackendConnection() {
   updateHealthUi();
   return false;
 }
-
-function getAbsoluteScriptUrl(src) {
-  try {
-    return new URL(src, document.baseURI).href;
-  } catch {
-    return src;
-  }
-}
-
-function loadScriptOnce(src, opts = {}) {
-  const check = typeof opts.check === 'function' ? opts.check : null;
-  if (check?.()) return Promise.resolve(true);
-  if (lazyScriptPromises[src]) return lazyScriptPromises[src];
-
-  lazyScriptPromises[src] = new Promise((resolve, reject) => {
-    const absoluteSrc = getAbsoluteScriptUrl(src);
-    let script = Array.from(document.scripts).find(item => item.src === absoluteSrc) || null;
-
-    const handleLoad = () => {
-      if (check && !check()) {
-        delete lazyScriptPromises[src];
-        reject(new Error(`Loaded ${src}, but it did not initialize correctly.`));
-        return;
-      }
-      if (script) script.dataset.loadState = 'loaded';
-      resolve(true);
-    };
-
-    const handleError = () => {
-      delete lazyScriptPromises[src];
-      reject(new Error(`Unable to load ${src}.`));
-    };
-
-    if (script) {
-      if (script.dataset.loadState === 'loaded') {
-        handleLoad();
-        return;
-      }
-      script.addEventListener('load', handleLoad, { once: true });
-      script.addEventListener('error', handleError, { once: true });
-      return;
-    }
-
-    script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.dataset.loadState = 'loading';
-    script.addEventListener('load', handleLoad, { once: true });
-    script.addEventListener('error', handleError, { once: true });
-    document.head.appendChild(script);
-  });
-
-  return lazyScriptPromises[src];
-}
-
-async function ensureChartLibraryLoaded() {
-  await loadScriptOnce(LIBRARY_PATHS.chart, { check: () => typeof window.Chart === 'function' });
-  return true;
-}
-
-async function ensureFaceAiLibraryLoaded() {
-  await loadScriptOnce(LIBRARY_PATHS.faceApi, { check: () => Boolean(window.faceapi) });
-  await loadScriptOnce(LIBRARY_PATHS.faceAi, { check: () => Boolean(window.FaceAi) });
-  return true;
-}
-
 function norm(v) { return String(v||DEFAULT_API_BASE).trim().replace(/\/+$/,''); }
 function toArr(v) { return Array.isArray(v) ? v : (v ? [v] : []); }
 function isoDate(d) { return d.toISOString().slice(0,10); }
@@ -3940,15 +3753,11 @@ function clearSess() {
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null; S.isScanning = false; S.scanInFlight = false;
   clearInterval(S.sessionTimerLoop); S.sessionTimerLoop = null; S.activeSessions = {};
   localStorage.removeItem(STORAGE_KEYS.sessionTimers);
-  selectRenderCache.usersRef = null;
-  selectRenderCache.slotsRef = null;
   stopBrowserSpeech(); clearAudio(); stopCamera(); clearDataPoll();
   closeAllMemberReport();
   if ($('lastSyncText')) $('lastSyncText').textContent = 'Never';
   openTab('liveOpsTab');
-  setAuth(S.currentUser);
-  populateSelects();
-  updateAlertBadge();
+  renderAll();
 }
 function handleErr(err, opts={}) {
   if (err?.status === 401 && opts.logout !== false) { clearSess(); toast('Session expired.','error'); return; }
@@ -4877,14 +4686,9 @@ function startHealthPoll() {
 
 /* â”€â”€ PARTICLES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function initParticles() {
-  if (particlesStarted) return;
-  particlesStarted = true;
   const canvas = $('particleCanvas');
   if (!canvas) return;
-  const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const smallScreen = window.matchMedia?.('(max-width: 900px)').matches;
-  const lowPowerDevice = Number(navigator.hardwareConcurrency || 0) > 0 && Number(navigator.hardwareConcurrency || 0) <= 4;
-  if (prefersReducedMotion || smallScreen) {
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
     canvas.hidden = true;
     return;
   }
@@ -4892,12 +4696,12 @@ function initParticles() {
   if (!ctx) return;
   let W, H, particles = [], lastTime = 0;
 
-  const TARGET_FPS = lowPowerDevice ? 18 : 24;
+  const TARGET_FPS = 36;
   const FRAME_MS = 1000 / TARGET_FPS;
-  const MAX_PARTICLES = lowPowerDevice ? 20 : 36;
-  const MIN_PARTICLES = lowPowerDevice ? 8 : 12;
-  const PARTICLE_DENSITY = lowPowerDevice ? 36000 : 28000;
-  const LINK_DISTANCE = lowPowerDevice ? 52 : 64;
+  const MAX_PARTICLES = 72;
+  const MIN_PARTICLES = 18;
+  const PARTICLE_DENSITY = 18000;
+  const LINK_DISTANCE = 84;
   const LINK_DISTANCE_SQ = LINK_DISTANCE * LINK_DISTANCE;
 
   const COLORS = [
@@ -4983,6 +4787,6 @@ function initParticles() {
   }
 
   resize();
-  window.addEventListener('resize', resize, { passive: true });
+  window.addEventListener('resize', resize);
   requestAnimationFrame(draw);
 }

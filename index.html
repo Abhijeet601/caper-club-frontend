@@ -6,494 +6,10 @@
   <title>Caper Sports Club | AI Attendance System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700;800&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-
-  <!-- ═══ EXTRA INLINE ENHANCEMENTS ═══ -->
-  <style>
-    /* ── FLOATING GEOMETRIC DECORATIONS ──── */
-    .geo-decoration {
-      position: fixed;
-      pointer-events: none;
-      z-index: 0;
-      opacity: 0;
-      animation: geoFloat 0s ease-in-out infinite alternate;
-    }
-    .geo-decoration.active { opacity: 1; }
-
-    .geo-hex {
-      width: 60px; height: 60px;
-      background: linear-gradient(135deg, rgba(99,102,241,0.08), rgba(14,165,233,0.06));
-      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-      border-radius: 2px;
-    }
-    .geo-ring {
-      width: 80px; height: 80px;
-      border-radius: 50%;
-      border: 1.5px solid rgba(124,58,237,0.1);
-      background: transparent;
-    }
-    .geo-diamond {
-      width: 40px; height: 40px;
-      background: linear-gradient(135deg, rgba(217,119,6,0.07), rgba(245,158,11,0.05));
-      transform: rotate(45deg);
-      border-radius: 3px;
-    }
-    .geo-tri {
-      width: 0; height: 0;
-      border-left: 22px solid transparent;
-      border-right: 22px solid transparent;
-      border-bottom: 38px solid rgba(5,150,105,0.07);
-      background: transparent !important;
-    }
-
-    /* ── CURSOR SPOTLIGHT ──────────────── */
-    .cursor-spotlight {
-      position: fixed;
-      width: 320px; height: 320px;
-      border-radius: 50%;
-      background: radial-gradient(circle,
-        rgba(99,102,241,0.055) 0%,
-        rgba(14,165,233,0.03) 40%,
-        transparent 70%
-      );
-      pointer-events: none;
-      z-index: 0;
-      transform: translate(-50%, -50%);
-      transition: left .15s ease, top .15s ease;
-    }
-
-    /* ── ANIMATED NOISE TEXTURE ────────── */
-    .noise-overlay {
-      position: fixed; inset: 0; z-index: 0;
-      pointer-events: none;
-      opacity: 0.018;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-      background-size: 180px 180px;
-      mix-blend-mode: overlay;
-    }
-
-    /* ── ANIMATED HEADER AURORA ─────────── */
-    .aurora-bar {
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: 3px;
-      z-index: 9998;
-      background: linear-gradient(
-        90deg,
-        #6366f1, #8b5cf6, #0ea5e9, #06b6d4,
-        #10b981, #f59e0b, #ef4444,
-        #8b5cf6, #6366f1
-      );
-      background-size: 300% 100%;
-      animation: auroraShift 5s linear infinite;
-      pointer-events: none;
-    }
-    @keyframes auroraShift {
-      0%   { background-position: 0% 0%; }
-      100% { background-position: 300% 0%; }
-    }
-
-    /* ── SCAN RIPPLE EFFECT ─────────────── */
-    .scan-ripple {
-      position: absolute;
-      border-radius: 50%;
-      pointer-events: none;
-      z-index: 6;
-      animation: scanRippleOut .8s ease-out forwards;
-    }
-    @keyframes scanRippleOut {
-      0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.6; }
-      100% { transform: translate(-50%,-50%) scale(3); opacity: 0; }
-    }
-
-    /* ── SHIMMER LOADING TEXT ───────────── */
-    .shimmer-text {
-      background: linear-gradient(90deg, var(--text3) 0%, var(--text) 40%, var(--text3) 100%);
-      background-size: 200% auto;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      animation: shimmerText 2s linear infinite;
-    }
-    @keyframes shimmerText {
-      0%   { background-position: 200% center; }
-      100% { background-position: -200% center; }
-    }
-
-    /* ── NAV ACTIVE GLOW ────────────────── */
-    .nav-tab.active {
-      text-shadow: 0 0 20px rgba(255,255,255,0.4);
-    }
-
-    /* ── CARD ENTRANCE STAGGER ──────────── */
-    .right-panel > .panel-card:nth-child(1) { animation: cardEntrance .5s var(--ease-spring) .1s both; }
-    .right-panel > .panel-card:nth-child(2) { animation: cardEntrance .5s var(--ease-spring) .18s both; }
-    .right-panel > .panel-card:nth-child(3) { animation: cardEntrance .5s var(--ease-spring) .26s both; }
-    .right-panel > .panel-card:nth-child(4) { animation: cardEntrance .5s var(--ease-spring) .34s both; }
-    .right-panel > .panel-card:nth-child(5) { animation: cardEntrance .5s var(--ease-spring) .42s both; }
-    .right-panel > .panel-card:nth-child(6) { animation: cardEntrance .5s var(--ease-spring) .5s both; }
-    @keyframes cardEntrance {
-      0%   { opacity: 0; transform: translateX(24px) scale(0.96); filter: blur(3px); }
-      60%  { opacity: 1; filter: blur(0); }
-      80%  { transform: translateX(-3px) scale(1.005); }
-      100% { opacity: 1; transform: translateX(0) scale(1); }
-    }
-
-    /* ── STAT CARD COUNTER ANIMATION ────── */
-    .stat-mini-value {
-      transition: transform .3s var(--ease-spring), color .3s;
-    }
-    .stat-mini:hover .stat-mini-value {
-      transform: scale(1.06);
-    }
-
-    /* ── PREMIUM TABLE ROW HOVER ─────────── */
-    .report-table tbody tr {
-      transition: all .2s;
-      position: relative;
-    }
-    .report-table tbody tr::after {
-      content: '';
-      position: absolute; left: 0; top: 0; bottom: 0;
-      width: 0; background: var(--indigo);
-      border-radius: 0 999px 999px 0;
-      transition: width .2s var(--ease-spring);
-    }
-    .report-table tbody tr:hover::after { width: 3px; }
-
-    /* ── RIPPLE BUTTON EFFECT ─────────────── */
-    .btn-primary, .btn-scan, .btn-capture {
-      overflow: hidden;
-    }
-    .ripple-wave {
-      position: absolute;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.35);
-      transform: scale(0);
-      animation: rippleExpand .6s linear;
-      pointer-events: none;
-    }
-    @keyframes rippleExpand {
-      to { transform: scale(4); opacity: 0; }
-    }
-
-    /* ── BREATHING GLOW ON LIVE SCAN ─────── */
-    .scanner-panel.is-live .cam-viewport {
-      animation: viewportBreath 3s ease-in-out infinite;
-    }
-    @keyframes viewportBreath {
-      0%,100% { box-shadow: inset 0 2px 8px rgba(99,102,241,0.07), 0 0 20px rgba(99,102,241,0.05); }
-      50%     { box-shadow: inset 0 2px 8px rgba(99,102,241,0.1), 0 0 40px rgba(14,165,233,0.12); }
-    }
-
-    /* ── STATUS PILL ENTRANCE ─────────────── */
-    .status-pills .status-pill {
-      animation: pillPop .5s var(--ease-spring) both;
-    }
-    .status-pills .status-pill:nth-child(1) { animation-delay: .2s; }
-    .status-pills .status-pill:nth-child(2) { animation-delay: .3s; }
-    .status-pills .status-pill:nth-child(3) { animation-delay: .4s; }
-    @keyframes pillPop {
-      0%   { transform: scale(0.7) translateY(8px); opacity: 0; }
-      70%  { transform: scale(1.06) translateY(-2px); }
-      100% { transform: scale(1) translateY(0); opacity: 1; }
-    }
-
-    /* ── TAB NAV ENTRANCE ─────────────────── */
-    .nav-tab {
-      animation: navTabIn .4s var(--ease-spring) both;
-    }
-    .nav-tab:nth-child(1)  { animation-delay: .05s; }
-    .nav-tab:nth-child(2)  { animation-delay: .10s; }
-    .nav-tab:nth-child(3)  { animation-delay: .15s; }
-    .nav-tab:nth-child(4)  { animation-delay: .20s; }
-    .nav-tab:nth-child(5)  { animation-delay: .25s; }
-    .nav-tab:nth-child(6)  { animation-delay: .30s; }
-    .nav-tab:nth-child(7)  { animation-delay: .35s; }
-    .nav-tab:nth-child(8)  { animation-delay: .40s; }
-    @keyframes navTabIn {
-      0%   { opacity: 0; transform: translateY(10px) scale(0.9); }
-      70%  { transform: translateY(-2px) scale(1.02); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    /* ── MEMBERSHIP ITEM SHIMMER ──────────── */
-    .membership-item::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%);
-      opacity: 0; transition: opacity .3s, transform .6s;
-      transform: translateX(-100%);
-      border-radius: inherit;
-    }
-    .membership-item {
-      position: relative; overflow: hidden;
-    }
-    .membership-item:hover::after {
-      opacity: 1;
-      transform: translateX(100%);
-    }
-
-    /* ── ALERT ITEM ANIMATED LEFT BORDER ─── */
-    .alert-item::before {
-      content: '';
-      position: absolute; left: 0; top: 50%; bottom: 50%;
-      width: 3px;
-      transition: top .3s var(--ease-spring), bottom .3s var(--ease-spring);
-      border-radius: 0 999px 999px 0;
-    }
-    .alert-item {
-      position: relative; overflow: hidden;
-    }
-    .alert-item.alert-warn::before  { background: var(--amber); }
-    .alert-item.alert-error::before { background: var(--rose); }
-    .alert-item.alert-info::before  { background: var(--cyan); }
-    .alert-item:hover::before { top: 0; bottom: 0; }
-
-    /* ── CHIP MICRO-INTERACTIONS ──────────── */
-    .status-chip, .badge-chip {
-      cursor: default;
-      transition: transform .2s var(--ease-spring), box-shadow .2s ease, filter .2s;
-    }
-    .status-chip:hover, .badge-chip:hover {
-      transform: scale(1.06) translateY(-1px);
-      filter: brightness(1.05);
-    }
-
-    /* ── SCAN RESULT CARD STATUS COLORS ──── */
-    .scan-result-card:has(.tone-green) {
-      background: rgba(240,253,246,.82);
-      border-color: rgba(5,150,105,.2);
-      box-shadow: 0 0 20px rgba(5,150,105,.08), 0 2px 8px rgba(0,0,0,0.04);
-    }
-    .scan-result-card:has(.tone-red) {
-      background: rgba(255,241,242,.82);
-      border-color: rgba(225,29,72,.2);
-      box-shadow: 0 0 20px rgba(225,29,72,.08), 0 2px 8px rgba(0,0,0,0.04);
-    }
-    .scan-result-card:has(.tone-amber) {
-      background: rgba(255,251,235,.82);
-      border-color: rgba(217,119,6,.2);
-      box-shadow: 0 0 20px rgba(217,119,6,.08), 0 2px 8px rgba(0,0,0,0.04);
-    }
-
-    /* ── VOICE CARD MICROPHONE ANIMATION ─── */
-    #ttsForm textarea:focus {
-      border-color: var(--violet);
-      box-shadow: 0 0 0 4px rgba(124,58,237,.1), 0 0 20px rgba(124,58,237,.08);
-    }
-
-    /* ── SCANNER ACTIVE PULSE RING ────────── */
-    .scanner-panel.is-live::after {
-      animation: scannerActiveAura 4s ease-in-out infinite;
-    }
-    @keyframes scannerActiveAura {
-      0%,100% { opacity: 0.3; }
-      50%     { opacity: 0.7; }
-    }
-
-    /* ── REPORT STATS ENTRANCE ────────────── */
-    .rpt-stat-card {
-      animation: statCardIn .5s var(--ease-spring) both;
-    }
-    .rpt-stat-card:nth-child(1) { animation-delay: .05s; }
-    .rpt-stat-card:nth-child(2) { animation-delay: .12s; }
-    .rpt-stat-card:nth-child(3) { animation-delay: .19s; }
-    .rpt-stat-card:nth-child(4) { animation-delay: .26s; }
-    .rpt-stat-card:nth-child(5) { animation-delay: .33s; }
-    @keyframes statCardIn {
-      0%   { opacity: 0; transform: translateY(16px) scale(0.94); }
-      70%  { transform: translateY(-3px) scale(1.02); }
-      100% { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    /* ── QUICK FILTER CARDS ENTRANCE ────── */
-    .rpt-quick-card {
-      animation: quickCardIn .45s var(--ease-spring) both;
-    }
-    .rpt-quick-card:nth-child(1) { animation-delay: .06s; }
-    .rpt-quick-card:nth-child(2) { animation-delay: .11s; }
-    .rpt-quick-card:nth-child(3) { animation-delay: .16s; }
-    .rpt-quick-card:nth-child(4) { animation-delay: .21s; }
-    .rpt-quick-card:nth-child(5) { animation-delay: .26s; }
-    .rpt-quick-card:nth-child(6) { animation-delay: .31s; }
-    .rpt-quick-card:nth-child(7) { animation-delay: .36s; }
-    .rpt-quick-card:nth-child(8) { animation-delay: .41s; }
-    @keyframes quickCardIn {
-      0%   { opacity: 0; transform: scale(0.9) translateY(10px); }
-      70%  { transform: scale(1.03) translateY(-2px); }
-      100% { opacity: 1; transform: scale(1) translateY(0); }
-    }
-
-    /* ── SESSION CARD ENTRANCE ───────────── */
-    .sess-card {
-      animation: sessCardIn .45s var(--ease-spring) both;
-    }
-    @keyframes sessCardIn {
-      0%   { opacity: 0; transform: translateX(-20px) scale(0.96); }
-      60%  { opacity: 1; }
-      80%  { transform: translateX(3px) scale(1.01); }
-      100% { transform: translateX(0) scale(1); }
-    }
-
-    /* ── FORM FIELD LABEL FLOAT ───────────── */
-    .field-stack > span {
-      transition: color .2s, transform .2s;
-      display: block;
-    }
-    .field-stack:focus-within > span {
-      color: var(--indigo);
-      transform: translateX(2px);
-    }
-
-    /* ── LOGO SVG GLOW ON HOVER ────────────── */
-    .brand-icon:hover .brand-logo {
-      filter: brightness(1.1) drop-shadow(0 0 8px rgba(255,255,255,0.5));
-    }
-
-    /* ── MINI BTN ICON PULSE ──────────────── */
-    .mini-btn:active {
-      transform: scale(0.9) translateZ(0);
-    }
-
-    /* ── PROGRESS FILL GLOW ────────────────── */
-    .stat-mini.sc-blue   .stat-mini-prog-fill { box-shadow: 1px 0 8px rgba(14,165,233,0.4); }
-    .stat-mini.sc-green  .stat-mini-prog-fill { box-shadow: 1px 0 8px rgba(5,150,105,0.4); }
-    .stat-mini.sc-violet .stat-mini-prog-fill { box-shadow: 1px 0 8px rgba(124,58,237,0.4); }
-    .stat-mini.sc-amber  .stat-mini-prog-fill { box-shadow: 1px 0 8px rgba(217,119,6,0.4); }
-    .stat-mini.sc-red    .stat-mini-prog-fill { box-shadow: 1px 0 8px rgba(225,29,72,0.4); }
-
-    /* ── FEED ITEM COLORED GLOW ─────────────── */
-    .feed-item.success { box-shadow: 0 0 12px rgba(5,150,105,0.1), 0 2px 6px rgba(0,0,0,0.04); }
-    .feed-item.error   { box-shadow: 0 0 12px rgba(225,29,72,0.1), 0 2px 6px rgba(0,0,0,0.04); }
-    .feed-item.warn    { box-shadow: 0 0 12px rgba(217,119,6,0.1), 0 2px 6px rgba(0,0,0,0.04); }
-
-    /* ── SLOT BAR ANIMATED FILL ──────────────── */
-    .slot-bar-fill {
-      animation: slotBarGrow 1.2s var(--ease-spring) both;
-    }
-    @keyframes slotBarGrow {
-      0%   { width: 0% !important; }
-    }
-
-    /* ── ALERT BADGE WIGGLE ────────────────── */
-    .nav-tab-badge {
-      animation: badgePop .5s var(--ease-spring), badgeWiggle 4s ease-in-out 1s infinite;
-    }
-    @keyframes badgeWiggle {
-      0%,90%,100% { transform: rotate(0deg) scale(1); }
-      92%         { transform: rotate(-8deg) scale(1.1); }
-      94%         { transform: rotate(8deg) scale(1.1); }
-      96%         { transform: rotate(-5deg) scale(1.05); }
-      98%         { transform: rotate(5deg) scale(1.05); }
-    }
-
-    /* ── GLASS SHEEN ANIMATION ON HOVER ──────── */
-    @keyframes glassSheen {
-      0%   { transform: translateX(-200%) skewX(-20deg); }
-      100% { transform: translateX(400%) skewX(-20deg); }
-    }
-    .panel-card:hover::after {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; bottom: 0;
-      width: 40%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
-      animation: glassSheen .6s ease forwards;
-      pointer-events: none;
-      z-index: 2;
-    }
-
-    /* ── SCAN LINE GLOW INTENSIFY WHEN LIVE ──── */
-    .scanner-panel.is-live .scan-line {
-      box-shadow: 0 0 24px rgba(14,165,233,.8), 0 0 60px rgba(99,102,241,.4);
-      height: 3px;
-    }
-
-    /* ── CORNER BRACKET DANCE ON HOVER ────────── */
-    .cam-viewport:hover .corner.tl { transform: translate(-2px, -2px); }
-    .cam-viewport:hover .corner.tr { transform: translate(2px, -2px); }
-    .cam-viewport:hover .corner.bl { transform: translate(-2px, 2px); }
-    .cam-viewport:hover .corner.br { transform: translate(2px, 2px); }
-    .corner { transition: transform .3s var(--ease-spring); }
-
-    /* ── BACKGROUND PARTICLE DENSITY BOOST ──── */
-    #particleCanvas { opacity: 0.38; }
-
-    /* ── TOGGLE ACTIVE STATE SPARKLE ─────────── */
-    .toggle-wrap input:checked ~ .toggle-track::after {
-      content: '';
-      position: absolute;
-      top: 50%; right: 4px;
-      transform: translateY(-50%);
-      width: 4px; height: 4px;
-      border-radius: 50%;
-      background: rgba(255,255,255,0.7);
-      box-shadow: 0 0 6px rgba(5,150,105,0.8);
-      animation: sparkle 1.5s ease-in-out infinite;
-    }
-    @keyframes sparkle {
-      0%,100% { opacity: 1; transform: translateY(-50%) scale(1); }
-      50%     { opacity: 0.4; transform: translateY(-50%) scale(0.6); }
-    }
-
-    /* ── SCROLLBAR GLOW ──────────────────────── */
-    ::-webkit-scrollbar-thumb {
-      box-shadow: 0 0 4px rgba(99,102,241,0.2);
-    }
-
-    /* ── REPORT TABLE STICKY HEADER GLOW ──────── */
-    .rpt-table th::after {
-      content: '';
-      position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(99,102,241,0.2), transparent);
-    }
-    .rpt-table th { position: relative; }
-
-    /* ── BRAND ANIMATED UNDERLINE ──────────────── */
-    .brand-name {
-      position: relative;
-      display: inline-block;
-    }
-    .brand-name::after {
-      content: '';
-      position: absolute;
-      bottom: -2px; left: 0;
-      width: 0; height: 1.5px;
-      background: var(--grad-hero);
-      border-radius: 999px;
-      transition: width .4s var(--ease-spring);
-    }
-    .brand:hover .brand-name::after { width: 100%; }
-
-  </style>
 </head>
 <body>
-
-  <!-- Aurora top bar -->
-  <div class="aurora-bar"></div>
-
-  <!-- Noise texture -->
-  <div class="noise-overlay"></div>
-
-  <!-- Cursor spotlight -->
-  <div class="cursor-spotlight" id="cursorSpotlight"></div>
-
-  <!-- Geometric decorations -->
-  <div class="geo-decoration geo-hex active" style="top:18%;left:4%;animation:geoFloat 8s ease-in-out infinite alternate;transform:rotate(15deg)"></div>
-  <div class="geo-decoration geo-ring active" style="top:72%;right:3%;animation:geoFloat 11s ease-in-out infinite alternate-reverse"></div>
-  <div class="geo-decoration geo-diamond active" style="top:42%;left:1.5%;animation:geoFloat 9s ease-in-out 2s infinite alternate"></div>
-  <div class="geo-decoration geo-tri active" style="bottom:20%;left:48%;animation:geoFloat 10s ease-in-out 1s infinite alternate-reverse"></div>
-  <div class="geo-decoration geo-hex active" style="bottom:28%;right:1.5%;animation:geoFloat 12s ease-in-out 3s infinite alternate;transform:rotate(-30deg);width:44px;height:44px;opacity:0.7"></div>
-
-  <style>
-    @keyframes geoFloat {
-      0%   { transform: translateY(0) rotate(var(--rot, 0deg)) scale(1); }
-      50%  { transform: translateY(-18px) rotate(var(--rot, 0deg)) scale(1.05); }
-      100% { transform: translateY(8px) rotate(var(--rot, 0deg)) scale(0.97); }
-    }
-  </style>
 
   <!-- Mesh BG -->
   <div class="mesh-bg">
@@ -503,8 +19,6 @@
     <div class="mesh-orb m4"></div>
     <div class="mesh-orb m5"></div>
     <div class="mesh-orb m6"></div>
-    <div class="mesh-orb m7"></div>
-    <div class="mesh-orb m8"></div>
   </div>
   <canvas id="particleCanvas"></canvas>
 
@@ -578,8 +92,8 @@
           New User
         </button>
         <button class="nav-tab" data-tab="faceEnrollmentTab">
-          <span class="nav-tab-dot blue"></span>
-          Face Enrollment
+          <span class="nav-tab-dot violet"></span>
+          Enrollment Status
         </button>
         <button class="nav-tab" data-tab="reportsTab">
           <span class="nav-tab-dot violet"></span>
@@ -608,12 +122,14 @@
     <!-- ═══ MAIN AREA ═══ -->
     <main class="main-area-full">
 
-      <!-- ══ LIVE OPS TAB ══ -->
+      <!-- ══ LIVE OPS TAB (scanner + right panels together) ══ -->
       <div class="tab-page active" id="liveOpsTab">
         <div class="liveops-layout">
 
-      <!-- Scanner -->
+      <!-- Scanner (only here) -->
       <section class="scanner-panel glass-card">
+
+        <!-- Scanner Header -->
         <div class="scanner-header">
           <div class="scanner-title-row">
             <div class="scanner-icon-badge">
@@ -632,6 +148,7 @@
           </div>
         </div>
 
+        <!-- Status strip -->
         <div class="scan-status-strip" id="scannerStatusPanel" data-scan-state="idle">
           <span class="scan-state-pill" id="scannerStatusPill">Idle</span>
           <div class="scan-state-text">
@@ -643,6 +160,7 @@
           </div>
         </div>
 
+        <!-- Viewport -->
         <div class="cam-viewport camera-shell" id="cameraShell">
           <video id="cameraPreview" autoplay muted playsinline></video>
           <div class="camera-assist-badge" id="cameraAssistBadge">Search mode | 1.0x</div>
@@ -674,6 +192,7 @@
           </div>
         </div>
 
+        <!-- Scanner Footer -->
         <div class="scanner-footer">
           <div class="scan-meta-row">
             <div class="scan-meta-item">
@@ -694,6 +213,7 @@
             </div>
           </div>
 
+          <!-- Scan controls -->
           <div class="scan-controls">
             <label class="field-inline">
               <span>Area</span>
@@ -709,15 +229,17 @@
             </div>
           </div>
 
+          <!-- Scan result -->
           <div class="scan-result-card" id="scanResult">
             <div class="empty-hint">Scan results appear here</div>
           </div>
         </div>
       </section>
 
-      <!-- Right panels -->
+      <!-- Right panels for Live Ops -->
       <aside class="right-panel">
 
+          <!-- Voice Control Card -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">🎤 Voice Control</span>
@@ -731,13 +253,17 @@
             <audio id="ttsAudio" controls class="audio-bar" hidden></audio>
           </div>
 
+          <!-- System Status Card -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">⚙ System Status</span>
             </div>
-            <div class="sys-status-grid" id="statsGrid"></div>
+            <div class="sys-status-grid" id="statsGrid">
+              <!-- Rendered by JS -->
+            </div>
           </div>
 
+          <!-- Active Sessions Panel -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">🏃 Active Sessions</span>
@@ -748,6 +274,7 @@
             </div>
           </div>
 
+          <!-- Quick Info: Live Feed -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">⚡ Live Feed</span>
@@ -758,6 +285,7 @@
             </div>
           </div>
 
+          <!-- Sign-In / Account (right panel) -->
           <div class="panel-card glass-card" id="authCard">
             <div class="card-head">
               <span class="card-title">🔐 Admin Sign In</span>
@@ -767,13 +295,16 @@
               <input type="password" id="loginPassword" placeholder="Password" required>
               <button type="submit" class="btn-primary btn-sm full-w">Sign In</button>
             </form>
-            <div id="accountSummary" class="account-block" hidden></div>
+            <div id="accountSummary" class="account-block" hidden>
+              <!-- Rendered by JS -->
+            </div>
             <div class="btn-row mt8" id="accountActions" hidden>
               <button type="button" class="btn-ghost btn-sm" id="loadMeBtn">Refresh</button>
               <button type="button" class="btn-ghost btn-sm danger" id="logoutBtn">Sign Out</button>
             </div>
           </div>
 
+          <!-- Backend Config -->
           <div class="panel-card glass-card">
             <div class="card-head"><span class="card-title">🔗 Backend</span></div>
             <form id="apiConfigForm" class="compact-form">
@@ -792,6 +323,8 @@
       <!-- ══ NEW USER TAB ══ -->
       <div class="tab-page" id="newUserTab">
         <div class="single-col-layout">
+
+          <!-- Enrollment Camera -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">📸 Face Capture</span>
@@ -834,6 +367,7 @@
             </div>
           </div>
 
+          <!-- User Form -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title" id="userFormTitle">➕ Create Member</span>
@@ -954,6 +488,7 @@
                 <button type="submit" class="btn-primary btn-sm" id="userSubmitBtn">Create Member</button>
                 <button type="button" class="btn-ghost btn-sm" id="userResetBtn">Clear</button>
               </div>
+              <!-- Success animation overlay -->
               <div class="form-success" id="userFormSuccess" hidden>
                 <div class="success-check">✓</div>
                 <p>Member Created!</p>
@@ -961,6 +496,7 @@
             </form>
           </div>
 
+          <!-- Face Upload submit -->
           <div class="panel-card glass-card">
             <div class="card-head"><span class="card-title">📤 Enroll Faces</span></div>
             <form id="faceUploadForm">
@@ -982,13 +518,20 @@
         </div>
       </div>
 
-      <!-- ══ FACE ENROLLMENT TAB ══ -->
+      <!-- ══ FACE ENROLLMENT STATUS TAB ══ -->
       <div class="tab-page" id="faceEnrollmentTab"></div>
+
+      <!-- ══ FACE ENROLLMENT STATUS TAB ══ -->
+      <div class="tab-page" id="faceEnrollmentTab">
+        <object data="faceEnrollmentTab.html" type="text/html" style="width:100%;height:100vh;border:none;"></object>
+      </div>
 
       <!-- ══ REPORTS TAB ══ -->
       <div class="tab-page" id="reportsTab">
+
         <div class="single-col-layout">
 
+    <!-- Summary Cards Row -->
     <div class="rpt-summary-grid panel-card glass-card">
       <div class="rpt-stat-card" id="rptTotalMembers">
         <span class="rpt-stat-icon">👥</span>
@@ -1052,6 +595,7 @@
       </button>
     </div>
 
+    <!-- Filter Bar -->
     <div class="panel-card glass-card rpt-filter-bar">
       <input type="search" id="rptSearch" placeholder="Search user…" class="rpt-input">
       <select id="rptFilterPlan" class="rpt-select">
@@ -1079,6 +623,7 @@
       <button class="btn-primary btn-sm" id="rptExportBtn">⬇ Export</button>
     </div>
 
+    <!-- Daily Admission Report Table -->
     <div class="panel-card glass-card">
       <div class="card-head">
         <span class="card-title">🧾 Daily Admission Report</span>
@@ -1087,10 +632,15 @@
       <div class="rpt-table-wrap">
         <table class="rpt-table" id="admissionTable">
           <thead>
-            <tr>
-              <th>Member</th><th>Check-in</th><th>Check-out</th>
-              <th>Plan</th><th>Mode</th><th>Status</th>
-              <th>Amount</th><th>Renewal</th>
+<tr>
+              <th>Member</th>
+              <th>Check-in</th>
+              <th>Check-out</th>
+              <th>Plan</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Amount</th>
+              <th>Renewal</th>
             </tr>
           </thead>
           <tbody id="admissionTableBody">
@@ -1100,6 +650,7 @@
       </div>
     </div>
 
+    <!-- Row Detail Drawer -->
     <div class="panel-card glass-card" id="rptDetailDrawer" hidden>
       <div class="card-head">
         <span class="card-title" id="rptDetailTitle">Member Detail</span>
@@ -1108,7 +659,10 @@
       <div id="rptDetailBody"></div>
     </div>
 
+    <!-- Charts Row -->
     <div class="rpt-charts-row">
+
+      <!-- Attendance Analytics -->
       <div class="panel-card glass-card rpt-chart-card">
         <div class="card-head"><span class="card-title">📈 Attendance Analytics</span></div>
         <div class="rpt-analytics-grid" id="rptAnalyticsGrid">
@@ -1133,19 +687,37 @@
           <canvas id="weeklyAttendanceChart"></canvas>
         </div>
       </div>
+
+      <!-- Slot Engagement -->
       <div class="panel-card glass-card rpt-chart-card">
         <div class="card-head"><span class="card-title">🕒 Slot Engagement</span></div>
         <div id="slotEngagementBars" class="slot-bars"></div>
       </div>
+
     </div>
 
+    <!-- Payment Details -->
     <div class="panel-card glass-card">
-      <div class="card-head"><span class="card-title">💰 Payment Summary</span></div>
+      <div class="card-head">
+        <span class="card-title">💰 Payment Summary</span>
+      </div>
       <div class="rpt-payment-grid">
-        <div class="rpt-pay-card green"><div class="rpt-pay-label">Daily</div><div class="rpt-pay-val" id="payDaily">₹0</div></div>
-        <div class="rpt-pay-card blue"><div class="rpt-pay-label">Weekly</div><div class="rpt-pay-val" id="payWeekly">₹0</div></div>
-        <div class="rpt-pay-card violet"><div class="rpt-pay-label">Monthly</div><div class="rpt-pay-val" id="payMonthly">₹0</div></div>
-        <div class="rpt-pay-card amber"><div class="rpt-pay-label">Pending</div><div class="rpt-pay-val" id="payPending">₹0</div></div>
+        <div class="rpt-pay-card green">
+          <div class="rpt-pay-label">Daily</div>
+          <div class="rpt-pay-val" id="payDaily">₹0</div>
+        </div>
+        <div class="rpt-pay-card blue">
+          <div class="rpt-pay-label">Weekly</div>
+          <div class="rpt-pay-val" id="payWeekly">₹0</div>
+        </div>
+        <div class="rpt-pay-card violet">
+          <div class="rpt-pay-label">Monthly</div>
+          <div class="rpt-pay-val" id="payMonthly">₹0</div>
+        </div>
+        <div class="rpt-pay-card amber">
+          <div class="rpt-pay-label">Pending</div>
+          <div class="rpt-pay-val" id="payPending">₹0</div>
+        </div>
       </div>
       <div class="table-scroll" style="margin-top:10px;">
         <table class="report-table">
@@ -1157,8 +729,11 @@
       </div>
     </div>
 
+    <!-- Renewal Details -->
     <div class="panel-card glass-card">
-      <div class="card-head"><span class="card-title">🔄 Renewal Tracker</span></div>
+      <div class="card-head">
+        <span class="card-title">🔄 Renewal Tracker</span>
+      </div>
       <div class="rpt-renewal-tabs">
         <button class="rpt-rtab active" data-rtab="expiring">⚠ Expiring</button>
         <button class="rpt-rtab" data-rtab="expired">🔴 Expired</button>
@@ -1170,6 +745,7 @@
     </div>
 
   </div>
+
       </div>
 
       <!-- ══ ALL MEMBERS TAB ══ -->
@@ -1192,7 +768,7 @@
             </div>
             <div class="table-scroll">
               <table class="report-table">
-                <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Face Enrolled</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody id="usersTableBody"></tbody>
               </table>
             </div>
@@ -1201,7 +777,7 @@
             <div class="card-head">
               <div>
                 <span class="card-title" id="allMemberReportTitle">Individual Member Report</span>
-                <p class="card-sub" id="allMemberReportSubtitle">Choose a member and open Report to see their full details.</p>
+                <p class="card-sub" id="allMemberReportSubtitle">Choose a member and open Report to see their full attendance, payment, and profile details.</p>
               </div>
               <button class="icon-btn" id="allMemberReportClose">✕</button>
             </div>
@@ -1214,8 +790,11 @@
       <div class="tab-page" id="membershipTab">
         <div class="single-col-layout">
 
+    <!-- Plan Calculator -->
     <div class="panel-card glass-card">
-      <div class="card-head"><span class="card-title">🧮 Plan Calculator</span></div>
+      <div class="card-head">
+        <span class="card-title">🧮 Plan Calculator</span>
+      </div>
       <div class="plan-calc-grid">
         <label class="field-stack">
           <span>Plan Type</span>
@@ -1246,6 +825,7 @@
       </div>
     </div>
 
+    <!-- Filters -->
     <div class="panel-card glass-card membership-filters">
       <button class="filter-chip active" data-mfilter="all">All</button>
       <button class="filter-chip" data-mfilter="active">🟢 Active</button>
@@ -1253,6 +833,7 @@
       <button class="filter-chip" data-mfilter="expired">🔴 Expired</button>
     </div>
 
+    <!-- Members list -->
     <div class="panel-card glass-card">
       <div class="card-head">
         <span class="card-title">💳 Members</span>
@@ -1263,6 +844,7 @@
       </div>
     </div>
 
+    <!-- Create membership -->
     <div class="panel-card glass-card">
       <div class="card-head"><span class="card-title">➕ Add Membership</span></div>
       <form id="membershipForm" class="compact-form">
@@ -1301,11 +883,14 @@
     </div>
 
   </div>
+
       </div>
 
       <!-- ══ ALERTS TAB ══ -->
       <div class="tab-page" id="alertsTab">
         <div class="single-col-layout">
+
+          <!-- Expiring soon -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">⚠ Expiring Soon</span>
@@ -1315,6 +900,8 @@
               <div class="empty-hint">No expiring memberships.</div>
             </div>
           </div>
+
+          <!-- Expired -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">🔴 Expired</span>
@@ -1324,6 +911,8 @@
               <div class="empty-hint">No expired memberships.</div>
             </div>
           </div>
+
+          <!-- Payment pending -->
           <div class="panel-card glass-card">
             <div class="card-head">
               <span class="card-title">💸 Payment Pending</span>
@@ -1333,12 +922,18 @@
               <div class="empty-hint">No pending payments.</div>
             </div>
           </div>
+
+          <!-- Defaulters -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">🚫 Defaulters</span></div>
+            <div class="card-head">
+              <span class="card-title">🚫 Defaulters</span>
+            </div>
             <div class="alert-list" id="defaultersList">
               <div class="empty-hint">No defaulters.</div>
             </div>
           </div>
+
+          <!-- Announcements -->
           <div class="panel-card glass-card">
             <div class="card-head"><span class="card-title">📣 Announcements</span></div>
             <form id="announcementForm" class="compact-form">
@@ -1363,6 +958,8 @@
       <!-- ══ SETTINGS TAB ══ -->
       <div class="tab-page" id="settingsTab">
         <div class="single-col-layout">
+
+          <!-- Slots -->
           <div class="panel-card glass-card">
             <div class="card-head"><span class="card-title">⏰ Time Slots</span></div>
             <form id="slotForm" class="compact-form">
@@ -1394,12 +991,14 @@
             </div>
           </div>
 
+          <!-- Member Account (self) -->
           <div class="panel-card glass-card" id="myAccountSection" hidden>
             <div class="card-head"><span class="card-title">👤 My Account</span></div>
             <div id="memberSummaryGrid"></div>
             <div id="memberProfileCard"></div>
           </div>
 
+          <!-- My Records -->
           <div class="panel-card glass-card" id="myRecordsSection" hidden>
             <div class="card-head"><span class="card-title">📂 My Records</span></div>
             <div class="card-sub-head">Attendance</div>
@@ -1414,7 +1013,10 @@
     </main>
   </div>
 
+  <!-- Scan preview hidden canvas helper -->
   <div id="scanPreview" hidden></div>
+
+  <!-- Toast -->
   <div class="toast" id="toast"></div>
 
   <footer class="app-footer">
@@ -1424,141 +1026,10 @@
     <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a>
   </footer>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="vendor/face-api.min.js"></script>
+  <script src="face-ai.js"></script>
   <script src="script.js"></script>
-
-  <!-- ═══ ENHANCEMENT SCRIPTS ═══ -->
-  <script>
-  (function() {
-    'use strict';
-
-    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const finePointer = window.matchMedia && window.matchMedia('(pointer: fine)').matches;
-
-    /* ── CURSOR SPOTLIGHT ──────────────────── */
-    const spotlight = document.getElementById('cursorSpotlight');
-    if (spotlight && finePointer && !reduceMotion) {
-      let raf = 0;
-      document.addEventListener('mousemove', e => {
-        if (raf) cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => {
-          spotlight.style.left = e.clientX + 'px';
-          spotlight.style.top  = e.clientY + 'px';
-        });
-      }, { passive: true });
-    } else if (spotlight) {
-      spotlight.hidden = true;
-    }
-
-    /* ── RIPPLE EFFECT ON BUTTONS ──────────── */
-    function addRipple(btn, event) {
-      const rect = btn.getBoundingClientRect();
-      const size = Math.max(rect.width, rect.height);
-      const x = event.clientX - rect.left - size / 2;
-      const y = event.clientY - rect.top  - size / 2;
-      const ripple = document.createElement('span');
-      ripple.className = 'ripple-wave';
-      ripple.style.cssText = `width:${size}px;height:${size}px;left:${x}px;top:${y}px;position:absolute;`;
-      btn.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 700);
-    }
-
-    document.addEventListener('click', e => {
-      const btn = e.target.closest('.btn-primary, .btn-scan, .btn-capture');
-      if (!btn) return;
-      addRipple(btn, e);
-    });
-
-    /* ── SCAN RIPPLE ON GRANTED ─────────────── */
-    const shell = document.getElementById('cameraShell');
-    if (shell && !reduceMotion) {
-      let wasGranted = shell.classList.contains('is-granted');
-      const observer = new MutationObserver(() => {
-        const isGranted = shell.classList.contains('is-granted');
-        if (isGranted && !wasGranted) {
-          const ripple = document.createElement('div');
-          ripple.className = 'scan-ripple';
-          ripple.style.cssText = 'width:80px;height:80px;border:3px solid rgba(5,150,105,0.6);left:50%;top:50%;';
-          shell.appendChild(ripple);
-          setTimeout(() => ripple.remove(), 900);
-        }
-        wasGranted = isGranted;
-      });
-      observer.observe(shell, { attributes: true, attributeFilter: ['class'] });
-    }
-
-    /* ── COUNTER ANIMATION ON STAT VALUES ──── */
-    function animateCounter(el, target) {
-      const num = parseFloat(String(target).replace(/[^0-9.]/g, ''));
-      if (isNaN(num) || num === 0) return;
-      const prefix = String(target).startsWith('₹') ? '₹' : '';
-      const isInt = Number.isInteger(num);
-      const duration = 900;
-      const startTime = performance.now();
-      function step(now) {
-        const p = Math.min((now - startTime) / duration, 1);
-        const eased = 1 - Math.pow(1 - p, 3);
-        const current = num * eased;
-        el.textContent = prefix + (isInt ? Math.round(current) : current.toFixed(2));
-        if (p < 1) requestAnimationFrame(step);
-        else el.textContent = target;
-      }
-      requestAnimationFrame(step);
-    }
-
-    /* Observe stat value elements and animate when they change */
-    const statSelectors = [
-      '#rptTotalMembersVal', '#rptActiveMembersVal',
-      '#rptExpiringSoonVal', '#rptTodayRevenueVal', '#rptTodayCheckinsVal',
-      '#qcardAll', '#qcardTodayAdmissions', '#qcardTodayRenewals', '#qcardTodayCheckins'
-    ];
-    if (!reduceMotion) {
-      statSelectors.forEach(sel => {
-        const el = document.querySelector(sel);
-        if (!el) return;
-        const obs = new MutationObserver(() => {
-          animateCounter(el, el.textContent);
-        });
-        obs.observe(el, { childList: true, characterData: true, subtree: true });
-      });
-    }
-
-    /* ── GLASS CARD TILT ON MOUSE ────────────── */
-    if (finePointer && !reduceMotion) {
-      document.querySelectorAll('.rpt-stat-card, .rpt-quick-card, .stat-mini').forEach(card => {
-        card.addEventListener('mousemove', e => {
-          const rect = card.getBoundingClientRect();
-          const cx = rect.left + rect.width / 2;
-          const cy = rect.top + rect.height / 2;
-          const rx = ((e.clientY - cy) / (rect.height / 2)) * 4;
-          const ry = ((e.clientX - cx) / (rect.width / 2)) * -4;
-          card.style.transform = `perspective(600px) rotateX(${rx}deg) rotateY(${ry}deg) translateY(-4px) scale(1.02)`;
-        }, { passive: true });
-        card.addEventListener('mouseleave', () => {
-          card.style.transform = '';
-        });
-      });
-    }
-
-    /* ── SMOOTH TOAST STACK ──────────────────── */
-    /* (toast already handled by script.js, just enhance positioning) */
-
-    /* ── PAGE VISIBILITY OPTIMIZE ────────────── */
-    document.addEventListener('visibilitychange', () => {
-      const canvas = document.getElementById('particleCanvas');
-      if (canvas) {
-        canvas.style.opacity = document.hidden || canvas.hidden ? '0' : '0.22';
-      }
-    });
-
-    /* ── KEYBOARD SHORTCUT HINTS ─────────────── */
-    document.addEventListener('keydown', e => {
-      if (e.altKey && e.key === 'l') {
-        const toggle = document.getElementById('enableCameraInput');
-        if (toggle && !toggle.disabled) toggle.click();
-      }
-    });
-
-  })();
-  </script>
 </body>
+
 </html>
