@@ -662,7 +662,7 @@ async function refreshAll(opts = {}) {
   if (!S.currentUser || !S.token) { renderAll(); return; }
   const timerSnapshot = snapshotActiveSessions();
   try {
-    await Promise.all(isAdmin() ? [loadAdmin(), loadMember()] : [loadMember()]);
+    await refreshActiveTabData({ activeTab: opts.activeTab || S.activeTab, force: Boolean(opts.force) });
     restoreMissingActiveSessions(timerSnapshot);
     persistSessionTimers();
     ensureSessionTimerLoop();
@@ -673,18 +673,72 @@ async function refreshAll(opts = {}) {
   } catch (err) { handleErr(err, { toast: opts.toast, logout: true }); }
 }
 
-async function loadAdmin() {
-  const [dash, users, slots, sessions, reports, ann, embeddings] = await Promise.all([
-    api('/admin/dashboard'), api('/admin/users'), api('/admin/slots'),
-    api('/admin/sessions'), api('/admin/reports'), api('/admin/announcements'),
-    api('/users/embeddings'),
-  ]);
-  S.dashboard = dash || null; S.users = toArr(users); S.slots = toArr(slots);
-  S.sessions = toArr(sessions); S.reports = reports || null; S.announcements = toArr(ann);
-  S.faceUsers = toArr(embeddings);
-  syncCooldownStoreFromUsers(S.users);
-  syncUserMemberIdField();
-  syncActiveSessionsFromBackend();
+function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
+  if (opts.force) return true;
+  switch (key) {
+    case 'users':
+    case 'slots':
+      return true;
+    case 'dashboard':
+      return activeTab === 'liveOpsTab';
+    case 'sessions':
+      return activeTab === 'liveOpsTab' || activeTab === 'reportsTab';
+    case 'reports':
+      return activeTab === 'liveOpsTab' || activeTab === 'reportsTab' || activeTab === 'alertsTab';
+    case 'announcements':
+      return activeTab === 'alertsTab';
+    case 'embeddings':
+      return S.isScanning || activeTab === 'liveOpsTab' || activeTab === 'faceEnrollmentTab';
+    default:
+      return false;
+  }
+}
+
+async function refreshActiveTabData(opts = {}) {
+  const activeTab = opts.activeTab || S.activeTab;
+  if (isAdmin()) {
+    const tasks = [loadAdmin({ activeTab, force: opts.force })];
+    if (activeTab === 'settingsTab') tasks.push(loadMember());
+    await Promise.all(tasks);
+    return;
+  }
+  await loadMember();
+}
+
+async function loadAdmin(opts = {}) {
+  const activeTab = opts.activeTab || S.activeTab || 'liveOpsTab';
+  const requests = [];
+
+  if (shouldLoadAdminDataset('dashboard', activeTab, opts)) requests.push(['dashboard', api('/admin/dashboard')]);
+  if (shouldLoadAdminDataset('users', activeTab, opts)) requests.push(['users', api('/admin/users')]);
+  if (shouldLoadAdminDataset('slots', activeTab, opts)) requests.push(['slots', api('/admin/slots')]);
+  if (shouldLoadAdminDataset('sessions', activeTab, opts)) requests.push(['sessions', api('/admin/sessions')]);
+  if (shouldLoadAdminDataset('reports', activeTab, opts)) requests.push(['reports', api('/admin/reports')]);
+  if (shouldLoadAdminDataset('announcements', activeTab, opts)) requests.push(['announcements', api('/admin/announcements')]);
+  if (shouldLoadAdminDataset('embeddings', activeTab, opts)) requests.push(['embeddings', api('/users/embeddings')]);
+
+  const results = await Promise.all(requests.map(([, request]) => request));
+  const fetched = {};
+
+  results.forEach((result, index) => {
+    const key = requests[index][0];
+    fetched[key] = true;
+    if (key === 'dashboard') S.dashboard = result || null;
+    if (key === 'users') S.users = toArr(result);
+    if (key === 'slots') S.slots = toArr(result);
+    if (key === 'sessions') S.sessions = toArr(result);
+    if (key === 'reports') S.reports = result || null;
+    if (key === 'announcements') S.announcements = toArr(result);
+    if (key === 'embeddings') S.faceUsers = toArr(result);
+  });
+
+  if (fetched.users) {
+    syncCooldownStoreFromUsers(S.users);
+    syncUserMemberIdField();
+  }
+  if (fetched.users || fetched.sessions) {
+    syncActiveSessionsFromBackend();
+  }
 }
 
 async function loadMember() {
@@ -768,6 +822,16 @@ function openTab(id) {
     ensureEnrollmentLivePreview().catch(console.error);
   }
   renderActiveTabContent();
+  if (S.currentUser && S.token) {
+    const targetTab = id;
+    refreshActiveTabData({ activeTab: targetTab })
+      .then(() => {
+        if (S.activeTab !== targetTab) return;
+        renderActiveTabContent();
+        updateAlertBadge();
+      })
+      .catch(console.error);
+  }
 }
 
 
