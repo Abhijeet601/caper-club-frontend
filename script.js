@@ -728,13 +728,14 @@ async function refreshActiveTabData(opts = {}) {
 
 async function loadAdmin(opts = {}) {
   const activeTab = opts.activeTab || S.activeTab || 'liveOpsTab';
+  const liveScope = activeTab === 'liveOpsTab' ? '?scope=live' : '';
   const requests = [];
 
   if (shouldLoadAdminDataset('dashboard', activeTab, opts)) requests.push(['dashboard', api('/admin/dashboard')]);
-  if (shouldLoadAdminDataset('users', activeTab, opts)) requests.push(['users', api('/admin/users')]);
+  if (shouldLoadAdminDataset('users', activeTab, opts)) requests.push(['users', api(`/admin/users${liveScope}`)]);
   if (shouldLoadAdminDataset('slots', activeTab, opts)) requests.push(['slots', api('/admin/slots')]);
-  if (shouldLoadAdminDataset('sessions', activeTab, opts)) requests.push(['sessions', api('/admin/sessions')]);
-  if (shouldLoadAdminDataset('reports', activeTab, opts)) requests.push(['reports', api('/admin/reports')]);
+  if (shouldLoadAdminDataset('sessions', activeTab, opts)) requests.push(['sessions', api(`/admin/sessions${liveScope}`)]);
+  if (shouldLoadAdminDataset('reports', activeTab, opts)) requests.push(['reports', api(`/admin/reports${liveScope}`)]);
   if (shouldLoadAdminDataset('announcements', activeTab, opts)) requests.push(['announcements', api('/admin/announcements')]);
   if (shouldLoadAdminDataset('embeddings', activeTab, opts)) requests.push(['embeddings', api('/users/embeddings')]);
 
