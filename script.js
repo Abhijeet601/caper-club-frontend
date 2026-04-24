@@ -1753,7 +1753,10 @@ function getPaidReportPayments() {
 
 function getTodayPaidReportPayments() {
   const today = localDateKey();
-  return getPaidReportPayments().filter(payment => localDateKey(payment.createdAt) === today);
+  return getPaidReportPayments().filter(payment => {
+    const createdAt = normalizeTimestamp(payment.createdAt || payment.membershipStart);
+    return createdAt ? localDateKey(createdAt) === today : false;
+  });
 }
 
 function isAdmissionPayment(payment) {
