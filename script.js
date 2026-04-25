@@ -1264,15 +1264,13 @@ function renderUsers() {
     const members = filtered.filter(u => String(u.role || '').toLowerCase() === 'user');
     const faceEnrolledCount = members.filter(u => getFaceCount(u) > 0).length;
     const facePendingCount = members.filter(u => getFaceCount(u) === 0).length;
-    renderFaceEnrollSummary(faceEnrolledCount, facePendingCount, members.length);
+    const legacyFaceBar = $('faceEnrollSummaryBar');
+    if (legacyFaceBar) legacyFaceBar.remove();
     const activeMembershipCount = members.filter(u => getUserStatusValue(u) === 'active').length;
-    const activeMembershipPercent = members.length
-      ? Math.round((activeMembershipCount / members.length) * 100)
-      : 0;
     if ($('allMembersVisibleCount')) $('allMembersVisibleCount').textContent = String(filtered.length);
     if ($('allMembersFaceEnrolled')) $('allMembersFaceEnrolled').textContent = String(faceEnrolledCount);
     if ($('allMembersFacePending')) $('allMembersFacePending').textContent = String(facePendingCount);
-    if ($('allMembersActiveMembership')) $('allMembersActiveMembership').textContent = `${activeMembershipPercent}%`;
+    if ($('allMembersActiveMembership')) $('allMembersActiveMembership').textContent = `${activeMembershipCount} / ${members.length}`;
 
     // Optimize HTML generation for large lists
     const htmlParts = [];
@@ -1414,36 +1412,6 @@ function getMemberInitials(name) {
   if (!parts.length) return 'NA';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
-}
-
-function renderFaceEnrollSummary(enrolled, pending, total) {
-  let bar = $('faceEnrollSummaryBar');
-  if (!bar) {
-    const panel = document.querySelector('.all-members-panel');
-    if (!panel) return;
-    bar = document.createElement('div');
-    bar.id = 'faceEnrollSummaryBar';
-    bar.className = 'face-enroll-summary-bar';
-    const tableScroll = panel.querySelector('.table-scroll');
-    if (tableScroll) panel.insertBefore(bar, tableScroll);
-    else panel.appendChild(bar);
-  }
-  const pct = total > 0 ? Math.round((enrolled / total) * 100) : 0;
-  bar.innerHTML = `
-    <div class="face-enroll-stat enrolled">
-      <span class="face-enroll-dot"></span>
-      <span><strong>${enrolled}</strong> Face Enrolled</span>
-    </div>
-    <div class="face-enroll-progress-wrap">
-      <div class="face-enroll-progress-track">
-        <div class="face-enroll-progress-fill" style="width:${pct}%"></div>
-      </div>
-      <span class="face-enroll-pct">${pct}%</span>
-    </div>
-    <div class="face-enroll-stat pending">
-      <span class="face-enroll-dot"></span>
-      <span><strong>${pending}</strong> Not Enrolled</span>
-    </div>`;
 }
 
 function formatUserStatusLabel(value) {

@@ -680,6 +680,15 @@ table { width: 100%; border-collapse: collapse; }
   font-size: .72rem;
   color: var(--text3);
 }
+.all-members-help-note {
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid rgba(99,102,241,.22);
+  background: linear-gradient(135deg, rgba(99,102,241,.08), rgba(14,165,233,.06));
+  color: var(--text2);
+  font-size: .76rem;
+}
 .all-members-panel .mini-search {
   width: min(320px, 100%);
   padding: 9px 14px;
