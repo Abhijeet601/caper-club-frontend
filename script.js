@@ -2341,19 +2341,34 @@ async function handleUserSubmit(e) {
   const password = $('userPasswordInput').value.trim();
   const isEditMode = Boolean(editId);
   let createdUserId = '';
+
+  // Client-side validation
+  const name = $('userNameInput').value.trim();
+  const email = $('userEmailInput').value.trim();
+  const startDate = $('userStartInput').value;
+  const expiryDate = $('userExpiryInput').value;
+
+  if (!name) { toast('Name is required.', 'error'); return; }
+  if (!email) { toast('Email is required.', 'error'); return; }
+  if (!email.includes('@') || !email.includes('.')) { toast('Please enter a valid email address.', 'error'); return; }
+  if (!isEditMode && !password) { toast('Password is required.', 'error'); return; }
+  if (!startDate) { toast('Start date is required.', 'error'); return; }
+  if (!expiryDate) { toast('Expiry date is required.', 'error'); return; }
+  if (new Date(startDate) >= new Date(expiryDate)) { toast('Expiry date must be after start date.', 'error'); return; }
+
   const payload = {
-    name: $('userNameInput').value.trim(),
+    name: name,
     memberId: isEditMode ? $('userMemberIdInput').value.trim() || null : null,
     sport: $('userSportInput')?.value || 'General',
     membershipLevel: $('userLevelInput')?.value || '',
-    email: $('userEmailInput').value.trim(),
-    password: password || null,
-    mobileNumber: $('userMobileInput')?.value?.trim() || null,
+    email: email,
+    password: password,
+    mobileNumber: $('userMobileInput')?.value?.trim() || '',
     role: $('userRoleInput').value,
     slotId: $('userSlotInput').value || null,
     membershipPlan: $('userPlanInput').value,
-    membershipStart: $('userStartInput').value,
-    membershipExpiry: $('userExpiryInput').value,
+    membershipStart: startDate,
+    membershipExpiry: expiryDate,
     visitLimit: parseOptionalNonNegativeInt($('userVisitLimitInput')?.value),
     paymentAmount: Number($('userAmountInput').value||0),
     dueAmount: Number($('userDueAmountInput')?.value||0),
