@@ -3825,6 +3825,14 @@ async function api(path, opts = {}) {
       S.healthOk = false;
       updateHealthUi();
     }
+    // Network-level failures ("Failed to fetch") usually mean base URL is unreachable.
+    // Re-discover a healthy backend once, then retry the same request.
+    if (!opts._retryAfterReconnect) {
+      const recovered = await ensureBackendConnection().catch(() => false);
+      if (recovered) {
+        return api(path, { ...opts, _retryAfterReconnect: true });
+      }
+    }
     throw error;
   }
   if (!S.healthOk) {
