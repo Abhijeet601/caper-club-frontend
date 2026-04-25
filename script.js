@@ -739,6 +739,23 @@ async function refreshActiveTabData(opts = {}) {
   await loadMember();
 }
 
+function updateAllMembersInsights(filtered, faceEnrolledCount, facePendingCount) {
+  // Update insights cards
+  const allMembers = S.users.filter(u => u.role === 'user');
+  const now = new Date();
+  const totalActive = allMembers.filter(u => u.membershipExpiry && new Date(u.membershipExpiry) >= now).length;
+  const totalMembers = allMembers.length;
+
+  if ($('allMembersVisibleCount')) $('allMembersVisibleCount').textContent = String(filtered.length);
+  if ($('allMembersFaceEnrolled')) $('allMembersFaceEnrolled').textContent = String(faceEnrolledCount);
+  if ($('allMembersFacePending')) $('allMembersFacePending').textContent = String(facePendingCount);
+  if ($('allMembersActiveMembership')) $('allMembersActiveMembership').textContent = `${totalActive} / ${totalMembers}`;
+
+  // Update subtext for active members
+  const activeSub = $('allMembersActiveMembership')?.nextElementSibling;
+  if (activeSub) activeSub.textContent = 'Active out of total members';
+}
+
 async function loadAdmin(opts = {}) {
   const activeTab = opts.activeTab || S.activeTab || 'liveOpsTab';
   const liveScope = activeTab === 'liveOpsTab' ? '?scope=live' : '';
@@ -774,6 +791,9 @@ async function loadAdmin(opts = {}) {
     syncCooldownStoreFromUsers(S.users);
     syncUserMemberIdField();
     S.usersChanged = true; // Mark users as changed for filter cache invalidation
+    if (S.activeTab === 'allMembersTab') {
+      renderUsers();
+    }
   }
   if (fetched.users || fetched.sessions) {
     syncActiveSessionsFromBackend();
@@ -1261,40 +1281,29 @@ function renderUsers() {
       $('allMembersCount').textContent = String(totalFiltered);
     }
 
-    const members = filtered.filter(u => String(u.role || '').toLowerCase() === 'user');
+    const members = filtered.filter(u => u.role === 'user');
     const faceEnrolledCount = members.filter(u => getFaceCount(u) > 0).length;
     const facePendingCount = members.filter(u => getFaceCount(u) === 0).length;
-    const legacyFaceBar = $('faceEnrollSummaryBar');
-    if (legacyFaceBar) legacyFaceBar.remove();
-    const activeMembershipCount = members.filter(u => getUserStatusValue(u) === 'active').length;
-    if ($('allMembersVisibleCount')) $('allMembersVisibleCount').textContent = String(filtered.length);
-    if ($('allMembersFaceEnrolled')) $('allMembersFaceEnrolled').textContent = String(faceEnrolledCount);
-    if ($('allMembersFacePending')) $('allMembersFacePending').textContent = String(facePendingCount);
-    if ($('allMembersActiveMembership')) $('allMembersActiveMembership').textContent = `${activeMembershipCount} / ${members.length}`;
+    renderFaceEnrollSummary(faceEnrolledCount, facePendingCount, members.length);
+
+    updateAllMembersInsights(filtered, faceEnrolledCount, facePendingCount);
 
     // Optimize HTML generation for large lists
     const htmlParts = [];
     if (filtered.length) {
       for (const u of filtered) {
         const fc = getFaceCount(u);
-        const initials = getMemberInitials(u.name);
         const faceChip = fc > 0
           ? `<span class="face-enroll-chip enrolled" title="${fc} face image${fc > 1 ? 's' : ''} enrolled">&#10004; Enrolled (${fc})</span>`
           : `<span class="face-enroll-chip pending" title="No face images enrolled">&#10008; Not Enrolled</span>`;
 
-        htmlParts.push(`<tr data-user-row="${u.id}" style="animation-delay:${Math.min(htmlParts.length * 24, 220)}ms">
+        htmlParts.push(`<tr data-user-row="${u.id}">
           <td>
-            <div class="all-members-member-cell">
-              <span class="all-members-avatar">${esc(initials)}</span>
-              <div class="all-members-meta">
-                <div class="t-primary">${esc(u.name)}</div>
-                <div class="t-secondary">${esc(u.email)}</div>
-              </div>
-            </div>
+            <div class="t-primary">${esc(u.name)}</div>
+            <div class="t-secondary">${esc(u.email)}</div>
           </td>
           <td>
             <div class="t-primary">${esc(u.sport||'-')}</div>
-            <div class="all-members-plan-chip">${esc(u.membershipPlan || '-')}</div>
             <div class="t-secondary">${esc([
               u.membershipLevel || u.membershipPlan || '-',
               Number(u.dueAmount || 0) > 0 ? `Due ${fmtMoney(u.dueAmount || 0)}` : '',
@@ -1405,13 +1414,34 @@ function getFaceCount(user) {
   return count;
 }
 
-function getMemberInitials(name) {
-  const text = String(name || '').trim();
-  if (!text) return 'NA';
-  const parts = text.split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'NA';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
+function renderFaceEnrollSummary(enrolled, pending, total) {
+  let bar = $('faceEnrollSummaryBar');
+  if (!bar) {
+    const panel = document.querySelector('.all-members-panel');
+    if (!panel) return;
+    bar = document.createElement('div');
+    bar.id = 'faceEnrollSummaryBar';
+    bar.className = 'face-enroll-summary-bar';
+    const tableScroll = panel.querySelector('.table-scroll');
+    if (tableScroll) panel.insertBefore(bar, tableScroll);
+    else panel.appendChild(bar);
+  }
+  const pct = total > 0 ? Math.round((enrolled / total) * 100) : 0;
+  bar.innerHTML = `
+    <div class="face-enroll-stat enrolled">
+      <span class="face-enroll-dot"></span>
+      <span><strong>${enrolled}</strong> Face Enrolled</span>
+    </div>
+    <div class="face-enroll-progress-wrap">
+      <div class="face-enroll-progress-track">
+        <div class="face-enroll-progress-fill" style="width:${pct}%"></div>
+      </div>
+      <span class="face-enroll-pct">${pct}%</span>
+    </div>
+    <div class="face-enroll-stat pending">
+      <span class="face-enroll-dot"></span>
+      <span><strong>${pending}</strong> Not Enrolled</span>
+    </div>`;
 }
 
 function formatUserStatusLabel(value) {
@@ -3816,14 +3846,6 @@ async function api(path, opts = {}) {
     if (S.healthOk) {
       S.healthOk = false;
       updateHealthUi();
-    }
-    // Network-level failures ("Failed to fetch") usually mean base URL is unreachable.
-    // Re-discover a healthy backend once, then retry the same request.
-    if (!opts._retryAfterReconnect) {
-      const recovered = await ensureBackendConnection().catch(() => false);
-      if (recovered) {
-        return api(path, { ...opts, _retryAfterReconnect: true });
-      }
     }
     throw error;
   }
