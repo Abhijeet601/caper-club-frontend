@@ -771,8 +771,30 @@
               <select id="userRoleFilterInput" class="rpt-select"></select>
               <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear</button>
             </div>
+            <div class="all-members-insights" id="allMembersInsights">
+              <div class="all-members-insight-card">
+                <div class="all-members-insight-label">Visible Members</div>
+                <div class="all-members-insight-value" id="allMembersVisibleCount">0</div>
+                <div class="all-members-insight-sub">After filters</div>
+              </div>
+              <div class="all-members-insight-card">
+                <div class="all-members-insight-label">Face Enrolled</div>
+                <div class="all-members-insight-value" id="allMembersFaceEnrolled">0</div>
+                <div class="all-members-insight-sub">Ready for recognition</div>
+              </div>
+              <div class="all-members-insight-card">
+                <div class="all-members-insight-label">Pending Enrollment</div>
+                <div class="all-members-insight-value" id="allMembersFacePending">0</div>
+                <div class="all-members-insight-sub">Need face capture</div>
+              </div>
+              <div class="all-members-insight-card">
+                <div class="all-members-insight-label">Active Membership</div>
+                <div class="all-members-insight-value" id="allMembersActiveMembership">0%</div>
+                <div class="all-members-insight-sub">Member health score</div>
+              </div>
+            </div>
             <div class="table-scroll">
-              <table class="report-table">
+              <table class="report-table all-members-table">
                 <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody id="usersTableBody"></tbody>
               </table>

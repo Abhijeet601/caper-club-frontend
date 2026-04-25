@@ -623,6 +623,63 @@ table { width: 100%; border-collapse: collapse; }
   flex: 0 1 160px;
   min-width: 130px;
 }
+.all-members-insights {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 14px;
+}
+.all-members-insight-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background:
+    radial-gradient(120% 120% at 100% 0%, rgba(99,102,241,.16), rgba(99,102,241,0) 45%),
+    linear-gradient(135deg, rgba(255,255,255,.92), rgba(248,250,252,.84));
+  padding: 10px 12px;
+  min-height: 80px;
+  box-shadow: var(--shadow-sm);
+  transition: transform .25s var(--ease-smooth), box-shadow .25s var(--ease-smooth), border-color .25s;
+  animation: allMembersInsightIn .45s ease both;
+}
+.all-members-insight-card:nth-child(2) { animation-delay: .04s; }
+.all-members-insight-card:nth-child(3) { animation-delay: .08s; }
+.all-members-insight-card:nth-child(4) { animation-delay: .12s; }
+.all-members-insight-card::after {
+  content: '';
+  position: absolute;
+  inset: auto -20% -35% -20%;
+  height: 40%;
+  background: linear-gradient(90deg, rgba(99,102,241,0), rgba(99,102,241,.18), rgba(99,102,241,0));
+  transform: translateX(-120%);
+  transition: transform .55s ease;
+}
+.all-members-insight-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(99,102,241,.35);
+  box-shadow: 0 12px 22px rgba(15,23,42,.12);
+}
+.all-members-insight-card:hover::after {
+  transform: translateX(120%);
+}
+.all-members-insight-label {
+  font-size: .72rem;
+  color: var(--text2);
+  letter-spacing: .02em;
+}
+.all-members-insight-value {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text1);
+}
+.all-members-insight-sub {
+  margin-top: 2px;
+  font-size: .72rem;
+  color: var(--text3);
+}
 .all-members-panel .mini-search {
   width: min(320px, 100%);
   padding: 9px 14px;
@@ -635,6 +692,55 @@ table { width: 100%; border-collapse: collapse; }
 }
 .all-members-panel .report-table {
   min-width: 1100px;
+}
+.all-members-table tbody tr {
+  opacity: 0;
+  transform: translateY(8px) scale(.995);
+  animation: allMembersRowIn .42s ease forwards;
+}
+.all-members-table tbody tr td { vertical-align: middle; }
+.all-members-member-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.all-members-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(145deg, #6366f1, #0ea5e9);
+  box-shadow: 0 8px 16px rgba(79,70,229,.28);
+  flex-shrink: 0;
+}
+.all-members-meta {
+  display: grid;
+  gap: 2px;
+}
+.all-members-plan-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(99,102,241,.25);
+  background: rgba(99,102,241,.1);
+  color: #4338ca;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+@keyframes allMembersInsightIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes allMembersRowIn {
+  from { opacity: 0; transform: translateY(8px) scale(.995); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .all-member-report-panel .card-head {
   align-items: flex-start;
@@ -1452,6 +1558,9 @@ textarea { min-height: 60px; resize: none; }
   .all-members-panel .table-scroll {
     max-height: clamp(280px, 60vh, 520px);
   }
+  .all-members-insights {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .all-member-report-section .table-scroll {
     max-height: clamp(220px, 48vh, 420px);
   }
@@ -1472,6 +1581,9 @@ textarea { min-height: 60px; resize: none; }
   .scan-toggle-group .toggle-label { display: none; }
   .api-info      { display: none; }
   .nav-tab span.nav-tab-dot { display: none; }
+  .all-members-insights {
+    grid-template-columns: 1fr;
+  }
   .scan-controls { flex-direction: column; align-items: flex-start; }
   .scan-btns    { width: 100%; }
   .scan-btns button { flex: 1; }
