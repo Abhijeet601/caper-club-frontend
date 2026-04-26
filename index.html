@@ -763,40 +763,71 @@
                 <span class="badge-chip chip-blue" id="allMembersCount">0</span>
               </div>
             </div>
-            <div class="rpt-filter-bar all-members-filter-bar">
-              <input type="search" id="userFilterInput" placeholder="Search member, email, ID, mobile…" class="rpt-input">
-              <select id="userSportFilterInput" class="rpt-select"></select>
-              <select id="userPlanFilterInput" class="rpt-select"></select>
-              <select id="userStatusFilterInput" class="rpt-select"></select>
-              <select id="userRoleFilterInput" class="rpt-select"></select>
-              <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear</button>
+            <div class="filter-section">
+              <div class="filter-row">
+                <div class="search-group">
+                  <input type="search" id="userFilterInput" placeholder="Search by name, email, member ID, mobile…" class="filter-input">
+                  <button class="btn-ghost btn-sm" id="allMembersRefresh" title="Refresh data">🔄</button>
+                </div>
+                <div class="filter-group">
+                  <select id="userSportFilterInput" class="filter-select">
+                    <option value="">All Sports</option>
+                  </select>
+                  <select id="userPlanFilterInput" class="filter-select">
+                    <option value="">All Plans</option>
+                  </select>
+                  <select id="userStatusFilterInput" class="filter-select">
+                    <option value="">All Statuses</option>
+                  </select>
+                  <select id="userRoleFilterInput" class="filter-select">
+                    <option value="">All Roles</option>
+                  </select>
+                  <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear Filters</button>
+                </div>
+              </div>
             </div>
             <div class="all-members-insights" id="allMembersInsights">
-              <div class="all-members-insight-card">
-                <div class="all-members-insight-label">Visible Rows</div>
-                <div class="all-members-insight-value" id="allMembersVisibleCount">0</div>
-                <div class="all-members-insight-sub">Current filter result</div>
-              </div>
-              <div class="all-members-insight-card">
-                <div class="all-members-insight-label">Enrolled Faces</div>
-                <div class="all-members-insight-value" id="allMembersFaceEnrolled">0</div>
-                <div class="all-members-insight-sub">Ready for recognition</div>
-              </div>
-              <div class="all-members-insight-card">
-                <div class="all-members-insight-label">Missing Faces</div>
-                <div class="all-members-insight-value" id="allMembersFacePending">0</div>
-                <div class="all-members-insight-sub">Need face capture</div>
-              </div>
-              <div class="all-members-insight-card">
-                <div class="all-members-insight-label">Active Members</div>
-                <div class="all-members-insight-value" id="allMembersActiveMembership">0 / 0</div>
-                <div class="all-members-insight-sub">Active out of total members</div>
+              <div class="insight-grid">
+                <div class="insight-card">
+                  <div class="insight-icon">👁️</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersVisibleCount">0</div>
+                    <div class="insight-label">Total Members</div>
+                    <div class="insight-sub">All registered members</div>
+                  </div>
+                </div>
+                <div class="insight-card">
+                  <div class="insight-icon">🤖</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersFaceEnrolled">0</div>
+                    <div class="insight-label">Face Enrolled</div>
+                    <div class="insight-sub">Total enrolled members</div>
+                  </div>
+                </div>
+                <div class="insight-card">
+                  <div class="insight-icon">📷</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersFacePending">0</div>
+                    <div class="insight-label">Face Pending</div>
+                    <div class="insight-sub">Total pending enrollment</div>
+                  </div>
+                </div>
+                <div class="insight-card">
+                  <div class="insight-icon">✅</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersActiveMembership">0 / 0</div>
+                    <div class="insight-label">Active Memberships</div>
+                    <div class="insight-sub">Valid out of total</div>
+                  </div>
+                </div>
               </div>
             </div>
-            <div class="all-members-help-note">These stats are calculated from rows currently visible after filters.</div>
+            <div class="help-note">
+              <p>💡 <strong>Pro Tips:</strong> Use filters to find members quickly. All stats show totals from all members. Click member actions for detailed reports or management.</p>
+            </div>
             <div class="table-scroll">
               <table class="report-table all-members-table">
-                <thead><tr><th>Member</th><th>Sport / Level</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Member</th><th>Sport / Plan</th><th>Status</th><th>Face Recognition</th><th>Actions</th></tr></thead>
                 <tbody id="usersTableBody"></tbody>
               </table>
             </div>

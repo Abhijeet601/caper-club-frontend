@@ -475,6 +475,7 @@ function bindEvents() {
     renderUsers();
   });
   if ($('allMembersClearFilters')) $('allMembersClearFilters').addEventListener('click', resetAllMemberFilters);
+  if ($('allMembersRefresh')) $('allMembersRefresh').addEventListener('click', () => refreshAll({ force: true, toast: true }));
   if ($('allMemberReportClose')) $('allMemberReportClose').addEventListener('click', closeAllMemberReport);
 
   // Reports filter
@@ -716,7 +717,7 @@ function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
     case 'dashboard':
       return activeTab === 'liveOpsTab';
     case 'sessions':
-      return activeTab === 'liveOpsTab' || activeTab === 'reportsTab';
+      return activeTab === 'liveOpsTab' || activeTab === 'reportsTab' || activeTab === 'faceEnrollmentTab' || S.isScanning;
     case 'reports':
       return activeTab === 'liveOpsTab' || activeTab === 'reportsTab' || activeTab === 'alertsTab';
     case 'announcements':
@@ -746,7 +747,7 @@ function updateAllMembersInsights(filtered, faceEnrolledCount, facePendingCount)
   const totalActive = allMembers.filter(u => u.membershipExpiry && new Date(u.membershipExpiry) >= now).length;
   const totalMembers = allMembers.length;
 
-  if ($('allMembersVisibleCount')) $('allMembersVisibleCount').textContent = String(filtered.length);
+  if ($('allMembersVisibleCount')) $('allMembersVisibleCount').textContent = String(totalMembers);
   if ($('allMembersFaceEnrolled')) $('allMembersFaceEnrolled').textContent = String(faceEnrolledCount);
   if ($('allMembersFacePending')) $('allMembersFacePending').textContent = String(facePendingCount);
   if ($('allMembersActiveMembership')) $('allMembersActiveMembership').textContent = `${totalActive} / ${totalMembers}`;
@@ -1282,8 +1283,10 @@ function renderUsers() {
     }
 
     const members = filtered.filter(u => u.role === 'user');
-    const faceEnrolledCount = members.filter(u => getFaceCount(u) > 0).length;
-    const facePendingCount = members.filter(u => getFaceCount(u) === 0).length;
+    // Calculate face counts from ALL members, not just filtered ones
+    const allMembers = S.users.filter(u => u.role === 'user');
+    const faceEnrolledCount = allMembers.filter(u => getFaceCount(u) > 0).length;
+    const facePendingCount = allMembers.filter(u => getFaceCount(u) === 0).length;
     renderFaceEnrollSummary(faceEnrolledCount, facePendingCount, members.length);
 
     updateAllMembersInsights(filtered, faceEnrolledCount, facePendingCount);
@@ -1293,29 +1296,48 @@ function renderUsers() {
     if (filtered.length) {
       for (const u of filtered) {
         const fc = getFaceCount(u);
-        const faceChip = fc > 0
-          ? `<span class="face-enroll-chip enrolled" title="${fc} face image${fc > 1 ? 's' : ''} enrolled">&#10004; Enrolled (${fc})</span>`
-          : `<span class="face-enroll-chip pending" title="No face images enrolled">&#10008; Not Enrolled</span>`;
+        const faceStatus = fc > 0
+          ? `<span class="status-chip enrolled" title="${fc} face image${fc > 1 ? 's' : ''} enrolled">✅ Enrolled (${fc})</span>`
+          : `<span class="status-chip pending" title="No face images enrolled">⏳ Pending</span>`;
+
+        const memberInfo = [
+          u.memberId ? `<span class="member-id">#${esc(u.memberId)}</span>` : '',
+          u.mobileNumber ? `<span class="member-mobile">${esc(u.mobileNumber)}</span>` : '',
+        ].filter(Boolean).join(' • ');
+
+        const planInfo = [
+          u.membershipPlan || 'No Plan',
+          u.membershipLevel ? `Level: ${u.membershipLevel}` : '',
+          Number(u.dueAmount || 0) > 0 ? `<span class="due-amount">Due: ${fmtMoney(u.dueAmount)}</span>` : '',
+        ].filter(Boolean).join(' • ');
 
         htmlParts.push(`<tr data-user-row="${u.id}">
           <td>
-            <div class="t-primary">${esc(u.name)}</div>
-            <div class="t-secondary">${esc(u.email)}</div>
+            <div class="member-cell">
+              <div class="member-avatar">${esc((u.name || '?')[0].toUpperCase())}</div>
+              <div class="member-details">
+                <div class="member-name">${esc(u.name || 'Unknown')}</div>
+                <div class="member-meta">${esc(u.email || '')}</div>
+                ${memberInfo ? `<div class="member-meta">${memberInfo}</div>` : ''}
+              </div>
+            </div>
           </td>
           <td>
-            <div class="t-primary">${esc(u.sport||'-')}</div>
-            <div class="t-secondary">${esc([
-              u.membershipLevel || u.membershipPlan || '-',
-              Number(u.dueAmount || 0) > 0 ? `Due ${fmtMoney(u.dueAmount || 0)}` : '',
-            ].filter(Boolean).join(' | '))}</div>
+            <div class="plan-cell">
+              <div class="plan-sport">${esc(u.sport || 'No Sport')}</div>
+              <div class="plan-details">${planInfo}</div>
+            </div>
           </td>
           <td>${renderUserStatusChip(u)}</td>
-          <td>${faceChip}</td>
-          <td><div class="table-actions">
-            <button class="mini-btn" data-user-report="${u.id}">Report</button>
-            <button class="mini-btn" data-user-edit="${u.id}">Edit</button>
-            <button class="mini-btn del" data-user-delete="${u.id}">Del</button>
-          </div></td>
+          <td>${faceStatus}</td>
+          <td>
+            <div class="action-buttons">
+              ${fc > 0 ? `<button class="btn btn-xs warn" data-user-delete-face="${u.id}" title="Clear enrolled face data">🗑️ Face</button>` : ''}
+              <button class="btn btn-xs" data-user-report="${u.id}" title="View detailed report">📊 Report</button>
+              <button class="btn btn-xs primary" data-user-edit="${u.id}" title="Edit member details">✏️ Edit</button>
+              <button class="btn btn-xs danger" data-user-delete="${u.id}" title="Delete member">🗑️ Delete</button>
+            </div>
+          </td>
         </tr>`);
       }
 
@@ -2432,6 +2454,7 @@ function showFormSuccess(id) {
 async function handleUsersClick(e) {
   if (e.target.dataset.userReport) await openAllMemberReport(e.target.dataset.userReport);
   if (e.target.dataset.userEdit)   beginUserEdit(e.target.dataset.userEdit);
+  if (e.target.dataset.userDeleteFace) await deleteFaceForUser(e.target.dataset.userDeleteFace);
   if (e.target.dataset.userDelete) deleteUser(e.target.dataset.userDelete);
 }
 
@@ -2617,6 +2640,20 @@ async function deleteUser(id) {
   if (!u || !confirm(`Delete ${u.name}?`)) return;
   try { await api(`/admin/delete-user/${id}`, { method:'DELETE' }); toast('Deleted.','success'); await refreshAll(); }
   catch (err) { handleErr(err, { toast: true }); }
+}
+
+async function deleteFaceForUser(id) {
+  if (!ensureAdmin()) return;
+  const u = S.users.find(x => x.id === id);
+  if (!u || !confirm(`Clear enrolled face data for ${u.name}?`)) return;
+  try {
+    await api(`/admin/users/${id}/embeddings`, { method: 'DELETE' });
+    toast(`Face enrollment cleared for ${u.name}.`, 'success');
+    await refreshAll();
+    loadFaceEnrollmentStatus();
+  } catch (err) {
+    handleErr(err, { toast: true });
+  }
 }
 
 function resetUserForm() {
