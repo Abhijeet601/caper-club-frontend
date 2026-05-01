@@ -530,6 +530,7 @@ function bindEvents() {
   $('captureScanBtn').addEventListener('click', captureScanFrame);
   $('scanFileInput').addEventListener('change', handleScanFileInput);
   $('runScanBtn').addEventListener('click', handleManualScan);
+  if ($('clearLiveFeedBtn')) $('clearLiveFeedBtn').addEventListener('click', clearLiveFeed);
 
   // Enrollment
   if ($('enrollmentZoomOutBtn')) $('enrollmentZoomOutBtn').addEventListener('click', () => adjustEnrollmentZoom(-1));
@@ -1219,6 +1220,19 @@ function renderSystemStatus() {
 function renderLiveFeed() {
   renderList($('liveFeedList'), S.dashboard?.liveFeed || [], feedItemTpl, 'No live events yet.');
   $('feedCount').textContent = (S.dashboard?.liveFeed || []).length;
+}
+
+async function clearLiveFeed() {
+  if (!ensureAdmin()) return;
+  try {
+    await api('/admin/live-feed', { method: 'DELETE' });
+    if (!S.dashboard) S.dashboard = {};
+    S.dashboard.liveFeed = [];
+    renderLiveFeed();
+    toast('Live feed cleared.', 'success');
+  } catch (err) {
+    handleErr(err, { toast: true });
+  }
 }
 
 function renderUsers() {
