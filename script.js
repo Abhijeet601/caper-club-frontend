@@ -3465,9 +3465,9 @@ function legacySpeakBrowser(text) {
   try {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-IN'; u.rate = 1;
+    u.lang = 'hi-IN'; u.rate = 0.92;
     const voices = window.speechSynthesis.getVoices();
-    const v = voices.find(x => /^en/i.test(x.lang)) || voices[0];
+    const v = voices.find(x => /^hi/i.test(x.lang)) || voices[0];
     if (v) u.voice = v;
     window.speechSynthesis.speak(u);
     return true;
@@ -3540,10 +3540,10 @@ let ttsVoiceRetryCount = 0;
 let activeSpeechItem = null;
 const ttsMessageHistory = new Map();
 const TTS_PROFILE = Object.freeze({
-  lang: 'en-IN',
-  rate: 1.0,
-  pitch: 0.96,
-  volume: 4,
+  lang: 'hi-IN',
+  rate: 0.92,
+  pitch: 1,
+  volume: 1,
   lowRepeatMs: 5000,
 });
 const TTS_COOLDOWN_MS = Object.freeze({
@@ -3733,12 +3733,12 @@ function speakBrowserLegacy(text) {
     try {
       const synth = window.speechSynthesis;
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-IN';
+      utterance.lang = 'hi-IN';
       utterance.rate = 1;
       utterance.pitch = 1;
       const voices = synth.getVoices();
-      const voice = voices.find(item => item.lang === 'en-IN')
-        || voices.find(item => /^en/i.test(item.lang))
+      const voice = voices.find(item => item.lang === 'hi-IN')
+        || voices.find(item => /^hi/i.test(item.lang))
         || voices[0];
       if (voice) utterance.voice = voice;
 
@@ -4591,6 +4591,135 @@ function buildSessionSpeechText(session, type) {
     : 'Your session time is over. Please exit now.';
 }
 
+function formatSpeechDurationHindi(seconds) {
+  const total = Math.max(0, Math.ceil(Number(seconds || 0)));
+  const minutes = Math.floor(total / 60);
+  const remainingSeconds = total % 60;
+  if (minutes && remainingSeconds) return `${minutes} मिनट ${remainingSeconds} सेकंड`;
+  if (minutes) return `${minutes} मिनट`;
+  return `${remainingSeconds} सेकंड`;
+}
+
+function buildScanSpeechTextHindi(result) {
+  const name = speechName(result?.name);
+  const action = normalizeAttendanceAction(result?.attendanceAction);
+  const status = String(result?.status || '').toLowerCase();
+  const rawMessage = String(result?.message || '').trim();
+
+  if (status === 'granted') {
+    if (action === 'OUT') {
+      return name
+        ? `${name}, आपका एग्जिट सफलतापूर्वक मार्क हो गया है। धन्यवाद।`
+        : 'आपका एग्जिट सफलतापूर्वक मार्क हो गया है। धन्यवाद।';
+    }
+    return name
+      ? `नमस्ते ${name}, आपकी अटेंडेंस सफलतापूर्वक मार्क हो गई है।`
+      : 'नमस्ते, आपकी अटेंडेंस सफलतापूर्वक मार्क हो गई है।';
+  }
+
+  if (status === 'cooldown') {
+    const waitFor = formatSpeechDurationHindi(result?.cooldownRemainingSeconds || 0);
+    return action === 'OUT'
+      ? `कृपया ${waitFor} रुकिए, उसके बाद एग्जिट कर सकते हैं।`
+      : `कृपया ${waitFor} रुकिए, फिर दोबारा कोशिश करें।`;
+  }
+
+  if (status === 'duplicate') {
+    if (/exit already/i.test(rawMessage)) return 'आज आपका एग्जिट पहले से मार्क हो चुका है।';
+    if (/exit is pending/i.test(rawMessage)) return 'आपकी एंट्री पहले से मार्क है। एग्जिट के लिए बाद में फिर स्कैन करें।';
+    return 'आपकी अटेंडेंस पहले से मार्क है।';
+  }
+
+  if (status === 'retry') {
+    return 'चेहरा साफ नहीं दिख रहा है। कृपया कैमरे की तरफ देखकर दोबारा कोशिश करें।';
+  }
+
+  if (status === 'unknown') {
+    return 'चेहरा पहचान में नहीं आया। कृपया दोबारा कोशिश करें।';
+  }
+
+  if (/expired/i.test(rawMessage)) {
+    return 'आपकी मेंबरशिप समाप्त हो गई है। कृपया फ्रंट डेस्क से संपर्क करें।';
+  }
+
+  return 'एक्सेस अस्वीकार किया गया है। कृपया फ्रंट डेस्क से संपर्क करें।';
+}
+
+function buildSessionSpeechTextHindi(session, type) {
+  const name = speechName(session?.name);
+  if (type === 'warning') {
+    return name
+      ? `${name}, आपका सेशन 5 मिनट में समाप्त होगा। कृपया एग्जिट के लिए तैयार रहें।`
+      : 'आपका सेशन 5 मिनट में समाप्त होगा। कृपया एग्जिट के लिए तैयार रहें।';
+  }
+  return name
+    ? `${name}, आपका सेशन समय समाप्त हो गया है। कृपया अब एग्जिट करें।`
+    : 'आपका सेशन समय समाप्त हो गया है। कृपया अब एग्जिट करें।';
+}
+
+buildScanSpeechText = buildScanSpeechTextHindi;
+buildSessionSpeechText = buildSessionSpeechTextHindi;
+
+function hiText(codes) {
+  return String.fromCodePoint(...String(codes).trim().split(/\s+/).map(code => parseInt(code, 16)));
+}
+
+const HI_MINUTE = hiText('092E 093F 0928 091F');
+const HI_SECOND = hiText('0938 0947 0915 0902 0921');
+const HI_ENTRY_MARKED = hiText('0928 092E 0938 094D 0924 0947 002C 0020 0939 093E 091C 093F 0930 0940 0020 0926 0930 094D 091C 0020 0939 094B 0020 0917 092F 0940 0964');
+const HI_EXIT_MARKED = hiText('0928 093F 0915 093E 0938 0020 0926 0930 094D 091C 0020 0939 094B 0020 0917 092F 093E 0964 0020 0927 0928 094D 092F 0935 093E 0926 0964');
+const HI_PLEASE = hiText('0915 0943 092A 092F 093E');
+const HI_WAIT_RETRY = hiText('0930 0941 0915 093F 090F 002C 0020 092B 093F 0930 0020 0915 094B 0936 093F 0936 0020 0915 0930 0947 0902 0964');
+const HI_WAIT_EXIT = hiText('0930 0941 0915 093F 090F 002C 0020 0909 0938 0915 0947 0020 092C 093E 0926 0020 0928 093F 0915 093E 0938 0020 0915 0930 0947 0902 0964');
+const HI_DUPLICATE = hiText('0939 093E 091C 093F 0930 0940 0020 092A 0939 0932 0947 0020 0938 0947 0020 0926 0930 094D 091C 0020 0939 0948 0964');
+const HI_EXIT_DUPLICATE = hiText('0928 093F 0915 093E 0938 0020 092A 0939 0932 0947 0020 0938 0947 0020 0926 0930 094D 091C 0020 0939 0948 0964');
+const HI_RETRY_FACE = hiText('091A 0947 0939 0930 093E 0020 0938 093E 092B 0020 0928 0939 0940 0902 0020 0939 0948 0964 0020 092B 093F 0930 0020 0915 094B 0936 093F 0936 0020 0915 0930 0947 0902 0964');
+const HI_UNKNOWN_FACE = hiText('091A 0947 0939 0930 093E 0020 092A 0939 091A 093E 0928 0020 092E 0947 0902 0020 0928 0939 0940 0902 0020 0906 092F 093E 0964');
+const HI_EXPIRED = hiText('0938 0926 0938 094D 092F 0924 093E 0020 0938 092E 093E 092A 094D 0924 0020 0939 0948 0964 0020 0915 093E 0930 094D 092F 093E 0932 092F 0020 0938 0947 0020 0938 0902 092A 0930 094D 0915 0020 0915 0930 0947 0902 0964');
+const HI_DENIED = hiText('0905 0928 0941 092E 0924 093F 0020 0928 0939 0940 0902 0020 0939 0948 0964 0020 0915 093E 0930 094D 092F 093E 0932 092F 0020 0938 0947 0020 0938 0902 092A 0930 094D 0915 0020 0915 0930 0947 0902 0964');
+const HI_SESSION_WARNING = hiText('0938 092E 092F 0020 092A 093E 0902 091A 0020 092E 093F 0928 091F 0020 092E 0947 0902 0020 0938 092E 093E 092A 094D 0924 0020 0939 094B 0917 093E 0964');
+const HI_SESSION_OVER = hiText('0938 092E 092F 0020 0938 092E 093E 092A 094D 0924 0020 0939 094B 0020 0917 092F 093E 0964 0020 0915 0943 092A 092F 093E 0020 0928 093F 0915 093E 0938 0020 0915 0930 0947 0902 0964');
+
+function formatSpeechDurationHindiRuntime(seconds) {
+  const total = Math.max(0, Math.ceil(Number(seconds || 0)));
+  const minutes = Math.floor(total / 60);
+  const remainingSeconds = total % 60;
+  if (minutes && remainingSeconds) return `${minutes} ${HI_MINUTE} ${remainingSeconds} ${HI_SECOND}`;
+  if (minutes) return `${minutes} ${HI_MINUTE}`;
+  return `${remainingSeconds} ${HI_SECOND}`;
+}
+
+buildScanSpeechText = function buildScanSpeechTextHindiRuntime(result) {
+  const name = speechName(result?.name);
+  const action = normalizeAttendanceAction(result?.attendanceAction);
+  const status = String(result?.status || '').toLowerCase();
+  const rawMessage = String(result?.message || '').trim();
+
+  if (status === 'granted') {
+    return name ? `${name}, ${action === 'OUT' ? HI_EXIT_MARKED : HI_ENTRY_MARKED}` : (action === 'OUT' ? HI_EXIT_MARKED : HI_ENTRY_MARKED);
+  }
+
+  if (status === 'cooldown') {
+    const waitFor = formatSpeechDurationHindiRuntime(result?.cooldownRemainingSeconds || 0);
+    return `${HI_PLEASE} ${waitFor} ${action === 'OUT' ? HI_WAIT_EXIT : HI_WAIT_RETRY}`;
+  }
+
+  if (status === 'duplicate') {
+    return /exit already/i.test(rawMessage) ? HI_EXIT_DUPLICATE : HI_DUPLICATE;
+  }
+
+  if (status === 'retry') return HI_RETRY_FACE;
+  if (status === 'unknown') return HI_UNKNOWN_FACE;
+  if (/expired/i.test(rawMessage)) return HI_EXPIRED;
+  return HI_DENIED;
+};
+
+buildSessionSpeechText = function buildSessionSpeechTextHindiRuntime(session, type) {
+  const name = speechName(session?.name);
+  const message = type === 'warning' ? HI_SESSION_WARNING : HI_SESSION_OVER;
+  return name ? `${name}, ${message}` : message;
+};
+
 function shouldSpeakScanFeedback(key, throttleMs) {
   const now = Date.now();
   const lastAt = Number(S.cooldownVoiceAt[key] || 0);
@@ -4991,10 +5120,12 @@ function pickSpeechVoice(voices) {
       const lang = String(voice?.lang || '').toLowerCase();
       const name = String(voice?.name || '').toLowerCase();
       let score = 0;
-      if (lang === 'en-in') score += 300;
-      else if (lang.startsWith('en')) score += 180;
+      if (lang === 'hi-in') score += 400;
+      else if (lang.startsWith('hi')) score += 320;
+      else if (lang === 'en-in') score += 80;
       if (name.includes('google')) score += 80;
       if (name.includes('microsoft')) score += 60;
+      if (name.includes('hindi')) score += 120;
       if (name.includes('india') || name.includes('indian')) score += 50;
       if (name.includes('natural') || name.includes('online') || name.includes('premium')) score += 35;
       if (name.includes('female')) score += 15;
