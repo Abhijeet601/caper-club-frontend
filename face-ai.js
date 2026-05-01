@@ -1,13 +1,18 @@
 (function initFaceAi(global) {
   'use strict';
 
-  const DEFAULT_THRESHOLD = 0.56;
+  const DEFAULT_THRESHOLD = 0.47;
+  const STRONG_MATCH_THRESHOLD = 0.42;
+  const MIN_MATCH_MARGIN = 0.045;
+  const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
     Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
     Object.freeze({ inputSize: 320, scoreThreshold: 0.4, label: 'balanced' }),
   ]);
   const VIDEO_FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 256, scoreThreshold: 0.42, label: 'video-fast' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.44, label: 'video-fast' }),
+  ]);
+  const VIDEO_RECOVERY_PASSES = Object.freeze([
     Object.freeze({ inputSize: 320, scoreThreshold: 0.36, label: 'video-balanced' }),
   ]);
   const CENTER_CROP_PASSES = Object.freeze([
@@ -23,8 +28,8 @@
     label: 'focus-zoom',
   });
   const VIDEO_FOCUS_PASS = Object.freeze({
-    inputSize: 384,
-    scoreThreshold: 0.24,
+    inputSize: 320,
+    scoreThreshold: 0.28,
     label: 'video-focus',
   });
   const SMALL_FACE_RATIO = 0.18;
@@ -32,6 +37,7 @@
   const TARGET_FACE_RATIO = 0.24;
   const MAX_RECOMMENDED_ZOOM = 2.6;
   const DETECTOR_OPTIONS_CACHE = new Map();
+  const USER_DESCRIPTOR_CACHE = new WeakMap();
 
   function ensureFaceApi() {
     if (!global.faceapi) {
@@ -364,18 +370,19 @@
 
     if (opts.videoMode) {
       let detection = null;
+      const recoveryMode = Boolean(opts.recoveryMode);
 
       if (opts.hintBox) {
         detection = await refineSmallFace(input, dimensions.width, dimensions.height, { faceBox: opts.hintBox }, {
           pass: VIDEO_FOCUS_PASS,
-          targetLongEdge: 640,
+          targetLongEdge: 512,
           captureMode: 'focus-lock',
           single: true,
         });
       }
 
       if (!detection) {
-        detection = await detectOnSurface(input, dimensions.width, dimensions.height, VIDEO_FULL_FRAME_PASSES, {
+        detection = await detectOnSurface(input, dimensions.width, dimensions.height, recoveryMode ? VIDEO_RECOVERY_PASSES : VIDEO_FULL_FRAME_PASSES, {
           captureMode: 'video-frame',
           single: true,
         });
@@ -390,10 +397,10 @@
         });
       }
 
-      if (detection && (detection.faceRatio < SMALL_FACE_RATIO || detection.captureMode !== 'video-frame')) {
+      if (detection && detection.captureMode !== 'focus-lock' && detection.faceRatio < SMALL_FACE_RATIO) {
         const refined = await refineSmallFace(input, dimensions.width, dimensions.height, detection, {
           pass: VIDEO_FOCUS_PASS,
-          targetLongEdge: 640,
+          targetLongEdge: 512,
           captureMode: 'focus-lock',
           single: true,
         });
@@ -429,6 +436,7 @@
       videoMode: true,
       hintBox: opts.hintBox || null,
       allowLongRange: opts.allowLongRange !== false,
+      recoveryMode: Boolean(opts.recoveryMode),
     });
   }
 
@@ -470,28 +478,111 @@
     return normalizeDescriptor(averaged);
   }
 
+  function descriptorCandidatesForUser(user) {
+    if (user && USER_DESCRIPTOR_CACHE.has(user)) {
+      return USER_DESCRIPTOR_CACHE.get(user);
+    }
+
+    const candidates = [];
+    const seen = new Set();
+
+    function addCandidate(values, source) {
+      const descriptor = normalizeDescriptor(values);
+      if (!descriptor) return;
+      const key = descriptor.join(',');
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push({ descriptor, source });
+    }
+
+    (Array.isArray(user?.descriptors) ? user.descriptors : []).forEach(values => {
+      addCandidate(values, 'sample');
+    });
+    addCandidate(user?.descriptor, 'centroid');
+
+    if (user && typeof user === 'object') {
+      USER_DESCRIPTOR_CACHE.set(user, candidates);
+    }
+
+    return candidates;
+  }
+
+  function scoreUserMatch(descriptor, user, threshold) {
+    const candidates = descriptorCandidatesForUser(user);
+    if (!candidates.length) return null;
+
+    const distances = candidates
+      .map(candidate => ({
+        distance: euclideanDistance(descriptor, candidate.descriptor),
+        source: candidate.source,
+      }))
+      .filter(item => Number.isFinite(item.distance))
+      .sort((left, right) => left.distance - right.distance);
+
+    if (!distances.length) return null;
+
+    const sampleDistances = distances.filter(item => item.source === 'sample');
+    const supportLimit = threshold + SUPPORT_DISTANCE_BUFFER;
+    const supportCount = sampleDistances.filter(item => item.distance <= supportLimit).length;
+    const hasSampleSet = sampleDistances.length >= 3;
+    const topSampleDistances = sampleDistances.slice(0, Math.min(3, sampleDistances.length));
+    const sampleMeanDistance = topSampleDistances.length
+      ? topSampleDistances.reduce((total, item) => total + item.distance, 0) / topSampleDistances.length
+      : distances[0].distance;
+
+    return {
+      user,
+      distance: distances[0].distance,
+      sampleMeanDistance,
+      supportCount,
+      sampleCount: sampleDistances.length || Number(user?.sampleCount || 0),
+      hasSampleSet,
+      bestSource: distances[0].source,
+    };
+  }
+
   function bestMatch(descriptor, users, threshold = DEFAULT_THRESHOLD) {
     if (!Array.isArray(descriptor) || !Array.isArray(users) || !users.length) {
       return null;
     }
 
-    let match = null;
+    const ranked = users
+      .map(user => scoreUserMatch(descriptor, user, threshold))
+      .filter(Boolean)
+      .sort((left, right) => left.distance - right.distance);
 
-    users.forEach(user => {
-      if (!Array.isArray(user?.descriptor)) return;
-      const distance = euclideanDistance(descriptor, user.descriptor);
+    const best = ranked[0];
+    if (!best) return null;
 
-      if (!match || distance < match.distance) {
-        match = {
-          user,
-          distance: Number(distance.toFixed(4)),
-          confidence: distanceToConfidence(distance),
-          matched: distance <= threshold,
-        };
-      }
-    });
+    const runnerUp = ranked.find(candidate => String(candidate.user?.id || '') !== String(best.user?.id || '')) || null;
+    const secondDistance = runnerUp?.distance ?? Number.POSITIVE_INFINITY;
+    const margin = secondDistance - best.distance;
+    const strongMatch = best.distance <= STRONG_MATCH_THRESHOLD;
+    const separated = !Number.isFinite(secondDistance) || margin >= MIN_MATCH_MARGIN;
+    const sampleSupported = !best.hasSampleSet || best.supportCount >= 2 || strongMatch;
+    const matched = best.distance <= threshold && sampleSupported && (strongMatch || separated);
+    let reason = '';
 
-    return match;
+    if (best.distance > threshold) {
+      reason = 'distance';
+    } else if (!sampleSupported) {
+      reason = 'sample-support';
+    } else if (!strongMatch && !separated) {
+      reason = 'ambiguous';
+    }
+
+    return {
+      user: best.user,
+      distance: Number(best.distance.toFixed(4)),
+      secondDistance: Number.isFinite(secondDistance) ? Number(secondDistance.toFixed(4)) : null,
+      margin: Number.isFinite(secondDistance) ? Number(margin.toFixed(4)) : null,
+      sampleMeanDistance: Number(best.sampleMeanDistance.toFixed(4)),
+      sampleSupport: best.supportCount,
+      sampleCount: best.sampleCount,
+      confidence: distanceToConfidence(best.distance),
+      matched,
+      reason,
+    };
   }
 
   global.FaceAi = {

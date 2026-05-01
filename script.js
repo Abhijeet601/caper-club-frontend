@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 850;
+const LIVE_SCAN_INTERVAL = 650;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -141,7 +141,7 @@ const S = {
   audioUrl: '', audioContext: null, audioUnlocked: false,
   ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
   scanMissStreak: 0,
-  userFilters: { search: '', sport: '', plan: '', status: '', role: '' },
+  userFilters: { search: '', sport: '', plan: '', status: '', role: '', expiryStatus: '', paymentMode: '' },
   userPage: 1,
   reportFilter: { search: '', status: '', date: '' },
   membershipFilter: 'all',
@@ -365,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initUi() {
   updateApiBaseUi();
+  clearRestoredSessionTimerData();
   registerMediaUnlock();
   relocateFaceEnrollmentUi();
   const apiConfigForm = $('apiConfigForm');
@@ -389,7 +390,6 @@ function initUi() {
   populateSelects();
   updateAlertBadge();
   openTab('liveOpsTab');
-  restoreSessionTimers();
   initReportsModule();
 }
 
@@ -694,10 +694,9 @@ function logout() { clearSess(); toast('Signed out.', 'success'); }
 async function refreshAll(opts = {}) {
   if (!S.healthOk) pingHealth().catch(() => {});
   if (!S.currentUser || !S.token) { renderAll(); return; }
-  const timerSnapshot = snapshotActiveSessions();
   try {
     await refreshActiveTabData({ activeTab: opts.activeTab || S.activeTab, force: Boolean(opts.force) });
-    restoreMissingActiveSessions(timerSnapshot);
+    restoreMissingActiveSessions();
     persistSessionTimers();
     ensureSessionTimerLoop();
     if ($('lastSyncText')) $('lastSyncText').textContent = fmtDT(new Date().toISOString());
@@ -1238,6 +1237,16 @@ function renderUsers() {
   requestAnimationFrame(() => {
     const startTime = performance.now();
 
+    const now = new Date();
+    const getExpiryStatus = u => {
+      if (!u.membershipExpiry) return 'unknown';
+      const exp = new Date(u.membershipExpiry);
+      if (exp < now) return 'expired';
+      const daysLeft = (exp - now) / 86400000;
+      if (daysLeft <= 7) return 'expiring';
+      return 'active';
+    };
+
     let filtered = S.users.filter(u => {
       const statusValue = getUserStatusValue(u);
       const searchHaystack = [
@@ -1250,6 +1259,8 @@ function renderUsers() {
       if (filters.plan && String(u.membershipPlan || '') !== filters.plan) return false;
       if (filters.status && statusValue !== String(filters.status).toLowerCase()) return false;
       if (filters.role && String(u.role || '').toLowerCase() !== String(filters.role).toLowerCase()) return false;
+      if (filters.paymentMode && String(u.paymentMode || '') !== filters.paymentMode) return false;
+      if (filters.expiryStatus && getExpiryStatus(u) !== filters.expiryStatus) return false;
       return true;
     });
 
@@ -1365,7 +1376,7 @@ function renderUsers() {
 }
 
 function populateAllMemberFilters() {
-  const filters = S.userFilters || { search: '', sport: '', plan: '', status: '', role: '' };
+  const filters = S.userFilters || { search: '', sport: '', plan: '', status: '', role: '', expiryStatus: '', paymentMode: '' };
 
   // Cache filter options to avoid recalculating on every tab switch
   if (!S.cachedFilterOptions || S.usersChanged) {
@@ -1373,7 +1384,8 @@ function populateAllMemberFilters() {
       sport: uniqueSortedValues(S.users.map(user => user?.sport)),
       plan: uniqueSortedValues(S.users.map(user => user?.membershipPlan)),
       status: uniqueSortedValues(S.users.map(getUserStatusValue)),
-      role: uniqueSortedValues(S.users.map(user => String(user?.role || '').toLowerCase()))
+      role: uniqueSortedValues(S.users.map(user => String(user?.role || '').toLowerCase())),
+      paymentMode: uniqueSortedValues(S.users.map(user => user?.paymentMode))
     };
     S.usersChanged = false;
   }
@@ -1383,6 +1395,8 @@ function populateAllMemberFilters() {
   fillValueSelect($('userPlanFilterInput'), S.cachedFilterOptions.plan, { blankLabel: 'All Plans', value: filters.plan });
   fillValueSelect($('userStatusFilterInput'), S.cachedFilterOptions.status, { blankLabel: 'All Statuses', value: filters.status, label: formatUserStatusLabel });
   fillValueSelect($('userRoleFilterInput'), S.cachedFilterOptions.role, { blankLabel: 'All Roles', value: filters.role, label: formatUserStatusLabel });
+  fillValueSelect($('userExpiryStatusFilterInput'), ['active','expiring','expired','unknown'], { blankLabel: 'All Memberships', value: filters.expiryStatus, label: formatUserStatusLabel });
+  fillValueSelect($('userPaymentModeFilterInput'), S.cachedFilterOptions.paymentMode, { blankLabel: 'All Modes', value: filters.paymentMode });
 }
 
 function changeUserPage(page) {
@@ -1391,7 +1405,7 @@ function changeUserPage(page) {
 }
 
 function resetAllMemberFilters() {
-  S.userFilters = { search: '', sport: '', plan: '', status: '', role: '' };
+  S.userFilters = { search: '', sport: '', plan: '', status: '', role: '', expiryStatus: '', paymentMode: '' };
   S.userPage = 1; // Reset to first page when clearing filters
   populateAllMemberFilters();
   renderUsers();
@@ -3242,6 +3256,7 @@ async function detectRecognitionProbe(opts = {}) {
   const detection = await window.FaceAi.detectFromVideo(video, {
     hintBox: S.liveDetection?.faceBox || null,
     allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
+    recoveryMode: S.scanMissStreak >= 2,
   });
   S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
   return { source, detection };
@@ -4656,7 +4671,6 @@ function applyScanResult(r) {
 
 const SESSION_DURATION_MS = 70 * 60 * 1000;
 const SESSION_TIMER_GRACE_MS = 10 * 60 * 1000;
-const ACTIVE_SESSION_BACKEND_MISS_GRACE_MS = 2 * 60 * 1000;
 
 function parseTimestampMs(value) {
   const parsed = Date.parse(String(value || ''));
@@ -4703,12 +4717,6 @@ function buildActiveSessionState(session, existing = null) {
   };
 }
 
-function snapshotActiveSessions() {
-  return Object.fromEntries(
-    Object.entries(S.activeSessions).map(([userId, session]) => [userId, { ...session }])
-  );
-}
-
 function getBackendActiveSessionsByUser() {
   return toArr(S.sessions)
     .filter(session => String(session?.status || '').toLowerCase() === 'active')
@@ -4720,32 +4728,20 @@ function getBackendActiveSessionsByUser() {
     }, {});
 }
 
-function shouldPreserveMissingActiveSession(session, now = Date.now()) {
-  const startTime = Number(session?.startTime || now);
-  const duration = Math.max(1000, Number(session?.duration || SESSION_DURATION_MS));
-  const deadlineTime = Number(session?.deadlineTime || (startTime + duration));
-  const lastSeenAt = Number(session?.lastSeenAt || startTime);
-
-  if (now >= deadlineTime) return false;
-  return (now - lastSeenAt) <= ACTIVE_SESSION_BACKEND_MISS_GRACE_MS;
+function clearRestoredSessionTimerData() {
+  S.activeSessions = {};
+  S.activeSessionsRenderKey = '';
+  if (S.sessionTimerLoop) {
+    clearInterval(S.sessionTimerLoop);
+    S.sessionTimerLoop = null;
+  }
+  try {
+    localStorage.removeItem(STORAGE_KEYS.sessionTimers);
+  } catch {}
 }
 
-function restoreMissingActiveSessions(snapshot) {
-  const now = Date.now();
-  const backendActiveSessions = getBackendActiveSessionsByUser();
-
-  Object.entries(snapshot || {}).forEach(([userId, session]) => {
-    if (S.activeSessions[userId]) return;
-    if (!shouldPreserveMissingActiveSession(session, now)) return;
-    const backendSession = backendActiveSessions[userId];
-
-    S.activeSessions[userId] = backendSession
-      ? buildActiveSessionState(backendSession, session)
-      : {
-        ...session,
-        userId: String(session?.userId || userId),
-      };
-  });
+function restoreMissingActiveSessions() {
+  syncActiveSessionsFromBackend();
 }
 
 function upsertActiveSessionFromBackend(session) {
@@ -4763,22 +4759,11 @@ function upsertActiveSessionFromBackend(session) {
 }
 
 function syncActiveSessionsFromBackend() {
-  const snapshot = snapshotActiveSessions();
   const backendActiveSessions = getBackendActiveSessionsByUser();
   const nextSessions = {};
-  const now = Date.now();
 
   Object.entries(backendActiveSessions).forEach(([userId, session]) => {
     nextSessions[userId] = buildActiveSessionState(session, S.activeSessions[userId] || null);
-  });
-
-  Object.entries(snapshot).forEach(([userId, session]) => {
-    if (nextSessions[userId]) return;
-    if (!shouldPreserveMissingActiveSession(session, now)) return;
-    nextSessions[userId] = {
-      ...session,
-      userId: String(session?.userId || userId),
-    };
   });
 
   S.activeSessions = nextSessions;
@@ -4878,41 +4863,12 @@ function tickSessionTimers() {
 
 function persistSessionTimers() {
   try {
-    localStorage.setItem(STORAGE_KEYS.sessionTimers, JSON.stringify(
-      Object.fromEntries(
-        Object.entries(S.activeSessions).map(([id, session]) => [id, { ...session }])
-      )
-    ));
+    localStorage.removeItem(STORAGE_KEYS.sessionTimers);
   } catch {}
 }
 
 function restoreSessionTimers() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEYS.sessionTimers);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    const now = Date.now();
-    Object.entries(parsed).forEach(([userId, sess]) => {
-      const startTime = Number(sess?.startTime || now);
-      const duration = Math.max(1000, Number(sess?.duration || SESSION_DURATION_MS));
-      const deadlineTime = Number(sess?.deadlineTime || (startTime + duration));
-      if (now < deadlineTime + SESSION_TIMER_GRACE_MS) {
-        S.activeSessions[userId] = {
-          ...sess,
-          userId: String(sess?.userId || userId),
-          startTime,
-          duration,
-          deadlineTime,
-          lastSeenAt: Number(sess?.lastSeenAt || startTime),
-          name: sess?.name || 'Member',
-          announced5: Boolean(sess?.announced5),
-          announcedEnd: Boolean(sess?.announcedEnd),
-        };
-      }
-    });
-    ensureSessionTimerLoop();
-    renderActiveSessionsPanel();
-  } catch {}
+  clearRestoredSessionTimerData();
 }
 
 function renderActiveSessionsPanel(force = false) {
