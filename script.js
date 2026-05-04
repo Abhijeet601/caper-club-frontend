@@ -655,7 +655,7 @@ async function handleLogin(e) {
   e.preventDefault();
   try {
     const payload = await api('/login', { method: 'POST', body: { email: $('loginEmail').value.trim(), password: $('loginPassword').value }});
-    S.token = payload.access_token || '';;
+    S.token = payload.accessToken || payload.access_token || '';
     S.currentUser = payload.user || null;
     sessionStorage.setItem(STORAGE_KEYS.token, S.token);
     setAuth(S.currentUser);
