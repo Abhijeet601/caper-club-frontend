@@ -654,7 +654,7 @@ async function handleApiSave(e) {
 async function handleLogin(e) {
   e.preventDefault();
   try {
-    const payload = await api('/auth/login', { method: 'POST', body: { email: $('loginEmail').value.trim(), password: $('loginPassword').value }});
+    const payload = await api('/login', { method: 'POST', body: { email: $('loginEmail').value.trim(), password: $('loginPassword').value }});
     S.token = payload.access_token || '';;
     S.currentUser = payload.user || null;
     sessionStorage.setItem(STORAGE_KEYS.token, S.token);
