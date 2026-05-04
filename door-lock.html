@@ -374,7 +374,7 @@
       </div>
       <div class="field">
         <label>API Key (X-Door-Key)</label>
-        <input type="text" id="cfg-key" placeholder="caperclub-door-2026" />
+        <input type="text" id="cfg-key" placeholder="Enter manually for local testing only" />
       </div>
       <div class="btn-row">
         <button class="btn primary" id="btn-save-cfg">💾 Save & Apply</button>
@@ -405,7 +405,7 @@ function loadConfig() {
   } catch (_) {}
   return {
     backendUrl: '',
-    doorApiKey: 'caperclub-door-2026',
+    doorApiKey: '',
   };
 }
 function saveConfig(cfg) {

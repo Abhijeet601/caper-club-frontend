@@ -13,6 +13,7 @@ const STORAGE_KEYS = {
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 650;
+const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -135,6 +136,11 @@ const S = {
   activeSessions: {},        // { userId: { sessionId, startTime, deadlineTime, duration, name, announced5, announcedEnd } }
   activeSessionsRenderKey: '',
   sessionTimerLoop: null,
+  doorCommand: 'LOCK',
+  doorUpdatedAt: null,
+  doorStatusTimer: null,
+  doorStatusSyncPromise: null,
+  lastDoorDetectionSignal: '',
   enrollmentImages: [],
   enrollmentZoom: 1,
   stream: null, refreshTimer: null, healthTimer: null, toastTimer: null,
@@ -365,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initUi() {
   updateApiBaseUi();
+  updateDoorUi();
   clearRestoredSessionTimerData();
   registerMediaUnlock();
   relocateFaceEnrollmentUi();
@@ -647,8 +654,8 @@ async function handleApiSave(e) {
 async function handleLogin(e) {
   e.preventDefault();
   try {
-    const payload = await api('/login', { method: 'POST', body: { email: $('loginEmail').value.trim(), password: $('loginPassword').value }});
-    S.token = payload.accessToken || '';
+    const payload = await api('/auth/login', { method: 'POST', body: { email: $('loginEmail').value.trim(), password: $('loginPassword').value }});
+    S.token = payload.access_token || '';;
     S.currentUser = payload.user || null;
     sessionStorage.setItem(STORAGE_KEYS.token, S.token);
     setAuth(S.currentUser);
@@ -687,9 +694,21 @@ function setAuth(user) {
   $('enableCameraInput').disabled = !cameraAccess;
   $('captureScanBtn').disabled = !cameraAccess;
   $('captureEnrollmentBtn').disabled = !cameraAccess;
+
+  if (cameraAccess) {
+    startDoorStatusPoll();
+    syncDoorState({ silent: true }).catch(console.error);
+  } else {
+    clearDoorStatusPoll();
+    applyDoorStateSnapshot({ command: 'LOCK', updatedAt: null });
+  }
 }
 
-function logout() { clearSess(); toast('Signed out.', 'success'); }
+function logout() {
+  queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
+  clearSess();
+  toast('Signed out.', 'success');
+}
 
 /* â”€â”€ REFRESH â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function refreshAll(opts = {}) {
@@ -697,6 +716,7 @@ async function refreshAll(opts = {}) {
   if (!S.currentUser || !S.token) { renderAll(); return; }
   try {
     await refreshActiveTabData({ activeTab: opts.activeTab || S.activeTab, force: Boolean(opts.force) });
+    if (isAdmin()) await syncDoorState({ silent: true });
     restoreMissingActiveSessions();
     persistSessionTimers();
     ensureSessionTimerLoop();
@@ -815,6 +835,87 @@ async function pingHealth() {
   S.healthOk = await probeHealth(S.apiBase);
   updateHealthUi();
   return S.healthOk;
+}
+
+function applyDoorStateSnapshot(state) {
+  S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
+  S.doorUpdatedAt = state?.updatedAt || null;
+  updateDoorUi();
+}
+
+function updateDoorUi() {
+  const dot = $('doorDot');
+  const text = $('doorText');
+  if (!dot || !text) return;
+
+  const unlocked = S.doorCommand === 'UNLOCK';
+  dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
+  text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
+}
+
+async function syncDoorState(opts = {}) {
+  if (!S.currentUser || !S.token || !isAdmin()) {
+    applyDoorStateSnapshot({ command: 'LOCK', updatedAt: null });
+    return null;
+  }
+
+  if (S.doorStatusSyncPromise) return S.doorStatusSyncPromise;
+
+  S.doorStatusSyncPromise = (async () => {
+    try {
+      const state = await api('/door/state');
+      applyDoorStateSnapshot(state);
+      return state;
+    } catch (error) {
+      if (!opts.silent) console.error(error);
+      return null;
+    } finally {
+      S.doorStatusSyncPromise = null;
+    }
+  })();
+
+  return S.doorStatusSyncPromise;
+}
+
+function startDoorStatusPoll() {
+  clearDoorStatusPoll();
+  if (!S.currentUser || !S.token || !isAdmin()) return;
+  S.doorStatusTimer = setInterval(() => {
+    if (document.hidden) return;
+    syncDoorState({ silent: true }).catch(console.error);
+  }, DOOR_STATUS_POLL_MS);
+}
+
+function clearDoorStatusPoll() {
+  clearInterval(S.doorStatusTimer);
+  S.doorStatusTimer = null;
+}
+
+function buildDoorDetectionPayload(result) {
+  const status = String(result?.status || '').toLowerCase();
+  const knownFace = result?.knownFace === true || ['granted', 'duplicate', 'cooldown'].includes(status);
+  return {
+    status,
+    knownFace,
+    forceLock: result?.forceLock === true || !knownFace,
+    name: typeof result?.name === 'string' ? result.name : null,
+  };
+}
+
+function queueDoorDetectionSync(result, opts = {}) {
+  if (!S.currentUser || !S.token || !isAdmin()) return;
+
+  const payload = buildDoorDetectionPayload(result);
+  const signature = JSON.stringify(payload);
+  if (!opts.force && signature === S.lastDoorDetectionSignal) return;
+  S.lastDoorDetectionSignal = signature;
+
+  api('/door/detection', {
+    method: 'POST',
+    body: payload,
+  }).then(state => {
+    if (state?.command) applyDoorStateSnapshot(state);
+  }).catch(console.error);
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -2927,6 +3028,7 @@ function stopLiveScan(opts = {}) {
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
+  queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
   stopCamera();
@@ -4156,6 +4258,7 @@ function toast(msg, type = '') {
 function clearSess() {
   sessionStorage.removeItem(STORAGE_KEYS.token);
   scannedUsers.clear();
+  clearDoorStatusPoll();
   Object.assign(S, {
     token:'', activeTab:'liveOpsTab', currentUser:null, dashboard:null, users:[], slots:[],
     sessions:[], announcements:[], reports:null, memberDashboard:null, memberProfile:null,
@@ -4164,6 +4267,7 @@ function clearSess() {
     enrollmentZoom:1,
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
+    doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
     activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
@@ -4749,6 +4853,7 @@ function maybeSpeakDuplicate(result) {
 }
 
 function applyScanResult(r) {
+  queueDoorDetectionSync(r);
   const detail = r.name ? `${r.name} - ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
   if (r.status === 'granted') {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
