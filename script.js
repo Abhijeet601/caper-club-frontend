@@ -119,6 +119,7 @@ const S = {
   token: sessionStorage.getItem(STORAGE_KEYS.token) || '',
   activeTab: 'liveOpsTab',
   currentUser: null, healthOk: false,
+  healthDetail: 'Checking backend connection...',
   dashboard: null, users: [], slots: [], sessions: [],
   announcements: [], reports: null,
   memberDashboard: null, memberProfile: null,
@@ -376,10 +377,6 @@ function initUi() {
   clearRestoredSessionTimerData();
   registerMediaUnlock();
   relocateFaceEnrollmentUi();
-  const apiConfigForm = $('apiConfigForm');
-  if (apiConfigForm?.closest('.panel-card')) {
-    apiConfigForm.closest('.panel-card').hidden = true;
-  }
   $('scanAreaInput').value = 'Capper Sports Club Entry';
   if ($('sessionAreaInput')) $('sessionAreaInput').value = 'Capper Sports Club Floor';
   if ($('sessionConfidenceInput') && $('sessionConfidenceValue')) {
@@ -431,6 +428,8 @@ function bindEvents() {
   // Backend
   if ($('apiConfigForm')) $('apiConfigForm').addEventListener('submit', handleApiSave);
   if ($('refreshAllBtn')) $('refreshAllBtn').addEventListener('click', () => refreshAll({ toast: true }));
+  if ($('openHealthBtn')) $('openHealthBtn').addEventListener('click', () => openBackendPage('/health'));
+  if ($('openDocsBtn')) $('openDocsBtn').addEventListener('click', () => openBackendPage('/docs'));
 
   // Auth
   $('loginForm').addEventListener('submit', handleLogin);
@@ -4157,6 +4156,8 @@ function updateApiBaseUi() {
 function updateHealthUi() {
   $('healthDot').className = `status-dot ${S.healthOk ? 'online' : 'alert'}`;
   $('healthText').textContent = S.healthOk ? 'Backend online' : 'Backend offline';
+  $('healthPill').title = `${S.apiBase} | ${S.healthDetail}`;
+  if ($('backendStatusDetail')) $('backendStatusDetail').textContent = S.healthDetail;
 }
 async function probeHealth(base) {
   const target = norm(base);
@@ -4173,14 +4174,27 @@ async function probeHealth(base) {
       signal: controller.signal,
     });
 
-    if (!response.ok) return false;
+    if (!response.ok) {
+      S.healthDetail = `Health check failed: ${response.status} ${response.statusText} at ${target}/health`;
+      return false;
+    }
 
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    if (!contentType.includes('application/json')) return false;
+    if (!contentType.includes('application/json')) {
+      S.healthDetail = `Unexpected health response type from ${target}/health: ${contentType || 'unknown'}`;
+      return false;
+    }
 
     const payload = await response.json().catch(() => null);
-    return payload?.ok === true;
-  } catch {
+    if (payload?.ok === true) {
+      S.healthDetail = `Connected to ${target}`;
+      return true;
+    }
+    S.healthDetail = `Health response from ${target}/health did not include ok=true`;
+    return false;
+  } catch (error) {
+    const message = humanizeApiFetchError(error, '/health');
+    S.healthDetail = message;
     return false;
   } finally {
     clearTimeout(timer);
@@ -4198,6 +4212,11 @@ async function ensureBackendConnection() {
   S.healthOk = false;
   updateHealthUi();
   return false;
+}
+
+function openBackendPage(path = '/health') {
+  const target = `${norm($('apiBaseInput')?.value || S.apiBase)}${path}`;
+  window.open(target, '_blank', 'noopener,noreferrer');
 }
 
 function getAbsoluteScriptUrl(src) {
