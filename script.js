@@ -12,7 +12,6 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LOCAL_DEV_API_BASE = inferLocalDevApiBase();
 const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
@@ -115,11 +114,10 @@ const SPORT_LEVELS = {
 
 /* â”€â”€ STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const S = {
-  apiBase: resolveInitialApiBase(),
+  apiBase: norm(localStorage.getItem(STORAGE_KEYS.apiBase) || DEFAULT_API_BASE),
   token: sessionStorage.getItem(STORAGE_KEYS.token) || '',
   activeTab: 'liveOpsTab',
   currentUser: null, healthOk: false,
-  healthDetail: 'Checking backend connection...',
   dashboard: null, users: [], slots: [], sessions: [],
   announcements: [], reports: null,
   memberDashboard: null, memberProfile: null,
@@ -377,6 +375,10 @@ function initUi() {
   clearRestoredSessionTimerData();
   registerMediaUnlock();
   relocateFaceEnrollmentUi();
+  const apiConfigForm = $('apiConfigForm');
+  if (apiConfigForm?.closest('.panel-card')) {
+    apiConfigForm.closest('.panel-card').hidden = true;
+  }
   $('scanAreaInput').value = 'Capper Sports Club Entry';
   if ($('sessionAreaInput')) $('sessionAreaInput').value = 'Capper Sports Club Floor';
   if ($('sessionConfidenceInput') && $('sessionConfidenceValue')) {
@@ -428,14 +430,11 @@ function bindEvents() {
   // Backend
   if ($('apiConfigForm')) $('apiConfigForm').addEventListener('submit', handleApiSave);
   if ($('refreshAllBtn')) $('refreshAllBtn').addEventListener('click', () => refreshAll({ toast: true }));
-  if ($('openHealthBtn')) $('openHealthBtn').addEventListener('click', () => openBackendPage('/health'));
-  if ($('openDocsBtn')) $('openDocsBtn').addEventListener('click', () => openBackendPage('/docs'));
 
   // Auth
   $('loginForm').addEventListener('submit', handleLogin);
   $('logoutBtn').addEventListener('click', logout);
   $('loadMeBtn').addEventListener('click', () => refreshAll({ toast: true }));
-  if ($('manualDoorUnlockBtn')) $('manualDoorUnlockBtn').addEventListener('click', triggerManualDoorUnlock);
   if ($('manualDoorLockBtn')) $('manualDoorLockBtn').addEventListener('click', triggerManualDoorLock);
 
   // Users
@@ -665,7 +664,6 @@ async function handleLogin(e) {
 function setAuth(user) {
   const ok = Boolean(user && S.token);
   const cameraAccess = ok && isAdmin();
-  const manualDoorUnlockBtn = $('manualDoorUnlockBtn');
   const manualDoorLockBtn = $('manualDoorLockBtn');
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
   $('authText').textContent = ok ? `${user.role?.toUpperCase()} â€¢ ${user.name}` : 'Signed out';
@@ -693,7 +691,6 @@ function setAuth(user) {
   $('enableCameraInput').disabled = !cameraAccess;
   $('captureScanBtn').disabled = !cameraAccess;
   $('captureEnrollmentBtn').disabled = !cameraAccess;
-  if (manualDoorUnlockBtn) manualDoorUnlockBtn.disabled = !cameraAccess;
   if (manualDoorLockBtn) manualDoorLockBtn.disabled = !cameraAccess;
 
   if (cameraAccess) {
@@ -847,14 +844,12 @@ function applyDoorStateSnapshot(state) {
 function updateDoorUi() {
   const dot = $('doorDot');
   const text = $('doorText');
-  const unlockButton = $('manualDoorUnlockBtn');
   const button = $('manualDoorLockBtn');
   if (!dot || !text) return;
 
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
   text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
-  if (unlockButton) unlockButton.textContent = unlocked ? 'Unlocked' : 'Manual Unlock';
   if (button) button.textContent = unlocked ? 'Manual Lock' : 'Locked';
 }
 
@@ -929,9 +924,7 @@ function queueDoorDetectionSync(result, opts = {}) {
 async function triggerManualDoorLock() {
   if (!ensureAdmin()) return;
 
-  const unlockButton = $('manualDoorUnlockBtn');
   const button = $('manualDoorLockBtn');
-  if (unlockButton) unlockButton.disabled = true;
   if (button) button.disabled = true;
 
   try {
@@ -945,31 +938,7 @@ async function triggerManualDoorLock() {
   } catch (error) {
     handleErr(error, { toast: true });
   } finally {
-    if (unlockButton) unlockButton.disabled = !isAdmin();
     if (button) button.disabled = !isAdmin();
-  }
-}
-
-async function triggerManualDoorUnlock() {
-  if (!ensureAdmin()) return;
-
-  const unlockButton = $('manualDoorUnlockBtn');
-  const lockButton = $('manualDoorLockBtn');
-  if (unlockButton) unlockButton.disabled = true;
-  if (lockButton) lockButton.disabled = true;
-
-  try {
-    const state = await api('/door/manual-unlock', {
-      method: 'POST',
-    });
-    applyDoorStateSnapshot(state);
-    S.lastDoorDetectionSignal = '';
-    toast('Door unlocked manually.', 'success');
-  } catch (error) {
-    handleErr(error, { toast: true });
-  } finally {
-    if (unlockButton) unlockButton.disabled = !isAdmin();
-    if (lockButton) lockButton.disabled = !isAdmin();
   }
 }
 
@@ -3069,7 +3038,6 @@ async function startLiveScan(opts = {}) {
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
   setScanState('loading','Scanning...','Sending frame to backend recognition.');
-  ensureFaceModelsLoaded().catch(() => {});
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -3203,25 +3171,6 @@ function getCameraErrorMessage(err) {
 async function runLiveCycle() {
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
-  if (S.faceModelsReady && window.FaceAi) {
-    const probe = await detectRecognitionProbe({ source: 'camera' });
-    if (!probe?.detection?.faceBox) {
-      setLiveDetection(null, { keepSearchZoom: true });
-      const retryResult = buildClientScanResult({
-        status: 'retry',
-        message: probe?.message || 'No face detected. Align your face and try again.',
-        source: 'camera',
-      });
-      S.scanResult = retryResult;
-      renderScanResult();
-      applyScanResult(retryResult);
-      renderConsole();
-      return;
-    }
-
-    setLiveDetection(probe.detection, { keepSearchZoom: true });
-    setScanState('loading', 'Face locked', buildDetectionAssistDetail(probe.detection), 'Face Lock');
-  }
   await runScan({ source: 'camera', showToast: false });
 }
 
@@ -3361,22 +3310,7 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    const fallbackMessage = err?.message || 'Scan failed.';
-    if (isRetryLikeScanError(err)) {
-      const retryResult = buildClientScanResult({
-        status: 'retry',
-        message: fallbackMessage,
-        source,
-      });
-      if (source === 'camera') setLiveDetection(null, { keepSearchZoom: true });
-      S.scanResult = retryResult;
-      renderScanResult();
-      applyScanResult(retryResult);
-      if (opts.showToast) toast(fallbackMessage, 'warning');
-      return retryResult;
-    }
-
-    setScanState('denied', 'Access Denied', fallbackMessage);
+    setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
@@ -3386,18 +3320,6 @@ async function runScan(opts = {}) {
     }
     renderConsole();
   }
-}
-
-function isRetryLikeScanError(err) {
-  const message = String(err?.message || '').toLowerCase();
-  if (!message) return false;
-  return [
-    'no face detected',
-    'face alignment failed',
-    'encoding failed',
-    'camera preview is not ready yet',
-    'unable to read image payload',
-  ].some(fragment => message.includes(fragment));
 }
 
 async function detectRecognitionProbe(opts = {}) {
@@ -4059,7 +3981,6 @@ async function api(path, opts = {}) {
       S.healthOk = false;
       updateHealthUi();
     }
-    error.message = humanizeApiFetchError(error, path);
     throw error;
   }
   if (!S.healthOk) {
@@ -4089,63 +4010,14 @@ function ensureAdmin() {
 function streamHasActiveVideo(stream) {
   return Boolean(stream && stream.getVideoTracks().some(track => track.readyState === 'live'));
 }
-function inferLocalDevApiBase() {
-  const origin = window.location.origin && window.location.origin !== 'null'
-    ? window.location.origin
-    : '';
-
-  if (origin) {
-    try {
-      const url = new URL(origin);
-      const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
-      if (isLocalHost) return `${url.protocol}//${url.hostname}:8001`;
-    } catch {}
-  }
-
-  return '';
-}
-function inferHostedApiBase() {
-  const origin = window.location.origin && window.location.origin !== 'null'
-    ? window.location.origin
-    : '';
-
-  if (!origin) return '';
-
-  try {
-    const url = new URL(origin);
-    const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
-    if (isLocalHost) return '';
-    return `${url.protocol}//${url.host}`;
-  } catch {
-    return '';
-  }
-}
-function readApiBaseOverride() {
-  try {
-    const url = new URL(window.location.href);
-    const queryValue = url.searchParams.get('apiBase');
-    if (queryValue) return queryValue;
-  } catch {}
-
-  const metaValue = document.querySelector('meta[name="caperclub-api-base"]')?.getAttribute('content');
-  if (metaValue) return metaValue;
-
-  const globalValue = window.CAPERCLUB_API_BASE;
-  if (typeof globalValue === 'string' && globalValue.trim()) return globalValue;
-
-  return '';
-}
-function resolveInitialApiBase() {
-  const overrideApiBase = readApiBaseOverride();
-  if (overrideApiBase) return norm(overrideApiBase);
-  const hostedApiBase = inferHostedApiBase();
-  if (hostedApiBase) return norm(hostedApiBase);
-  const savedApiBase = localStorage.getItem(STORAGE_KEYS.apiBase);
-  if (savedApiBase) return norm(savedApiBase);
-  if (LOCAL_DEV_API_BASE) return norm(LOCAL_DEV_API_BASE);
-  return norm(DEFAULT_API_BASE);
+// inferDefaultApiBase() - now using fixed production URL
+function inferDefaultApiBase() {
+  return 'https://caper-club-backend-production.up.railway.app';
 }
 function getApiBaseCandidates() {
+  const origin = window.location.origin && window.location.origin !== 'null'
+    ? window.location.origin
+    : '';
   const list = [];
   const push = value => {
     const next = norm(value);
@@ -4153,15 +4025,19 @@ function getApiBaseCandidates() {
   };
 
   push(S.apiBase);
-  push(readApiBaseOverride());
-  push(inferHostedApiBase());
   push(DEFAULT_API_BASE);
-  push(LOCAL_DEV_API_BASE);
+  push(origin);
 
-  if (LOCAL_DEV_API_BASE) {
-    push('http://localhost:8001');
-    push('http://127.0.0.1:8001');
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      push(`${url.protocol}//${url.hostname}:8001`);
+      push(`${url.protocol}//${url.hostname}:8000`);
+    } catch {}
   }
+
+  push('http://localhost:8001');
+  push('http://127.0.0.1:8001');
   return list;
 }
 function setApiBase(value, opts = {}) {
@@ -4176,8 +4052,6 @@ function updateApiBaseUi() {
 function updateHealthUi() {
   $('healthDot').className = `status-dot ${S.healthOk ? 'online' : 'alert'}`;
   $('healthText').textContent = S.healthOk ? 'Backend online' : 'Backend offline';
-  $('healthPill').title = `${S.apiBase} | ${S.healthDetail}`;
-  if ($('backendStatusDetail')) $('backendStatusDetail').textContent = S.healthDetail;
 }
 async function probeHealth(base) {
   const target = norm(base);
@@ -4194,27 +4068,14 @@ async function probeHealth(base) {
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      S.healthDetail = `Health check failed: ${response.status} ${response.statusText} at ${target}/health`;
-      return false;
-    }
+    if (!response.ok) return false;
 
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    if (!contentType.includes('application/json')) {
-      S.healthDetail = `Unexpected health response type from ${target}/health: ${contentType || 'unknown'}`;
-      return false;
-    }
+    if (!contentType.includes('application/json')) return false;
 
     const payload = await response.json().catch(() => null);
-    if (payload?.ok === true) {
-      S.healthDetail = `Connected to ${target}`;
-      return true;
-    }
-    S.healthDetail = `Health response from ${target}/health did not include ok=true`;
-    return false;
-  } catch (error) {
-    const message = humanizeApiFetchError(error, '/health');
-    S.healthDetail = message;
+    return payload?.ok === true;
+  } catch {
     return false;
   } finally {
     clearTimeout(timer);
@@ -4232,11 +4093,6 @@ async function ensureBackendConnection() {
   S.healthOk = false;
   updateHealthUi();
   return false;
-}
-
-function openBackendPage(path = '/health') {
-  const target = `${norm($('apiBaseInput')?.value || S.apiBase)}${path}`;
-  window.open(target, '_blank', 'noopener,noreferrer');
 }
 
 function getAbsoluteScriptUrl(src) {
@@ -4305,25 +4161,6 @@ async function ensureFaceAiLibraryLoaded() {
 }
 
 function norm(v) { return String(v||DEFAULT_API_BASE).trim().replace(/\/+$/,''); }
-function humanizeApiFetchError(error, path = '') {
-  const rawMessage = String(error?.message || '').trim();
-  const apiBase = norm(S.apiBase);
-  const isLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
-  const isLocalFrontend = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.origin || '');
-  const targetPath = String(path || '');
-
-  if (rawMessage === 'Failed to fetch' || /load failed|networkerror/i.test(rawMessage)) {
-    if (isLocalApi) {
-      return `Local backend is not reachable at ${apiBase}${targetPath}. Start the backend server and try again.`;
-    }
-    if (isLocalFrontend) {
-      return `Backend request failed at ${apiBase}${targetPath}. Check Railway deployment health, public networking, and CORS for your current frontend origin.`;
-    }
-    return `Backend request failed at ${apiBase}${targetPath}.`;
-  }
-
-  return rawMessage || `Request failed for ${targetPath || 'API call'}.`;
-}
 function toArr(v) { return Array.isArray(v) ? v : (v ? [v] : []); }
 function isoDate(d) { return d.toISOString().slice(0,10); }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }

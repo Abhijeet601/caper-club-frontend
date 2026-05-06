@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="caperclub-api-base" content="https://caper-club-backend-production.up.railway.app">
   <title>Caper Sports Club | AI Attendance System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -62,9 +61,6 @@
           <span class="status-dot" id="doorDot"></span>
           <span id="doorText">Door: Checking...</span>
         </div>
-        <button type="button" class="btn-ghost btn-sm topbar-door-btn" id="manualDoorUnlockBtn" disabled>
-          Manual Unlock
-        </button>
         <button type="button" class="btn-ghost btn-sm danger topbar-door-btn" id="manualDoorLockBtn" disabled>
           Manual Lock
         </button>
@@ -325,14 +321,11 @@
           <div class="panel-card glass-card">
             <div class="card-head"><span class="card-title">🔗 Backend</span></div>
             <form id="apiConfigForm" class="compact-form">
-              <input type="url" id="apiBaseInput" placeholder="https://caper-club-backend-production.up.railway.app">
+              <input type="url" id="apiBaseInput" placeholder="http://localhost:8001">
               <div class="btn-row">
                 <button type="submit" class="btn-primary btn-sm">Save</button>
                 <button type="button" class="btn-ghost btn-sm" id="refreshAllBtn">Refresh All</button>
-                <button type="button" class="btn-ghost btn-sm" id="openHealthBtn">Health</button>
-                <button type="button" class="btn-ghost btn-sm" id="openDocsBtn">Docs</button>
               </div>
-              <div class="t-secondary" id="backendStatusDetail" style="margin-top:8px; font-size:.82rem;">Backend status will appear here.</div>
             </form>
           </div>
 
