@@ -4105,9 +4105,26 @@ function inferLocalDevApiBase() {
 
   return '';
 }
+function readApiBaseOverride() {
+  try {
+    const url = new URL(window.location.href);
+    const queryValue = url.searchParams.get('apiBase');
+    if (queryValue) return queryValue;
+  } catch {}
+
+  const metaValue = document.querySelector('meta[name="caperclub-api-base"]')?.getAttribute('content');
+  if (metaValue) return metaValue;
+
+  const globalValue = window.CAPERCLUB_API_BASE;
+  if (typeof globalValue === 'string' && globalValue.trim()) return globalValue;
+
+  return '';
+}
 function resolveInitialApiBase() {
   const savedApiBase = localStorage.getItem(STORAGE_KEYS.apiBase);
   if (savedApiBase) return norm(savedApiBase);
+  const overrideApiBase = readApiBaseOverride();
+  if (overrideApiBase) return norm(overrideApiBase);
   if (LOCAL_DEV_API_BASE) return norm(LOCAL_DEV_API_BASE);
   return norm(DEFAULT_API_BASE);
 }
