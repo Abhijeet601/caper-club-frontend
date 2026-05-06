@@ -435,6 +435,7 @@ function bindEvents() {
   $('loginForm').addEventListener('submit', handleLogin);
   $('logoutBtn').addEventListener('click', logout);
   $('loadMeBtn').addEventListener('click', () => refreshAll({ toast: true }));
+  if ($('manualDoorLockBtn')) $('manualDoorLockBtn').addEventListener('click', triggerManualDoorLock);
 
   // Users
   $('userRoleInput').addEventListener('change', () => {
@@ -566,7 +567,7 @@ function bindEvents() {
 
 async function bootstrapFaceRecognition() {
   if (!S.currentUser || !isAdmin()) return;
-  if (!S.isScanning && S.activeTab !== 'faceEnrollmentTab') return;
+  if (S.activeTab !== 'faceEnrollmentTab') return;
   await ensureFaceModelsLoaded();
 }
 
@@ -607,11 +608,6 @@ async function loadRecognitionEmbeddings() {
 
 async function ensureRecognitionReady() {
   if (!ensureAdmin()) return false;
-  const modelsReady = await ensureFaceModelsLoaded();
-  if (!modelsReady) {
-    toast(S.faceModelsError || 'AI models are not ready.', 'error');
-    return false;
-  }
   if (!S.faceUsers.length) {
     try {
       await loadRecognitionEmbeddings();
@@ -668,6 +664,7 @@ async function handleLogin(e) {
 function setAuth(user) {
   const ok = Boolean(user && S.token);
   const cameraAccess = ok && isAdmin();
+  const manualDoorLockBtn = $('manualDoorLockBtn');
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
   $('authText').textContent = ok ? `${user.role?.toUpperCase()} â€¢ ${user.name}` : 'Signed out';
 
@@ -694,6 +691,7 @@ function setAuth(user) {
   $('enableCameraInput').disabled = !cameraAccess;
   $('captureScanBtn').disabled = !cameraAccess;
   $('captureEnrollmentBtn').disabled = !cameraAccess;
+  if (manualDoorLockBtn) manualDoorLockBtn.disabled = !cameraAccess;
 
   if (cameraAccess) {
     startDoorStatusPoll();
@@ -846,11 +844,13 @@ function applyDoorStateSnapshot(state) {
 function updateDoorUi() {
   const dot = $('doorDot');
   const text = $('doorText');
+  const button = $('manualDoorLockBtn');
   if (!dot || !text) return;
 
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
   text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
+  if (button) button.textContent = unlocked ? 'Manual Lock' : 'Locked';
 }
 
 async function syncDoorState(opts = {}) {
@@ -921,6 +921,27 @@ function queueDoorDetectionSync(result, opts = {}) {
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    RENDER ALL
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+async function triggerManualDoorLock() {
+  if (!ensureAdmin()) return;
+
+  const button = $('manualDoorLockBtn');
+  if (button) button.disabled = true;
+
+  try {
+    const state = await api('/door/manual-lock', {
+      method: 'POST',
+      body: { force: true },
+    });
+    applyDoorStateSnapshot(state);
+    S.lastDoorDetectionSignal = '';
+    toast('Door locked manually.', 'success');
+  } catch (error) {
+    handleErr(error, { toast: true });
+  } finally {
+    if (button) button.disabled = !isAdmin();
+  }
+}
+
 function renderAll() {
   setAuth(S.currentUser);
   populateSelects();
@@ -3016,7 +3037,7 @@ async function startLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer);
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
-  setScanState('loading','Scanning...','Matching in browser and validating membership.');
+  setScanState('loading','Scanning...','Sending frame to backend recognition.');
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -3216,119 +3237,64 @@ async function handleManualScan() {
 async function runScan(opts = {}) {
   if (S.scanInFlight) return null;
   const source = opts.source || (opts.image ? 'upload' : 'camera');
-  const image = source === 'upload' ? (opts.image || S.scanImage || '') : '';
+  const image = source === 'upload'
+    ? (opts.image || S.scanImage || '')
+    : (opts.image || grabFrame({ zoom: 1 }));
   if (source === 'upload' && !image) return null;
+  if (source === 'camera' && !image) {
+    toast('Camera preview is not ready yet.', 'warning');
+    return null;
+  }
   S.scanInFlight = true;
   if (image) S.scanImage = image;
   renderConsole();
-  setScanState('loading', 'Scanning...', 'Matching face in browser and validating access.');
+  setScanState('loading', 'Scanning...', 'Sending frame to backend recognition.');
   try {
-    const probe = await detectRecognitionProbe({ source, image });
-    if (source === 'camera') {
-      setLiveDetection(probe?.detection || null, { keepSearchZoom: true });
-      if (probe?.detection) {
-        setScanState('loading', 'Face locked', buildDetectionAssistDetail(probe.detection), 'Face Lock');
-      }
-    }
-    if (!probe?.detection) {
-      const result = buildClientScanResult({
-        status: 'retry',
-        message: probe?.message || 'No face detected. Align your face and try again.',
-        confidence: 0,
-        source,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      return result;
-    }
-
-    const match = window.FaceAi.bestMatch(
-      probe.detection.descriptor,
-      S.faceUsers,
-      S.recognitionThreshold
-    );
-
-    if (!match?.matched || !match.user?.id) {
-      const result = buildClientScanResult({
-        status: 'unknown',
-        message: 'Unknown face. No enrolled member matched this scan.',
-        confidence: match?.confidence || probe.detection.score || 0,
-        faceBox: probe.detection.faceBox,
-        distanceHint: probe.detection.distanceHint,
-        captureMode: probe.detection.captureMode,
-        zoomFactor: probe.detection.recommendedZoom,
-        source,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      return result;
-    }
-
-    const userRecord = getUserRecord(match.user.id) || match.user;
-    if (!canScan(match.user.id)) {
-      return null;
-    }
-
-    const attendanceRecord = getAttendanceRecord(match.user.id);
-    const action = inferAttendanceAction(match.user.id);
-
-    const localCooldown = getCooldownInfo(match.user.id, action);
-    if (localCooldown.remainingMs > 0) {
-      const result = buildClientScanResult({
-        status: 'cooldown',
-        message: buildCooldownMessage(localCooldown.remainingMs, action),
-        name: userRecord?.name || match.user.name,
-        confidence: Number(match.confidence || probe.detection.score || 0),
-        attendanceAction: action,
-        cooldownRemainingSeconds: Math.ceil(localCooldown.remainingMs / 1000),
-        faceBox: probe.detection.faceBox,
-        distanceHint: probe.detection.distanceHint,
-        captureMode: probe.detection.captureMode,
-        zoomFactor: probe.detection.recommendedZoom,
-        source,
-        userId: match.user.id,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      if (opts.showToast) toast(result.message, 'warning');
-      return result;
-    }
-
-    const backendResult = await api('/attendance', {
+    const backendResult = await api('/access/scan', {
       method:'POST',
       body:{
-        userId: match.user.id,
-        action,
         area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
-        confidence: match.confidence,
+        image,
+        capturedFrames: source === 'camera' ? 1 : 3,
       },
     });
     const result = buildClientScanResult({
       ...backendResult,
-      status: backendResult?.status || 'granted',
-      message: backendResult?.message || 'Attendance marked successfully.',
-      name: backendResult?.name || userRecord?.name || match.user.name,
-      confidence: Number(backendResult?.confidence ?? match.confidence ?? 0),
-      attendanceAction: backendResult?.attendanceAction || action,
+      status: backendResult?.status || 'retry',
+      message: backendResult?.message || 'Scan complete.',
+      name: backendResult?.name || null,
+      confidence: Number(backendResult?.confidence ?? 0),
+      attendanceAction: backendResult?.attendanceAction || null,
       scannedAt: backendResult?.scannedAt,
       cooldownRemainingSeconds: Number(backendResult?.cooldownRemainingSeconds || 0),
-      faceBox: probe.detection.faceBox,
-      distanceHint: probe.detection.distanceHint,
-      captureMode: probe.detection.captureMode,
-      zoomFactor: probe.detection.recommendedZoom,
+      faceBox: backendResult?.faceBox || null,
       source,
-      userId: match.user.id || match.user?.userId || null,
+      userId: backendResult?.userId || backendResult?.session?.userId || null,
+      ttsMessage: backendResult?.ttsMessage || '',
     });
-    if (result.status === 'granted' && result.attendanceAction) {
-      recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
-      updateLocalUserAttendance(match.user.id, result.attendanceAction, result.scannedAt);
+
+    if (source === 'camera') {
+      if (result.faceBox) {
+        setLiveDetection({ faceBox: result.faceBox, recommendedZoom: 1.18 }, { keepSearchZoom: true });
+        setScanState('loading', 'Face locked', buildDetectionAssistDetail({
+          faceBox: result.faceBox,
+          captureMode: 'backend-scan',
+          distanceHint: '',
+        }), 'Face Lock');
+      } else {
+        setLiveDetection(null, { keepSearchZoom: true });
+      }
+    }
+
+    if (result.userId && !canScan(result.userId) && result.status === 'granted') {
+      return null;
+    }
+
+    if (result.status === 'granted' && result.attendanceAction && result.userId) {
+      recordAttendanceAction(result.userId, result.attendanceAction, result.scannedAt, result.name);
+      updateLocalUserAttendance(result.userId, result.attendanceAction, result.scannedAt);
     } else if (result.status === 'cooldown') {
-      syncCooldownFromResult(result, action);
-    } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
-      recordAttendanceAction(match.user.id, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
+      syncCooldownFromResult(result, result.attendanceAction || inferAttendanceAction(result.userId));
     }
     S.scanResult = result;
     renderScanResult();

@@ -359,9 +359,10 @@
     <!-- Manual controls -->
     <div class="card">
       <p class="card-title">🎛️ Manual Override</p>
+      <p class="door-sub">Use this to force the door into the locked state, same as the physical lock button.</p>
       <div class="btn-row">
         <button class="btn success" id="btn-unlock">🔓 Unlock</button>
-        <button class="btn danger"  id="btn-lock">🔒 Lock</button>
+        <button class="btn danger"  id="btn-manual-lock">🔒 Manual Lock</button>
       </div>
     </div>
 
@@ -527,19 +528,23 @@ async function sendUnlock() {
   }
 }
 
-async function sendLock() {
+async function sendLock(logLabel = 'LOCK') {
   try {
     await callDoorApi('lock');
     applyDoorUI('LOCK');
-    addLog('LOCK sent to backend', 'err');
+    addLog(`${logLabel} sent to backend`, 'info');
   } catch (err) {
-    addLog(`Lock failed: ${err.message}`, 'err');
-    toast(`Lock failed: ${err.message}`, 'err');
+    addLog(`${logLabel} failed: ${err.message}`, 'err');
+    toast(`${logLabel} failed: ${err.message}`, 'err');
   }
 }
 
+function sendManualLock() {
+  return sendLock('Manual LOCK');
+}
+
 document.getElementById('btn-unlock').addEventListener('click', sendUnlock);
-document.getElementById('btn-lock').addEventListener('click', sendLock);
+document.getElementById('btn-manual-lock').addEventListener('click', sendManualLock);
 
 // ─── Face detection loop ───────────────────────────────────────────────────
 const video   = document.getElementById('video');
