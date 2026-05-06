@@ -11,7 +11,7 @@ const STORAGE_KEYS = {
   cooldowns: 'capper-attendance-cooldowns',
   sessionTimers: 'capper-session-timers',
 };
-const DEFAULT_API_BASE = inferDefaultApiBase();
+const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
@@ -114,7 +114,7 @@ const SPORT_LEVELS = {
 
 /* â”€â”€ STATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const S = {
-  apiBase: norm(localStorage.getItem(STORAGE_KEYS.apiBase) || DEFAULT_API_BASE),
+  apiBase: resolveInitialApiBase(),
   token: sessionStorage.getItem(STORAGE_KEYS.token) || '',
   activeTab: 'liveOpsTab',
   currentUser: null, healthOk: false,
@@ -4103,6 +4103,27 @@ function inferDefaultApiBase() {
   }
 
   return 'https://caper-club-backend-production.up.railway.app';
+}
+function getLocalDevApiBase() {
+  const origin = window.location.origin && window.location.origin !== 'null'
+    ? window.location.origin
+    : '';
+
+  if (!origin) return '';
+
+  try {
+    const url = new URL(origin);
+    if (['localhost', '127.0.0.1'].includes(url.hostname)) {
+      return `${url.protocol}//${url.hostname}:8001`;
+    }
+  } catch {}
+
+  return '';
+}
+function resolveInitialApiBase() {
+  const savedApiBase = localStorage.getItem(STORAGE_KEYS.apiBase);
+  if (savedApiBase) return norm(savedApiBase);
+  return norm(DEFAULT_API_BASE);
 }
 function getApiBaseCandidates() {
   const origin = window.location.origin && window.location.origin !== 'null'
