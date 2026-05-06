@@ -4104,6 +4104,22 @@ function inferLocalDevApiBase() {
 
   return '';
 }
+function inferHostedApiBase() {
+  const origin = window.location.origin && window.location.origin !== 'null'
+    ? window.location.origin
+    : '';
+
+  if (!origin) return '';
+
+  try {
+    const url = new URL(origin);
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
+    if (isLocalHost) return '';
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '';
+  }
+}
 function readApiBaseOverride() {
   try {
     const url = new URL(window.location.href);
@@ -4120,10 +4136,12 @@ function readApiBaseOverride() {
   return '';
 }
 function resolveInitialApiBase() {
-  const savedApiBase = localStorage.getItem(STORAGE_KEYS.apiBase);
-  if (savedApiBase) return norm(savedApiBase);
   const overrideApiBase = readApiBaseOverride();
   if (overrideApiBase) return norm(overrideApiBase);
+  const hostedApiBase = inferHostedApiBase();
+  if (hostedApiBase) return norm(hostedApiBase);
+  const savedApiBase = localStorage.getItem(STORAGE_KEYS.apiBase);
+  if (savedApiBase) return norm(savedApiBase);
   if (LOCAL_DEV_API_BASE) return norm(LOCAL_DEV_API_BASE);
   return norm(DEFAULT_API_BASE);
 }
@@ -4135,6 +4153,8 @@ function getApiBaseCandidates() {
   };
 
   push(S.apiBase);
+  push(readApiBaseOverride());
+  push(inferHostedApiBase());
   push(DEFAULT_API_BASE);
   push(LOCAL_DEV_API_BASE);
 
