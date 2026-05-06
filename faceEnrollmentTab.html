@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Enrollment Dashboard</title>
+</head>
+<body style="margin:0;padding:var(--pad-card);background:transparent;font-family:var(--font-body);color:var(--text);">
+  <style>
+    /* Enrollment Dashboard Styles */
+    .enroll-header { 
+      display: flex; align-items: center; justify-content: space-between; 
+      margin-bottom: clamp(18px, 2.2vw, 28px); gap: 16px; flex-wrap: wrap; 
+    }
+    .enroll-stats { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.4rem, 2.1vw, 2.2rem); letter-spacing: -.03em; }
+    .enroll-progress-row { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+    .enroll-progress-main { flex: 1; min-width: 240px; }
+    .enroll-progress-bar { 
+      height: 12px; border-radius: 999px; background: var(--surface2); 
+      border: 1.5px solid var(--border); overflow: hidden; margin: 8px 0; 
+    }
+    .enroll-progress-fill { 
+      height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--emerald), var(--green)); 
+      transition: width .6s cubic-bezier(.34,1.56,.64,1); box-shadow: 0 0 0 2px rgba(16,185,129,.3); 
+    }
+    .enroll-pct { font-family: var(--font-mono); font-size: clamp(1rem, 1.6vw, 1.3rem); font-weight: 700; }
+    
+    .enroll-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+    @media (max-width: 900px) { .enroll-grid { grid-template-columns: 1fr; } }
+    
+    .enroll-section { 
+      display: flex; flex-direction: column; gap: 14px; 
+      background: var(--surface); border-radius: var(--r-xl); 
+      border: 1.5px solid var(--border); padding: var(--pad-card); 
+    }
+    .section-header { 
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; 
+    }
+    .section-count { font-family: var(--font-display); font-size: clamp(1.3rem, 1.8vw, 1.6rem); font-weight: 800; }
+    .section-title { 
+      font-family: var(--font-display); font-size: clamp(.88rem, 1.1vw, 1rem); 
+      font-weight: 700; color: var(--text); 
+    }
+    .section-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    
+    .member-grid { 
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+      gap: clamp(10px, 1.4vw, 16px); max-height: 520px; overflow-y: auto; 
+    }
+    .member-card { 
+      display: flex; align-items: center; gap: 14px; padding: 16px; 
+      border-radius: var(--r-lg); background: var(--surface2); border: 1.5px solid var(--border); 
+      transition: all .28s var(--ease-spring); cursor: pointer; 
+    }
+    .member-card:hover { 
+      border-color: var(--indigo); box-shadow: var(--shadow-md); transform: translateY(-3px); 
+    }
+    .member-avatar { 
+      width: 54px; height: 54px; border-radius: 50%; background: var(--grad-hero); 
+      color: #fff; display: flex; align-items: center; justify-content: center; 
+      font-family: var(--font-display); font-size: 1.4rem; font-weight: 800; flex-shrink: 0; 
+    }
+    .member-info { flex: 1; min-width: 0; }
+    .member-name { font-weight: 700; font-size: 1rem; margin-bottom: 2px; }
+    .member-meta { font-size: .78rem; color: var(--text2); }
+    
+    .status-badge { 
+      padding: 4px 12px; border-radius: 999px; font-size: .7rem; font-weight: 700; 
+      text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; 
+    }
+    .status-enrolled { background: rgba(16,185,129,.12); color: var(--emerald); border: 1px solid rgba(16,185,129,.3); }
+    .status-pending { background: rgba(245,158,11,.12); color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+    
+    .bulk-actions { display: flex; gap: 10px; padding: 12px; background: var(--surface2); border-radius: var(--r-md); border-top: 1px solid var(--border); }
+    
+    .enroll-station { 
+      grid-column: 1 / -1; margin-top: 20px; 
+      background: linear-gradient(135deg, rgba(16,185,129,.06), rgba(99,102,241,.04)); 
+      border: 2px dashed rgba(16,185,129,.3); border-radius: var(--r-xl); padding: 24px; 
+    }
+    @media (max-width: 900px) { .enroll-station { grid-column: 1; } }
+    
+    .search-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .search-input { flex: 1; min-width: 240px; }
+    
+    .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); }
+    .empty-state svg { font-size: 4rem; opacity: .4; margin-bottom: 12px; display: block; }
+    
+    /* Loading */
+    .loading-shimmer { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  </style>
+
+  <div class="enroll-header">
+    <div class="enroll-stats" id="enrollMainStats">-- / -- enrolled</div>
+    <div class="enroll-progress-row">
+      <div class="enroll-progress-main">
+        <div style="display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--text2);">
+          <span>Progress:</span>
+          <div class="enroll-progress-bar">
+            <div class="enroll-progress-fill" id="enrollProgressFill" style="width:0%"></div>
+          </div>
+          <span class="enroll-pct" id="enrollPct">0%</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-primary btn-sm" onclick="bulkEnrollPending()">📸 Enroll Pending (Bulk)</button>
+        <button class="btn-ghost btn-sm" onclick="exportEnrollmentCSV()">⬇ Export CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="enroll-grid" id="enrollGrid">
+    <!-- Pending Section -->
+    <div class="enroll-section">
+      <div class="section-header">
+        <div>
+          <span class="section-title">📋 Pending Enrollment</span>
+          <span class="section-count" id="pendingCount">--</span>
+        </div>
+        <div class="section-actions">
+          <div class="search-row">
+            <input class="search-input" id="pendingSearch" placeholder="Search pending members..." oninput="filterPendingMembers()">
+          </div>
+        </div>
+      </div>
+      <div class="member-grid" id="pendingGrid">
+        <div class="empty-state">
+          <span style="font-size:3.5rem;opacity:.3;">⏳</span>
+          <div style="margin-top:8px;font-weight:600;">No pending enrollments</div>
+          <div style="font-size:.85rem;color:var(--text3);">All members have face data enrolled</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enrolled Section -->
+    <div class="enroll-section">
+      <div class="section-header">
+        <div>
+          <span class="section-title">✅ Enrolled Members</span>
+          <span class="section-count" id="enrolledCount">--</span>
+        </div>
+        <div class="section-actions">
+          <div class="search-row">
+            <input class="search-input" id="enrolledSearch" placeholder="Search enrolled members..." oninput="filterEnrolledMembers()">
+          </div>
+        </div>
+      </div>
+      <div class="member-grid" id="enrolledGrid">
+        <div class="empty-state">
+          <span style="font-size:3.5rem;opacity:.3;">👥</span>
+          <div style="margin-top:8px;font-weight:600;">No enrolled members</div>
+          <div style="font-size:.85rem;color:var(--text3);">Enroll members using the webcam station below</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enrollment Station -->
+  <div class="enroll-station" id="enrollStation">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <span style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;">📸 Live Enrollment Station</span>
+      <span class="status-chip enrolled" style="font-size:.7rem;">Capture 3-5 images → Save</span>
+    </div>
+    
+    <!-- Camera + Controls (reuse from new user tab) -->
+    <div class="panel-card glass-card" style="margin-bottom:16px;">
+      <div class="enroll-progress-bar" style="margin-bottom:12px;">
+        <div class="enroll-progress-fill" id="stationProgress" style="width:0%"></div>
+      </div>
+      <div id="enrollmentGallery" class="thumb-grid" style="margin-bottom:16px;">
+        <div class="empty-hint">Capture your first face image</div>
+      </div>
+      <div class="cam-viewport camera-shell enrollment-cam-viewport" id="enrollmentCameraShell">
+        <video id="enrollmentCameraPreview" autoplay muted playsinline></video>
+        <div class="camera-assist-badge" id="enrollmentCameraBadge">Live preview | 1.0x</div>
+        <div class="cam-placeholder" id="enrollmentCameraPlaceholder">
+          <div class="eye-anim"><!-- eye animation --></div>
+          <p>Live camera preview</p>
+          <span class="placeholder-sub">Face enrollment station</span>
+        </div>
+      </div>
+      <div class="enrollment-zoom-row">
+        <span class="enrollment-zoom-label">Zoom</span>
+        <div class="enrollment-zoom-actions">
+          <button class="btn-ghost btn-sm" id="enrollmentZoomOutBtn">–</button>
+          <span class="enrollment-zoom-value" id="enrollmentZoomValue">1.0x</span>
+          <button class="btn-ghost btn-sm" id="enrollmentZoomInBtn">+</button>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-capture" id="captureEnrollmentBtn">📷 Capture Face</button>
+        <button class="btn-ghost btn-sm" id="clearEnrollmentBtn">Clear</button>
+        <label class="btn-ghost btn-sm file-lbl">
+          📁 Upload Images
+          <input type="file" id="enrollmentFilesInput" accept="image/*" multiple hidden>
+        </label>
+        <button class="btn-primary" id="saveEnrollmentBtn" disabled>💾 Save Enrollment</button>
+      </div>
+    </div>
+
+    <!-- Quick Member Search -->
+    <div style="display:flex;gap:12px;align-items:end;">
+      <div style="flex:1;">
+        <label class="field-stack">
+          <span>Select Member</span>
+          <div class="enrollment-search-row">
+            <input type="search" id="stationUserSearch" placeholder="Search by name/ID/email/mobile...">
+            <button class="btn-ghost btn-sm" onclick="applyStationMemberSearch()">Search</button>
+          </div>
+          <span class="enrollment-search-hint" id="stationSearchHint">Search to select member</span>
+        </label>
+        <select id="stationUserInput" style="width:100%;margin-top:8px;"></select>
+      </div>
+      <button class="btn-primary" id="stationEnrollBtn" disabled style="min-height:52px;padding-left:24px;padding-right:24px;">🚀 Enroll Selected</button>
+    </div>
+  </div>
+
+  <script>
+    // Auto-init enrollment tab
+    if (parent && parent.S && parent.S.currentUser && parent.isAdmin()) {
+      parent.openTab('faceEnrollmentTab');
+      parent.loadFaceEnrollmentStatus();
+    }
+  </script>
+</body>
+</html>
+
