@@ -435,6 +435,7 @@ function bindEvents() {
   $('loginForm').addEventListener('submit', handleLogin);
   $('logoutBtn').addEventListener('click', logout);
   $('loadMeBtn').addEventListener('click', () => refreshAll({ toast: true }));
+  if ($('manualDoorUnlockBtn')) $('manualDoorUnlockBtn').addEventListener('click', triggerManualDoorUnlock);
   if ($('manualDoorLockBtn')) $('manualDoorLockBtn').addEventListener('click', triggerManualDoorLock);
 
   // Users
@@ -664,6 +665,7 @@ async function handleLogin(e) {
 function setAuth(user) {
   const ok = Boolean(user && S.token);
   const cameraAccess = ok && isAdmin();
+  const manualDoorUnlockBtn = $('manualDoorUnlockBtn');
   const manualDoorLockBtn = $('manualDoorLockBtn');
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
   $('authText').textContent = ok ? `${user.role?.toUpperCase()} â€¢ ${user.name}` : 'Signed out';
@@ -691,6 +693,7 @@ function setAuth(user) {
   $('enableCameraInput').disabled = !cameraAccess;
   $('captureScanBtn').disabled = !cameraAccess;
   $('captureEnrollmentBtn').disabled = !cameraAccess;
+  if (manualDoorUnlockBtn) manualDoorUnlockBtn.disabled = !cameraAccess;
   if (manualDoorLockBtn) manualDoorLockBtn.disabled = !cameraAccess;
 
   if (cameraAccess) {
@@ -844,12 +847,14 @@ function applyDoorStateSnapshot(state) {
 function updateDoorUi() {
   const dot = $('doorDot');
   const text = $('doorText');
+  const unlockButton = $('manualDoorUnlockBtn');
   const button = $('manualDoorLockBtn');
   if (!dot || !text) return;
 
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
   text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
+  if (unlockButton) unlockButton.textContent = unlocked ? 'Unlocked' : 'Manual Unlock';
   if (button) button.textContent = unlocked ? 'Manual Lock' : 'Locked';
 }
 
@@ -924,7 +929,9 @@ function queueDoorDetectionSync(result, opts = {}) {
 async function triggerManualDoorLock() {
   if (!ensureAdmin()) return;
 
+  const unlockButton = $('manualDoorUnlockBtn');
   const button = $('manualDoorLockBtn');
+  if (unlockButton) unlockButton.disabled = true;
   if (button) button.disabled = true;
 
   try {
@@ -938,7 +945,31 @@ async function triggerManualDoorLock() {
   } catch (error) {
     handleErr(error, { toast: true });
   } finally {
+    if (unlockButton) unlockButton.disabled = !isAdmin();
     if (button) button.disabled = !isAdmin();
+  }
+}
+
+async function triggerManualDoorUnlock() {
+  if (!ensureAdmin()) return;
+
+  const unlockButton = $('manualDoorUnlockBtn');
+  const lockButton = $('manualDoorLockBtn');
+  if (unlockButton) unlockButton.disabled = true;
+  if (lockButton) lockButton.disabled = true;
+
+  try {
+    const state = await api('/door/manual-unlock', {
+      method: 'POST',
+    });
+    applyDoorStateSnapshot(state);
+    S.lastDoorDetectionSignal = '';
+    toast('Door unlocked manually.', 'success');
+  } catch (error) {
+    handleErr(error, { toast: true });
+  } finally {
+    if (unlockButton) unlockButton.disabled = !isAdmin();
+    if (lockButton) lockButton.disabled = !isAdmin();
   }
 }
 
