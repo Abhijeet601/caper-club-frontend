@@ -11,7 +11,7 @@ const STORAGE_KEYS = {
   cooldowns: 'capper-attendance-cooldowns',
   sessionTimers: 'capper-session-timers',
 };
-const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
+const DEFAULT_API_BASE = inferDefaultApiBase();
 const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
@@ -3069,6 +3069,7 @@ async function startLiveScan(opts = {}) {
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
   setScanState('loading','Scanning...','Sending frame to backend recognition.');
+  ensureFaceModelsLoaded().catch(() => {});
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -3202,6 +3203,25 @@ function getCameraErrorMessage(err) {
 async function runLiveCycle() {
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
+  if (S.faceModelsReady && window.FaceAi) {
+    const probe = await detectRecognitionProbe({ source: 'camera' });
+    if (!probe?.detection?.faceBox) {
+      setLiveDetection(null, { keepSearchZoom: true });
+      const retryResult = buildClientScanResult({
+        status: 'retry',
+        message: probe?.message || 'No face detected. Align your face and try again.',
+        source: 'camera',
+      });
+      S.scanResult = retryResult;
+      renderScanResult();
+      applyScanResult(retryResult);
+      renderConsole();
+      return;
+    }
+
+    setLiveDetection(probe.detection, { keepSearchZoom: true });
+    setScanState('loading', 'Face locked', buildDetectionAssistDetail(probe.detection), 'Face Lock');
+  }
   await runScan({ source: 'camera', showToast: false });
 }
 
@@ -3341,7 +3361,22 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
+    const fallbackMessage = err?.message || 'Scan failed.';
+    if (isRetryLikeScanError(err)) {
+      const retryResult = buildClientScanResult({
+        status: 'retry',
+        message: fallbackMessage,
+        source,
+      });
+      if (source === 'camera') setLiveDetection(null, { keepSearchZoom: true });
+      S.scanResult = retryResult;
+      renderScanResult();
+      applyScanResult(retryResult);
+      if (opts.showToast) toast(fallbackMessage, 'warning');
+      return retryResult;
+    }
+
+    setScanState('denied', 'Access Denied', fallbackMessage);
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
@@ -3351,6 +3386,18 @@ async function runScan(opts = {}) {
     }
     renderConsole();
   }
+}
+
+function isRetryLikeScanError(err) {
+  const message = String(err?.message || '').toLowerCase();
+  if (!message) return false;
+  return [
+    'no face detected',
+    'face alignment failed',
+    'encoding failed',
+    'camera preview is not ready yet',
+    'unable to read image payload',
+  ].some(fragment => message.includes(fragment));
 }
 
 async function detectRecognitionProbe(opts = {}) {
@@ -4012,6 +4059,7 @@ async function api(path, opts = {}) {
       S.healthOk = false;
       updateHealthUi();
     }
+    error.message = humanizeApiFetchError(error, path);
     throw error;
   }
   if (!S.healthOk) {
@@ -4041,8 +4089,19 @@ function ensureAdmin() {
 function streamHasActiveVideo(stream) {
   return Boolean(stream && stream.getVideoTracks().some(track => track.readyState === 'live'));
 }
-// inferDefaultApiBase() - now using fixed production URL
 function inferDefaultApiBase() {
+  const origin = window.location.origin && window.location.origin !== 'null'
+    ? window.location.origin
+    : '';
+
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
+      if (isLocalHost) return `${url.protocol}//${url.hostname}:8001`;
+    } catch {}
+  }
+
   return 'https://caper-club-backend-production.up.railway.app';
 }
 function getApiBaseCandidates() {
@@ -4055,18 +4114,22 @@ function getApiBaseCandidates() {
     if (next && !list.includes(next)) list.push(next);
   };
 
-  push(S.apiBase);
-  push(DEFAULT_API_BASE);
-  push(origin);
-
   if (origin) {
     try {
       const url = new URL(origin);
+      const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
+      if (isLocalHost) {
+        push(`${url.protocol}//${url.hostname}:8001`);
+        push(`${url.protocol}//${url.hostname}:8000`);
+      }
       push(`${url.protocol}//${url.hostname}:8001`);
       push(`${url.protocol}//${url.hostname}:8000`);
     } catch {}
   }
 
+  push(S.apiBase);
+  push(DEFAULT_API_BASE);
+  push(origin);
   push('http://localhost:8001');
   push('http://127.0.0.1:8001');
   return list;
@@ -4192,6 +4255,21 @@ async function ensureFaceAiLibraryLoaded() {
 }
 
 function norm(v) { return String(v||DEFAULT_API_BASE).trim().replace(/\/+$/,''); }
+function humanizeApiFetchError(error, path = '') {
+  const rawMessage = String(error?.message || '').trim();
+  const apiBase = norm(S.apiBase);
+  const isLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
+  const targetPath = String(path || '');
+
+  if (rawMessage === 'Failed to fetch' || /load failed|networkerror/i.test(rawMessage)) {
+    if (isLocalApi) {
+      return `Local backend is not reachable at ${apiBase}${targetPath}. Start the backend server and try again.`;
+    }
+    return `Backend request failed at ${apiBase}${targetPath}. If you are running the frontend on localhost, switch API Base to http://127.0.0.1:8001 or start the local backend.`;
+  }
+
+  return rawMessage || `Request failed for ${targetPath || 'API call'}.`;
+}
 function toArr(v) { return Array.isArray(v) ? v : (v ? [v] : []); }
 function isoDate(d) { return d.toISOString().slice(0,10); }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }

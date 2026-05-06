@@ -3,711 +3,736 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CaperClub — Smart Door Lock</title>
-  <meta name="description" content="Real-time face-detection door lock system powered by ESP32 and FastAPI." />
+  <title>CaperClub Smart Door Lock</title>
+  <meta name="description" content="Smart door lock using backend face recognition and ESP32 relay control." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
     :root {
-      --bg:        #0b0f1a;
-      --surface:   #111827;
-      --border:    rgba(255,255,255,.08);
-      --accent:    #6366f1;
-      --green:     #22c55e;
-      --red:       #ef4444;
-      --amber:     #f59e0b;
-      --text:      #f1f5f9;
-      --muted:     #94a3b8;
-      --radius:    16px;
-      --glow-g:    0 0 32px rgba(34,197,94,.35);
-      --glow-r:    0 0 32px rgba(239,68,68,.35);
-      --glow-a:    0 0 24px rgba(99,102,241,.4);
+      --bg: #0b0f1a;
+      --surface: #111827;
+      --surface-2: #0f172a;
+      --border: rgba(255,255,255,.08);
+      --text: #e5eefb;
+      --muted: #91a2bd;
+      --accent: #2dd4bf;
+      --green: #22c55e;
+      --red: #ef4444;
+      --amber: #f59e0b;
+      --radius: 18px;
     }
-
     body {
       font-family: 'Inter', system-ui, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at top left, rgba(45,212,191,.14), transparent 28%),
+        radial-gradient(circle at top right, rgba(59,130,246,.14), transparent 24%),
+        linear-gradient(180deg, #07111f 0%, var(--bg) 100%);
       color: var(--text);
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
       padding: 24px 16px 48px;
     }
-
-    /* ── Header ───────────────────────────────────────── */
     header {
       width: 100%;
-      max-width: 860px;
+      max-width: 980px;
+      margin: 0 auto 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 0 28px;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 32px;
+      gap: 16px;
     }
-    .logo { display: flex; align-items: center; gap: 10px; }
-    .logo-icon {
-      width: 40px; height: 40px;
-      background: linear-gradient(135deg,#6366f1,#a855f7);
-      border-radius: 10px;
-      display: grid; place-items: center;
-      font-size: 20px;
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-mark {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #14b8a6, #2563eb);
+      box-shadow: 0 10px 28px rgba(20,184,166,.24);
+      font-size: 1.5rem;
     }
-    .logo h1 { font-size: 1.15rem; font-weight: 700; letter-spacing: -.3px; }
-    .logo p  { font-size: .75rem; color: var(--muted); margin-top: 1px; }
-
-    /* ── Status badge ─────────────────────────────────── */
+    .brand h1 {
+      margin: 0;
+      font-size: 1.2rem;
+      letter-spacing: -.02em;
+    }
+    .brand p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: .83rem;
+    }
     #status-badge {
-      display: flex; align-items: center; gap: 8px;
-      padding: 6px 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
       border-radius: 999px;
-      font-size: .8rem; font-weight: 600; letter-spacing: .3px;
       border: 1px solid var(--border);
-      background: var(--surface);
-      transition: all .4s ease;
+      background: rgba(17,24,39,.86);
+      font-size: .84rem;
+      font-weight: 600;
     }
     .dot {
-      width: 9px; height: 9px; border-radius: 50%;
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
       background: var(--muted);
-      animation: pulse 2s infinite;
+      box-shadow: 0 0 0 0 rgba(255,255,255,.15);
+      animation: pulse 1.8s infinite;
     }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-
-    #status-badge.locked   { border-color: var(--red);   color: var(--red);   box-shadow: var(--glow-r); }
-    #status-badge.locked   .dot { background: var(--red); }
-    #status-badge.unlocked { border-color: var(--green); color: var(--green); box-shadow: var(--glow-g); }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(255,255,255,.16); }
+      70% { box-shadow: 0 0 0 10px rgba(255,255,255,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+    }
+    #status-badge.loading { color: var(--amber); }
+    #status-badge.loading .dot { background: var(--amber); }
+    #status-badge.locked { color: var(--red); }
+    #status-badge.locked .dot { background: var(--red); }
+    #status-badge.unlocked { color: var(--green); }
     #status-badge.unlocked .dot { background: var(--green); }
-    #status-badge.loading  { border-color: var(--amber); color: var(--amber); }
-    #status-badge.loading  .dot { background: var(--amber); }
-
-    /* ── Main grid ────────────────────────────────────── */
     .grid {
-      width: 100%; max-width: 860px;
+      width: 100%;
+      max-width: 980px;
+      margin: 0 auto;
       display: grid;
-      grid-template-columns: 1fr 320px;
-      gap: 20px;
+      grid-template-columns: minmax(0, 1.2fr) minmax(300px, .8fr);
+      gap: 22px;
     }
-    @media (max-width: 700px) {
+    @media (max-width: 860px) {
       .grid { grid-template-columns: 1fr; }
     }
-
-    /* ── Card ─────────────────────────────────────────── */
     .card {
-      background: var(--surface);
+      background: rgba(17,24,39,.92);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 20px;
-      position: relative;
-      overflow: hidden;
+      box-shadow: 0 20px 44px rgba(0,0,0,.22);
     }
     .card-title {
-      font-size: .75rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .8px;
+      margin: 0 0 14px;
       color: var(--muted);
-      margin-bottom: 14px;
+      font-size: .77rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
     }
-
-    /* ── Camera ───────────────────────────────────────── */
     .cam-wrapper {
       position: relative;
-      border-radius: 10px;
+      aspect-ratio: 4 / 3;
       overflow: hidden;
-      background: #000;
-      aspect-ratio: 4/3;
-    }
-    #video {
-      width: 100%; height: 100%;
-      object-fit: cover;
-      display: block;
-      transform: scaleX(-1); /* mirror */
-    }
-    #overlay {
-      position: absolute; inset: 0;
-      transform: scaleX(-1);
-      pointer-events: none;
-    }
-
-    /* Face ring */
-    .face-ring {
-      position: absolute; inset: 0;
-      pointer-events: none;
-      transition: opacity .4s;
-      opacity: 0;
-    }
-    .face-ring.visible { opacity: 1; }
-    .face-ring::before, .face-ring::after {
-      content: '';
-      position: absolute;
-      border-radius: 50%;
-    }
-    /* glow behind video */
-    .cam-glow {
-      position: absolute; inset: -4px;
       border-radius: 14px;
-      transition: box-shadow .5s ease;
-      pointer-events: none;
-      z-index: 1;
+      background: #020617;
+      border: 1px solid rgba(255,255,255,.06);
     }
-    .cam-glow.green { box-shadow: inset 0 0 0 3px var(--green), var(--glow-g); }
-    .cam-glow.red   { box-shadow: inset 0 0 0 3px var(--red),   var(--glow-r); }
-    .cam-glow.idle  { box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
-
-    /* ── Info panel ───────────────────────────────────── */
-    .side { display: flex; flex-direction: column; gap: 16px; }
-
-    /* Door visual */
+    #video, #overlay {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+    .cam-glow {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      border-radius: 14px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
+    }
+    .cam-glow.green { box-shadow: inset 0 0 0 3px rgba(34,197,94,.9), 0 0 34px rgba(34,197,94,.22); }
+    .cam-glow.red { box-shadow: inset 0 0 0 3px rgba(239,68,68,.9), 0 0 34px rgba(239,68,68,.18); }
+    .cam-glow.idle { box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+    .side { display: flex; flex-direction: column; gap: 18px; }
     .door-visual {
       text-align: center;
-      padding: 24px 0 20px;
+      padding: 10px 0 18px;
     }
     .door-icon {
-      font-size: 4rem;
+      font-size: 3.8rem;
       line-height: 1;
-      margin-bottom: 10px;
-      transition: transform .4s cubic-bezier(.34,1.56,.64,1);
+      margin-bottom: 12px;
+      transition: transform .35s ease;
     }
-    .door-icon.open { transform: rotateY(-30deg) scale(1.1); }
+    .door-icon.open { transform: rotateY(-24deg) scale(1.06); }
     .door-label {
-      font-size: 1.1rem; font-weight: 700;
-      letter-spacing: -.5px;
+      font-size: 1.1rem;
+      font-weight: 700;
     }
     .door-sub {
-      font-size: .78rem; color: var(--muted);
-      margin-top: 4px;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: .83rem;
+      min-height: 1.2em;
     }
-
-    /* Stats */
     .stat-row {
-      display: flex; justify-content: space-between;
+      display: flex;
       align-items: center;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border);
-      font-size: .82rem;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 11px 0;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      font-size: .84rem;
     }
     .stat-row:last-child { border-bottom: none; }
     .stat-label { color: var(--muted); }
     .stat-value { font-weight: 600; }
     .stat-value.green { color: var(--green); }
-    .stat-value.red   { color: var(--red); }
-    .stat-value.amber { color: var(--amber); }
-
-    /* Activity log */
-    #log-list {
-      list-style: none;
-      max-height: 200px;
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border) transparent;
+    .stat-value.red { color: var(--red); }
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
     }
-    #log-list li {
-      font-size: .75rem;
-      padding: 5px 0;
-      border-bottom: 1px solid var(--border);
-      display: flex; gap: 8px; align-items: baseline;
-      color: var(--muted);
-    }
-    #log-list li:last-child { border: none; }
-    #log-list li .ts { color: #475569; flex-shrink: 0; font-size: .7rem; }
-    #log-list li .msg.ok  { color: var(--green); }
-    #log-list li .msg.err { color: var(--red); }
-    #log-list li .msg.info{ color: var(--accent); }
-
-    /* Controls */
-    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
     .btn {
-      flex: 1; min-width: 100px;
-      padding: 10px 14px;
-      border: none; border-radius: 10px;
-      font-size: .82rem; font-weight: 600;
+      flex: 1;
+      min-width: 120px;
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 700;
       cursor: pointer;
-      transition: opacity .2s, transform .1s;
+      transition: transform .12s ease, opacity .2s ease;
     }
-    .btn:active { transform: scale(.97); }
-    .btn.primary  { background: var(--accent); color: #fff; }
-    .btn.danger   { background: var(--red);    color: #fff; }
-    .btn.success  { background: var(--green);  color: #fff; }
-    .btn:disabled { opacity: .4; cursor: not-allowed; }
-
-    /* Config section */
+    .btn:active { transform: scale(.98); }
+    .btn.primary { background: linear-gradient(135deg, #14b8a6, #0f766e); color: white; }
+    .btn.success { background: linear-gradient(135deg, #22c55e, #15803d); color: white; }
+    .btn.danger { background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; }
     .field { margin-bottom: 12px; }
-    .field label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 5px; }
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: .76rem;
+      font-weight: 600;
+    }
     .field input {
       width: 100%;
-      padding: 8px 10px;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,.08);
+      background: var(--surface-2);
       color: var(--text);
-      font-size: .82rem;
-      font-family: monospace;
-      outline: none;
-      transition: border-color .2s;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
     }
-    .field input:focus { border-color: var(--accent); }
-
-    /* Toast */
+    #log-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 220px;
+      overflow: auto;
+    }
+    #log-list li {
+      display: flex;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      font-size: .76rem;
+      color: var(--muted);
+    }
+    #log-list li:last-child { border-bottom: none; }
+    #log-list .ts {
+      flex: 0 0 auto;
+      color: #64748b;
+      font-variant-numeric: tabular-nums;
+    }
+    #log-list .msg.ok { color: var(--green); }
+    #log-list .msg.err { color: var(--red); }
+    #log-list .msg.info { color: #7dd3fc; }
     #toast {
-      position: fixed; bottom: 24px; right: 24px;
-      background: var(--surface);
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 1000;
+      max-width: 320px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: rgba(15,23,42,.94);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 18px;
-      font-size: .82rem; font-weight: 500;
-      box-shadow: 0 8px 32px rgba(0,0,0,.4);
-      transition: opacity .3s, transform .3s;
-      opacity: 0; transform: translateY(8px);
+      transform: translateY(10px);
+      opacity: 0;
+      transition: opacity .25s ease, transform .25s ease;
       pointer-events: none;
-      max-width: 280px;
-      z-index: 999;
+      font-size: .84rem;
+      box-shadow: 0 18px 30px rgba(0,0,0,.28);
     }
-    #toast.show { opacity: 1; transform: none; }
-    #toast.ok  { border-color: var(--green); color: var(--green); }
-    #toast.err { border-color: var(--red);   color: var(--red); }
-
-    /* Loading overlay */
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.ok { color: var(--green); border-color: rgba(34,197,94,.35); }
+    #toast.err { color: var(--red); border-color: rgba(239,68,68,.35); }
     #init-overlay {
-      position: fixed; inset: 0;
-      background: var(--bg);
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 16px; z-index: 9999;
-      transition: opacity .5s;
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      background: rgba(7,17,31,.96);
+      z-index: 2000;
+      transition: opacity .45s ease;
     }
-    #init-overlay.hidden { opacity: 0; pointer-events: none; }
+    #init-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
     .spinner {
-      width: 44px; height: 44px;
-      border: 3px solid var(--border);
+      width: 46px;
+      height: 46px;
+      border-radius: 999px;
+      border: 3px solid rgba(255,255,255,.08);
       border-top-color: var(--accent);
-      border-radius: 50%;
       animation: spin .9s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #init-msg { font-size: .9rem; color: var(--muted); }
+    #init-msg {
+      margin: 0;
+      color: var(--muted);
+      font-size: .9rem;
+    }
   </style>
 </head>
 <body>
-
-<!-- Init overlay -->
-<div id="init-overlay">
-  <div class="spinner"></div>
-  <p id="init-msg">Loading face models…</p>
-</div>
-
-<!-- Toast -->
-<div id="toast"></div>
-
-<!-- Header -->
-<header>
-  <div class="logo">
-    <div class="logo-icon">🔐</div>
-    <div>
-      <h1>Smart Door Lock</h1>
-      <p>CaperClub Access Control</p>
-    </div>
-  </div>
-  <div id="status-badge" class="loading">
-    <div class="dot"></div>
-    <span id="status-text">Initialising…</span>
-  </div>
-</header>
-
-<!-- Main -->
-<div class="grid">
-
-  <!-- Camera card -->
-  <div class="card">
-    <p class="card-title">📷 Live Camera Feed</p>
-    <div class="cam-wrapper">
-      <video id="video" autoplay muted playsinline></video>
-      <canvas id="overlay"></canvas>
-      <div class="cam-glow idle" id="cam-glow"></div>
-    </div>
+  <div id="init-overlay">
+    <div class="spinner"></div>
+    <p id="init-msg">Starting backend scanner...</p>
   </div>
 
-  <!-- Side panel -->
-  <div class="side">
+  <div id="toast"></div>
 
-    <!-- Door status -->
+  <header>
+    <div class="brand">
+      <div class="brand-mark">🔐</div>
+      <div>
+        <h1>Smart Door Lock</h1>
+        <p>CaperClub backend face recognition</p>
+      </div>
+    </div>
+    <div id="status-badge" class="loading">
+      <div class="dot"></div>
+      <span id="status-text">Initialising...</span>
+    </div>
+  </header>
+
+  <div class="grid">
     <div class="card">
-      <p class="card-title">🚪 Door Status</p>
-      <div class="door-visual">
-        <div class="door-icon" id="door-icon">🔒</div>
-        <div class="door-label" id="door-label">LOCKED</div>
-        <div class="door-sub"  id="door-sub">No face detected</div>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">Detection</span>
-        <span class="stat-value" id="stat-detection">—</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">Last command</span>
-        <span class="stat-value" id="stat-command">—</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">API ping</span>
-        <span class="stat-value" id="stat-ping">—</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-label">Face score</span>
-        <span class="stat-value" id="stat-score">—</span>
+      <p class="card-title">Live Camera Feed</p>
+      <div class="cam-wrapper">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+        <div class="cam-glow idle" id="cam-glow"></div>
       </div>
     </div>
 
-    <!-- Manual controls -->
-    <div class="card">
-      <p class="card-title">🎛️ Manual Override</p>
-      <p class="door-sub">Use this to force the door into the locked state, same as the physical lock button.</p>
-      <div class="btn-row">
-        <button class="btn success" id="btn-unlock">🔓 Unlock</button>
-        <button class="btn danger"  id="btn-manual-lock">🔒 Manual Lock</button>
+    <div class="side">
+      <div class="card">
+        <p class="card-title">Door Status</p>
+        <div class="door-visual">
+          <div class="door-icon" id="door-icon">🔒</div>
+          <div class="door-label" id="door-label">LOCKED</div>
+          <div class="door-sub" id="door-sub">Waiting for backend scan</div>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Detection</span>
+          <span class="stat-value" id="stat-detection">-</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Last command</span>
+          <span class="stat-value" id="stat-command">-</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">API ping</span>
+          <span class="stat-value" id="stat-ping">-</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Face score</span>
+          <span class="stat-value" id="stat-score">-</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Manual Override</p>
+        <p class="door-sub">Manual controls still use the protected door API key.</p>
+        <div class="btn-row">
+          <button class="btn success" id="btn-unlock">Unlock</button>
+          <button class="btn danger" id="btn-manual-lock">Manual Lock</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Configuration</p>
+        <div class="field">
+          <label for="cfg-url">Backend URL</label>
+          <input type="text" id="cfg-url" placeholder="https://your-app.up.railway.app" />
+        </div>
+        <div class="field">
+          <label for="cfg-key">API Key (X-Door-Key)</label>
+          <input type="text" id="cfg-key" placeholder="Required for manual door commands only" />
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="btn-save-cfg">Save and Apply</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Activity Log</p>
+        <ul id="log-list"></ul>
       </div>
     </div>
-
-    <!-- Config -->
-    <div class="card">
-      <p class="card-title">⚙️ Configuration</p>
-      <div class="field">
-        <label>Backend URL</label>
-        <input type="text" id="cfg-url" placeholder="https://your-app.up.railway.app" />
-      </div>
-      <div class="field">
-        <label>API Key (X-Door-Key)</label>
-        <input type="text" id="cfg-key" placeholder="Enter manually for local testing only" />
-      </div>
-      <div class="btn-row">
-        <button class="btn primary" id="btn-save-cfg">💾 Save & Apply</button>
-      </div>
-    </div>
-
-    <!-- Activity log -->
-    <div class="card">
-      <p class="card-title">📋 Activity Log</p>
-      <ul id="log-list"></ul>
-    </div>
-
   </div>
-</div>
 
-<!-- face-api.js from vendor folder -->
-<script src="vendor/face-api.min.js"></script>
-<script>
-'use strict';
+  <script>
+    'use strict';
 
-// ─── Config (editable via UI, persisted to localStorage) ───────────────────
-const CFG_KEY = 'door_lock_config';
+    const CFG_KEY = 'door_lock_config';
+    const LOCK_AFTER_MS = 4000;
+    const SCAN_INTERVAL_MS = 1400;
+    const DEFAULT_SCAN_AREA = 'Capper Sports Club Entry';
 
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(CFG_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (_) {}
-  return {
-    backendUrl: '',
-    doorApiKey: '',
-  };
-}
-function saveConfig(cfg) {
-  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
-}
+    const video = document.getElementById('video');
+    const overlay = document.getElementById('overlay');
+    const ctx = overlay.getContext('2d');
 
-let cfg = loadConfig();
+    let cfg = loadConfig();
+    let currentDoorState = 'LOCK';
+    let lastFaceTime = 0;
+    let scanning = false;
+    let pendingCommand = null;
+    let lastScanState = '';
 
-// Populate fields
-document.getElementById('cfg-url').value = cfg.backendUrl;
-document.getElementById('cfg-key').value = cfg.doorApiKey;
+    document.getElementById('cfg-url').value = cfg.backendUrl;
+    document.getElementById('cfg-key').value = cfg.doorApiKey;
 
-document.getElementById('btn-save-cfg').addEventListener('click', () => {
-  cfg.backendUrl  = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
-  cfg.doorApiKey  = document.getElementById('cfg-key').value.trim();
-  saveConfig(cfg);
-  toast('Config saved ✓', 'ok');
-  addLog('Config updated', 'info');
-});
-
-// ─── Utility ───────────────────────────────────────────────────────────────
-function ts() {
-  return new Date().toLocaleTimeString('en-IN', { hour12: false });
-}
-
-function toast(msg, type = 'ok') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `show ${type}`;
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.className = ''; }, 2800);
-}
-
-function addLog(msg, type = '') {
-  const li   = document.createElement('li');
-  const time = document.createElement('span');
-  time.className = 'ts';
-  time.textContent = ts();
-  const text = document.createElement('span');
-  text.className = `msg ${type}`;
-  text.textContent = msg;
-  li.append(time, text);
-  const list = document.getElementById('log-list');
-  list.prepend(li);
-  // Keep max 50 entries
-  while (list.children.length > 50) list.lastChild.remove();
-}
-
-function setInitMsg(msg) {
-  document.getElementById('init-msg').textContent = msg;
-}
-
-// ─── Door state UI ─────────────────────────────────────────────────────────
-let currentDoorState = 'LOCK'; // 'LOCK' | 'UNLOCK'
-
-function applyDoorUI(command) {
-  const icon  = document.getElementById('door-icon');
-  const label = document.getElementById('door-label');
-  const glow  = document.getElementById('cam-glow');
-  const badge = document.getElementById('status-badge');
-  const btext = document.getElementById('status-text');
-  currentDoorState = command;
-
-  if (command === 'UNLOCK') {
-    icon.textContent  = '🔓';
-    icon.classList.add('open');
-    label.textContent = 'UNLOCKED';
-    glow.className    = 'cam-glow green';
-    badge.className   = 'unlocked';
-    btext.textContent = 'Door Unlocked';
-    document.getElementById('stat-command').className = 'stat-value green';
-    document.getElementById('stat-command').textContent = 'UNLOCK';
-  } else {
-    icon.textContent  = '🔒';
-    icon.classList.remove('open');
-    label.textContent = 'LOCKED';
-    glow.className    = 'cam-glow red';
-    badge.className   = 'locked';
-    btext.textContent = 'Door Locked';
-    document.getElementById('stat-command').className = 'stat-value red';
-    document.getElementById('stat-command').textContent = 'LOCK';
-  }
-}
-
-// ─── Backend API calls ─────────────────────────────────────────────────────
-async function callDoorApi(endpoint) {
-  const url = `${cfg.backendUrl}/door/${endpoint}`;
-  const t0  = Date.now();
-  try {
-    const res = await fetch(url, {
-      method: endpoint === 'status' ? 'GET' : 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Door-Key': cfg.doorApiKey,
-      },
+    document.getElementById('btn-save-cfg').addEventListener('click', async () => {
+      cfg.backendUrl = document.getElementById('cfg-url').value.trim().replace(/\/$/, '');
+      cfg.doorApiKey = document.getElementById('cfg-key').value.trim();
+      saveConfig(cfg);
+      addLog('Config updated', 'info');
+      toast('Config saved', 'ok');
+      await runStatusCheck();
     });
-    const ping = Date.now() - t0;
-    document.getElementById('stat-ping').textContent = `${ping} ms`;
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${res.status}`);
+    document.getElementById('btn-unlock').addEventListener('click', sendUnlock);
+    document.getElementById('btn-manual-lock').addEventListener('click', () => sendLock('Manual LOCK'));
+
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem(CFG_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      return { backendUrl: '', doorApiKey: '' };
     }
-    return await res.json();
-  } catch (err) {
-    document.getElementById('stat-ping').textContent = 'error';
-    throw err;
-  }
-}
 
-async function sendUnlock() {
-  try {
-    await callDoorApi('unlock');
-    applyDoorUI('UNLOCK');
-    addLog('UNLOCK sent to backend', 'ok');
-  } catch (err) {
-    addLog(`Unlock failed: ${err.message}`, 'err');
-    toast(`Unlock failed: ${err.message}`, 'err');
-  }
-}
+    function saveConfig(value) {
+      localStorage.setItem(CFG_KEY, JSON.stringify(value));
+    }
 
-async function sendLock(logLabel = 'LOCK') {
-  try {
-    await callDoorApi('lock');
-    applyDoorUI('LOCK');
-    addLog(`${logLabel} sent to backend`, 'info');
-  } catch (err) {
-    addLog(`${logLabel} failed: ${err.message}`, 'err');
-    toast(`${logLabel} failed: ${err.message}`, 'err');
-  }
-}
+    function ts() {
+      return new Date().toLocaleTimeString('en-IN', { hour12: false });
+    }
 
-function sendManualLock() {
-  return sendLock('Manual LOCK');
-}
+    function toast(message, type = 'ok') {
+      const el = document.getElementById('toast');
+      el.textContent = message;
+      el.className = `show ${type}`;
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => {
+        el.className = '';
+      }, 2600);
+    }
 
-document.getElementById('btn-unlock').addEventListener('click', sendUnlock);
-document.getElementById('btn-manual-lock').addEventListener('click', sendManualLock);
+    function addLog(message, type = '') {
+      const li = document.createElement('li');
+      const time = document.createElement('span');
+      const text = document.createElement('span');
+      time.className = 'ts';
+      time.textContent = ts();
+      text.className = `msg ${type}`;
+      text.textContent = message;
+      li.append(time, text);
+      const list = document.getElementById('log-list');
+      list.prepend(li);
+      while (list.children.length > 50) list.lastChild.remove();
+    }
 
-// ─── Face detection loop ───────────────────────────────────────────────────
-const video   = document.getElementById('video');
-const overlay = document.getElementById('overlay');
-const ctx     = overlay.getContext('2d');
+    function setInitMsg(message) {
+      document.getElementById('init-msg').textContent = message;
+    }
 
-let modelsLoaded  = false;
-let lastFaceTime  = 0;          // epoch ms of last face detection
-const LOCK_AFTER_MS = 4000;     // lock if no face for 4 s
-let pendingCommand = null;       // 'UNLOCK' | 'LOCK' — deduplicate API calls
-let detecting     = false;
+    function applyDoorUI(command) {
+      const icon = document.getElementById('door-icon');
+      const label = document.getElementById('door-label');
+      const glow = document.getElementById('cam-glow');
+      const badge = document.getElementById('status-badge');
+      const badgeText = document.getElementById('status-text');
+      const commandEl = document.getElementById('stat-command');
+      currentDoorState = command === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
 
-async function startCamera() {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-    audio: false,
-  });
-  video.srcObject = stream;
-  await new Promise(r => { video.onloadedmetadata = r; });
-  overlay.width  = video.videoWidth;
-  overlay.height = video.videoHeight;
-  addLog('Camera started', 'info');
-}
+      if (currentDoorState === 'UNLOCK') {
+        icon.textContent = '🔓';
+        icon.classList.add('open');
+        label.textContent = 'UNLOCKED';
+        glow.className = 'cam-glow green';
+        badge.className = 'unlocked';
+        badgeText.textContent = 'Door Unlocked';
+        commandEl.className = 'stat-value green';
+        commandEl.textContent = 'UNLOCK';
+      } else {
+        icon.textContent = '🔒';
+        icon.classList.remove('open');
+        label.textContent = 'LOCKED';
+        glow.className = 'cam-glow red';
+        badge.className = 'locked';
+        badgeText.textContent = 'Door Locked';
+        commandEl.className = 'stat-value red';
+        commandEl.textContent = 'LOCK';
+      }
+    }
 
-async function loadFaceModels() {
-  const MODEL_URL = 'models';
-  await Promise.all([
-    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-    faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-  ]);
-  addLog('Face models loaded', 'info');
-}
+    async function callDoorApi(endpoint) {
+      if (!cfg.backendUrl) throw new Error('Backend URL is missing.');
+      const url = `${cfg.backendUrl}/door/${endpoint}`;
+      const start = Date.now();
+      try {
+        const res = await fetch(url, {
+          method: endpoint === 'status' ? 'GET' : 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Door-Key': cfg.doorApiKey,
+          },
+        });
+        document.getElementById('stat-ping').textContent = `${Date.now() - start} ms`;
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(payload.detail || `HTTP ${res.status}`);
+        }
+        return payload;
+      } catch (error) {
+        document.getElementById('stat-ping').textContent = 'error';
+        throw error;
+      }
+    }
 
-async function detectFaces() {
-  if (detecting || !modelsLoaded || !video.videoWidth) return;
-  detecting = true;
+    async function callScanApi(image) {
+      if (!cfg.backendUrl) throw new Error('Backend URL is missing.');
+      const url = `${cfg.backendUrl}/access/scan`;
+      const start = Date.now();
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            area: DEFAULT_SCAN_AREA,
+            image,
+            capturedFrames: 1,
+          }),
+        });
+        document.getElementById('stat-ping').textContent = `${Date.now() - start} ms`;
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(payload.message || payload.detail || `HTTP ${res.status}`);
+        }
+        return payload;
+      } catch (error) {
+        document.getElementById('stat-ping').textContent = 'error';
+        throw error;
+      }
+    }
 
-  try {
-    const options = new faceapi.TinyFaceDetectorOptions({
-      inputSize: 320,
-      scoreThreshold: 0.5,
-    });
+    async function sendUnlock() {
+      try {
+        await callDoorApi('unlock');
+        applyDoorUI('UNLOCK');
+        addLog('UNLOCK sent to backend', 'ok');
+      } catch (error) {
+        addLog(`Unlock failed: ${error.message}`, 'err');
+        toast(`Unlock failed: ${error.message}`, 'err');
+      }
+    }
 
-    const detections = await faceapi
-      .detectAllFaces(video, options)
-      .withFaceLandmarks(true);
+    async function sendLock(label = 'LOCK') {
+      try {
+        await callDoorApi('lock');
+        applyDoorUI('LOCK');
+        addLog(`${label} sent to backend`, 'info');
+      } catch (error) {
+        addLog(`${label} failed: ${error.message}`, 'err');
+        toast(`${label} failed: ${error.message}`, 'err');
+      }
+    }
 
-    const now = Date.now();
-
-    // Draw overlays
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-    if (detections.length > 0) {
-      // Draw bounding boxes
-      const resized = faceapi.resizeResults(detections, {
-        width: overlay.width, height: overlay.height,
+    async function startCamera() {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
       });
-      resized.forEach(det => {
-        const box = det.detection.box;
-        const score = det.detection.score;
-        ctx.strokeStyle = '#22c55e';
-        ctx.lineWidth   = 2.5;
-        ctx.shadowColor = '#22c55e';
-        ctx.shadowBlur  = 12;
-        ctx.strokeRect(box.x, box.y, box.width, box.height);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle  = 'rgba(34,197,94,.12)';
-        ctx.fillRect(box.x, box.y, box.width, box.height);
-        // Score label
-        ctx.fillStyle  = '#22c55e';
-        ctx.font       = 'bold 13px Inter, sans-serif';
-        ctx.fillText(`Face ${(score * 100).toFixed(0)}%`, box.x + 4, box.y - 6);
+      video.srcObject = stream;
+      await new Promise(resolve => {
+        video.onloadedmetadata = resolve;
       });
+      overlay.width = video.videoWidth;
+      overlay.height = video.videoHeight;
+      addLog('Camera started', 'info');
+    }
 
-      document.getElementById('stat-detection').className = 'stat-value green';
-      document.getElementById('stat-detection').textContent = `${detections.length} face(s)`;
-      document.getElementById('stat-score').textContent =
-        `${(detections[0].detection.score * 100).toFixed(1)}%`;
-      document.getElementById('door-sub').textContent = 'Face detected — unlocking';
+    function grabFrame() {
+      if (!video.videoWidth || !video.videoHeight) return '';
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const frameCtx = canvas.getContext('2d');
+      if (!frameCtx) return '';
+      frameCtx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', 0.9);
+    }
 
-      lastFaceTime = now;
+    function clearOverlay() {
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+    }
 
-      if (pendingCommand !== 'UNLOCK') {
-        pendingCommand = 'UNLOCK';
-        sendUnlock();
+    function drawFaceBox(faceBox) {
+      clearOverlay();
+      if (!faceBox) return;
+      const x = Number(faceBox.left || 0) * overlay.width;
+      const y = Number(faceBox.top || 0) * overlay.height;
+      const w = Number(faceBox.width || 0) * overlay.width;
+      const h = Number(faceBox.height || 0) * overlay.height;
+      if (!w || !h) return;
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = '#22c55e';
+      ctx.shadowBlur = 12;
+      ctx.strokeRect(x, y, w, h);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(34,197,94,.12)';
+      ctx.fillRect(x, y, w, h);
+    }
+
+    function applyScanStatus(result) {
+      const now = Date.now();
+      const status = String(result?.status || '').toLowerCase();
+      const message = String(result?.message || 'Waiting for backend scan.');
+      const confidence = Number(result?.confidence || 0);
+      const faceBox = result?.faceBox || null;
+      const name = String(result?.name || '').trim();
+      const hasFace = Boolean(faceBox);
+
+      drawFaceBox(faceBox);
+      document.getElementById('stat-score').textContent = confidence > 0
+        ? `${(confidence * 100).toFixed(1)}%`
+        : '-';
+
+      if (hasFace) {
+        lastFaceTime = now;
+        document.getElementById('stat-detection').className = 'stat-value green';
+        document.getElementById('stat-detection').textContent = name || 'Face detected';
+      } else {
+        document.getElementById('stat-detection').className = 'stat-value red';
+        document.getElementById('stat-detection').textContent = 'No face';
       }
 
-    } else {
-      document.getElementById('stat-detection').className = 'stat-value red';
-      document.getElementById('stat-detection').textContent = 'No face';
-      document.getElementById('stat-score').textContent = '—';
+      if (status === 'granted') {
+        document.getElementById('door-sub').textContent = name
+          ? `${name} recognized - unlocking`
+          : 'Access granted - unlocking';
+        if (pendingCommand !== 'UNLOCK') {
+          pendingCommand = 'UNLOCK';
+          sendUnlock();
+        }
+        lastScanState = status;
+        return;
+      }
 
-      const elapsed = now - lastFaceTime;
-      if (lastFaceTime > 0 && elapsed >= LOCK_AFTER_MS && pendingCommand !== 'LOCK') {
-        pendingCommand = 'LOCK';
-        document.getElementById('door-sub').textContent = 'No face — locking';
-        sendLock();
-      } else if (lastFaceTime === 0) {
-        document.getElementById('door-sub').textContent = 'Scanning for faces…';
+      if (status !== lastScanState) {
+        addLog(`Scan ${status || 'retry'}: ${message}`, status === 'denied' ? 'err' : 'info');
+        lastScanState = status;
+      }
+
+      if (hasFace) {
+        document.getElementById('door-sub').textContent = message;
         if (pendingCommand !== 'LOCK') {
           pendingCommand = 'LOCK';
-          sendLock();
+          sendLock('Auto LOCK');
         }
-      } else {
+        return;
+      }
+
+      const elapsed = now - lastFaceTime;
+      if (lastFaceTime > 0 && elapsed < LOCK_AFTER_MS) {
         const remaining = Math.max(0, Math.ceil((LOCK_AFTER_MS - elapsed) / 1000));
-        document.getElementById('door-sub').textContent =
-          `Face gone — locking in ${remaining}s`;
+        document.getElementById('door-sub').textContent = `Face gone - locking in ${remaining}s`;
+        return;
+      }
+
+      document.getElementById('door-sub').textContent = 'Scanning for recognized face...';
+      if (pendingCommand !== 'LOCK') {
+        pendingCommand = 'LOCK';
+        sendLock('Auto LOCK');
       }
     }
-  } catch (err) {
-    addLog(`Detection error: ${err.message}`, 'err');
-  } finally {
-    detecting = false;
-  }
-}
 
-// ─── Boot sequence ─────────────────────────────────────────────────────────
-(async () => {
-  const overlay_el = document.getElementById('init-overlay');
-
-  try {
-    setInitMsg('Loading face detection models…');
-    await loadFaceModels();
-    modelsLoaded = true;
-
-    setInitMsg('Starting camera…');
-    await startCamera();
-
-    // Check backend connectivity
-    if (cfg.backendUrl) {
+    async function detectFaces() {
+      if (scanning || !cfg.backendUrl || !video.videoWidth) return;
+      scanning = true;
       try {
-        setInitMsg('Connecting to backend…');
-        const data = await callDoorApi('status');
-        applyDoorUI(data.command || 'LOCK');
-        addLog(`Backend connected — current state: ${data.command}`, 'ok');
-        toast('Backend connected ✓', 'ok');
-      } catch (err) {
-        addLog(`Backend unreachable: ${err.message}`, 'err');
-        toast('Backend unreachable — check config', 'err');
-        document.getElementById('status-badge').className = 'loading';
-        document.getElementById('status-text').textContent = 'Backend offline';
+        const image = grabFrame();
+        if (!image) return;
+        const result = await callScanApi(image);
+        applyScanStatus(result);
+      } catch (error) {
+        document.getElementById('door-sub').textContent = `Scan failed: ${error.message}`;
+        addLog(`Scan error: ${error.message}`, 'err');
+      } finally {
+        scanning = false;
       }
-    } else {
-      addLog('No backend URL — set it in Configuration', 'err');
-      toast('Enter your backend URL in Configuration ⬇', 'err');
-      document.getElementById('status-badge').className = 'loading';
-      document.getElementById('status-text').textContent = 'No backend URL';
     }
 
-    // Dismiss loading screen
-    overlay_el.classList.add('hidden');
-    setTimeout(() => overlay_el.remove(), 600);
+    async function runStatusCheck() {
+      if (!cfg.backendUrl) {
+        document.getElementById('status-badge').className = 'loading';
+        document.getElementById('status-text').textContent = 'No backend URL';
+        return;
+      }
+      try {
+        const state = await callDoorApi('status');
+        applyDoorUI(state.command || 'LOCK');
+        addLog(`Backend connected - current state: ${state.command || 'LOCK'}`, 'ok');
+      } catch (error) {
+        document.getElementById('status-badge').className = 'loading';
+        document.getElementById('status-text').textContent = 'Backend check failed';
+        addLog(`Backend status check failed: ${error.message}`, 'err');
+      }
+    }
 
-    // Start detection loop (every 600 ms)
-    setInterval(detectFaces, 600);
+    (async () => {
+      const initOverlay = document.getElementById('init-overlay');
+      try {
+        setInitMsg('Starting camera...');
+        await startCamera();
 
-    addLog('System ready', 'info');
+        setInitMsg('Checking backend...');
+        await runStatusCheck();
 
-  } catch (err) {
-    setInitMsg(`Error: ${err.message}`);
-    addLog(`Boot error: ${err.message}`, 'err');
-  }
-})();
-</script>
+        initOverlay.classList.add('hidden');
+        setTimeout(() => initOverlay.remove(), 500);
+
+        setInterval(detectFaces, SCAN_INTERVAL_MS);
+        addLog('Backend face scanner ready', 'info');
+      } catch (error) {
+        setInitMsg(`Error: ${error.message}`);
+        addLog(`Boot error: ${error.message}`, 'err');
+      }
+    })();
+  </script>
 </body>
 </html>
