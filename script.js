@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
+const LOCAL_DEV_API_BASE = inferLocalDevApiBase();
 const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
@@ -4089,7 +4090,7 @@ function ensureAdmin() {
 function streamHasActiveVideo(stream) {
   return Boolean(stream && stream.getVideoTracks().some(track => track.readyState === 'live'));
 }
-function inferDefaultApiBase() {
+function inferLocalDevApiBase() {
   const origin = window.location.origin && window.location.origin !== 'null'
     ? window.location.origin
     : '';
@@ -4102,57 +4103,29 @@ function inferDefaultApiBase() {
     } catch {}
   }
 
-  return 'https://caper-club-backend-production.up.railway.app';
-}
-function getLocalDevApiBase() {
-  const origin = window.location.origin && window.location.origin !== 'null'
-    ? window.location.origin
-    : '';
-
-  if (!origin) return '';
-
-  try {
-    const url = new URL(origin);
-    if (['localhost', '127.0.0.1'].includes(url.hostname)) {
-      return `${url.protocol}//${url.hostname}:8001`;
-    }
-  } catch {}
-
   return '';
 }
 function resolveInitialApiBase() {
   const savedApiBase = localStorage.getItem(STORAGE_KEYS.apiBase);
   if (savedApiBase) return norm(savedApiBase);
+  if (LOCAL_DEV_API_BASE) return norm(LOCAL_DEV_API_BASE);
   return norm(DEFAULT_API_BASE);
 }
 function getApiBaseCandidates() {
-  const origin = window.location.origin && window.location.origin !== 'null'
-    ? window.location.origin
-    : '';
   const list = [];
   const push = value => {
     const next = norm(value);
     if (next && !list.includes(next)) list.push(next);
   };
 
-  if (origin) {
-    try {
-      const url = new URL(origin);
-      const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
-      if (isLocalHost) {
-        push(`${url.protocol}//${url.hostname}:8001`);
-        push(`${url.protocol}//${url.hostname}:8000`);
-      }
-      push(`${url.protocol}//${url.hostname}:8001`);
-      push(`${url.protocol}//${url.hostname}:8000`);
-    } catch {}
-  }
-
   push(S.apiBase);
   push(DEFAULT_API_BASE);
-  push(origin);
-  push('http://localhost:8001');
-  push('http://127.0.0.1:8001');
+  push(LOCAL_DEV_API_BASE);
+
+  if (LOCAL_DEV_API_BASE) {
+    push('http://localhost:8001');
+    push('http://127.0.0.1:8001');
+  }
   return list;
 }
 function setApiBase(value, opts = {}) {
@@ -4280,13 +4253,17 @@ function humanizeApiFetchError(error, path = '') {
   const rawMessage = String(error?.message || '').trim();
   const apiBase = norm(S.apiBase);
   const isLocalApi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(apiBase);
+  const isLocalFrontend = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(window.location.origin || '');
   const targetPath = String(path || '');
 
   if (rawMessage === 'Failed to fetch' || /load failed|networkerror/i.test(rawMessage)) {
     if (isLocalApi) {
       return `Local backend is not reachable at ${apiBase}${targetPath}. Start the backend server and try again.`;
     }
-    return `Backend request failed at ${apiBase}${targetPath}. If you are running the frontend on localhost, switch API Base to http://127.0.0.1:8001 or start the local backend.`;
+    if (isLocalFrontend) {
+      return `Backend request failed at ${apiBase}${targetPath}. Check Railway deployment health, public networking, and CORS for your current frontend origin.`;
+    }
+    return `Backend request failed at ${apiBase}${targetPath}.`;
   }
 
   return rawMessage || `Request failed for ${targetPath || 'API call'}.`;
