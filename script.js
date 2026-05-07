@@ -2926,12 +2926,13 @@ async function handleUserSubmit(e) {
 
   const payload = {
     name: name,
-    memberId: isEditMode ? $('userMemberIdInput').value.trim() || null : null,
+    // Backend requires memberId always for UpdateUserInput; frontend was sending null in edit mode.
+    memberId: $('userMemberIdInput').value.trim(),
     sport: $('userSportInput')?.value || 'General',
     membershipLevel: $('userLevelInput')?.value || '',
     email: email,
-    password: password,
-    mobileNumber: $('userMobileInput')?.value?.trim() || '',
+    password: password || null,
+    mobileNumber: $('userMobileInput')?.value?.trim() || null,
     role: $('userRoleInput').value,
     slotId: $('userSlotInput').value || null,
     membershipPlan: $('userPlanInput').value,
