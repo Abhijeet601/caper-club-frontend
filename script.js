@@ -31,7 +31,8 @@ const LIVE_VERIFY_MIN_DETECTION_SCORE = 0.88;
 const LIVE_VERIFY_MIN_FACE_RATIO = 0.16;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_X = 0.22;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_Y = 0.24;
-const LIVE_VERIFY_READY_CONFIDENCE = 0.58;
+// Lowered to reduce false negatives when detector quality is slightly lower.
+const LIVE_VERIFY_READY_CONFIDENCE = 0.48;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
