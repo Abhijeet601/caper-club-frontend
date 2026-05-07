@@ -1417,15 +1417,20 @@ function startSubtitleLoop() {
 function renderSystemStatus() {
   const members = S.users.filter(u => u.role === 'user').length;
   const activeSessions = S.sessions.filter(s => s.status === 'active').length;
+  const aiModelsReady = S.healthOk;
+  const aiModelsLoading = S.faceModelsLoading && !aiModelsReady;
+  const aiModelsSub = aiModelsReady
+    ? 'Railway backend recognition stack'
+    : (S.faceModelsError || 'Railway backend offline');
   const cards = [
     { label:'Members', value: members, sub:'Registered', tone:'blue', progress: Math.min(100, members*8) },
     { label:'Active', value: activeSessions, sub:'Sessions now', tone:'green', progress: Math.min(100, activeSessions*20) },
     {
       label:'AI Models',
-      value: S.faceModelsReady ? 'Ready' : (S.faceModelsLoading ? 'Loading' : 'Offline'),
-      sub: S.faceModelsError || 'Browser recognition stack',
-      tone: S.faceModelsReady ? 'green' : (S.faceModelsLoading ? 'amber' : 'red'),
-      progress: S.faceModelsReady ? 100 : (S.faceModelsLoading ? 55 : 12),
+      value: aiModelsReady ? 'Ready' : (aiModelsLoading ? 'Loading' : 'Offline'),
+      sub: aiModelsSub,
+      tone: aiModelsReady ? 'green' : (aiModelsLoading ? 'amber' : 'red'),
+      progress: aiModelsReady ? 100 : (aiModelsLoading ? 55 : 12),
     },
     {
       label:'Embeddings',
