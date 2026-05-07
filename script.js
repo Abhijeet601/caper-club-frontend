@@ -13,7 +13,7 @@ const STORAGE_KEYS = {
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 650;
-const DOOR_STATUS_POLL_MS = 3000;
+const DOOR_STATUS_POLL_MS = 2000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -138,7 +138,11 @@ const S = {
   sessionTimerLoop: null,
   doorCommand: 'LOCK',
   doorUpdatedAt: null,
+  doorRelocking: false,
+  doorRemainingSeconds: 0,
+  doorRelockDeadlineAt: 0,
   doorStatusTimer: null,
+  doorUiTimer: null,
   doorStatusSyncPromise: null,
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
@@ -435,7 +439,7 @@ function bindEvents() {
   $('loginForm').addEventListener('submit', handleLogin);
   $('logoutBtn').addEventListener('click', logout);
   $('loadMeBtn').addEventListener('click', () => refreshAll({ toast: true }));
-  if ($('manualDoorLockBtn')) $('manualDoorLockBtn').addEventListener('click', triggerManualDoorLock);
+  if ($('doorUnlockBtn')) $('doorUnlockBtn').addEventListener('click', triggerDoorUnlock);
 
   // Users
   $('userRoleInput').addEventListener('change', () => {
@@ -582,7 +586,9 @@ async function ensureFaceModelsLoaded() {
   try {
     await ensureFaceAiLibraryLoaded();
     if (!window.FaceAi) throw new Error('Face recognition library failed to load.');
-    await window.FaceAi.loadModels('models');
+    // Force offline model loading from the app's /models folder (not a relative path like "models").
+    await window.FaceAi.loadModels('/models');
+
     S.faceModelsReady = true;
     return true;
   } catch (err) {
@@ -664,7 +670,7 @@ async function handleLogin(e) {
 function setAuth(user) {
   const ok = Boolean(user && S.token);
   const cameraAccess = ok && isAdmin();
-  const manualDoorLockBtn = $('manualDoorLockBtn');
+  const doorUnlockBtn = $('doorUnlockBtn');
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
   $('authText').textContent = ok ? `${user.role?.toUpperCase()} â€¢ ${user.name}` : 'Signed out';
 
@@ -691,7 +697,7 @@ function setAuth(user) {
   $('enableCameraInput').disabled = !cameraAccess;
   $('captureScanBtn').disabled = !cameraAccess;
   $('captureEnrollmentBtn').disabled = !cameraAccess;
-  if (manualDoorLockBtn) manualDoorLockBtn.disabled = !cameraAccess;
+  if (doorUnlockBtn) doorUnlockBtn.disabled = !cameraAccess;
 
   if (cameraAccess) {
     startDoorStatusPoll();
@@ -838,19 +844,63 @@ async function pingHealth() {
 function applyDoorStateSnapshot(state) {
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
+  S.doorRelocking = Boolean(state?.relocking) && S.doorCommand === 'UNLOCK';
+  S.doorRemainingSeconds = S.doorRelocking ? Math.max(0, Number(state?.remainingSeconds || 0)) : 0;
+  S.doorRelockDeadlineAt = S.doorRelocking
+    ? Date.now() + (S.doorRemainingSeconds * 1000)
+    : 0;
+  ensureDoorUiTimer();
   updateDoorUi();
 }
 
 function updateDoorUi() {
   const dot = $('doorDot');
   const text = $('doorText');
-  const button = $('manualDoorLockBtn');
+  const countdown = $('doorCountdownText');
+  const button = $('doorUnlockBtn');
   if (!dot || !text) return;
 
+  const remainingSeconds = S.doorRelocking && S.doorRelockDeadlineAt
+    ? Math.max(0, Math.ceil((S.doorRelockDeadlineAt - Date.now()) / 1000))
+    : 0;
+  S.doorRemainingSeconds = remainingSeconds;
+  if (S.doorRelocking && !remainingSeconds) {
+    S.doorCommand = 'LOCK';
+    S.doorRelocking = false;
+    S.doorRelockDeadlineAt = 0;
+  }
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
-  text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
-  if (button) button.textContent = unlocked ? 'Manual Lock' : 'Locked';
+  text.textContent = unlocked ? '🔓 UNLOCKED' : '🔒 LOCKED';
+
+  if (countdown) {
+    countdown.textContent = S.doorRelocking && remainingSeconds > 0
+      ? `Relocking in ${remainingSeconds}s...`
+      : '';
+  }
+
+  if (button) {
+    button.disabled = !isAdmin() || S.doorRelocking;
+    button.textContent = S.doorRelocking ? `UNLOCKED ${remainingSeconds}s` : 'UNLOCK DOOR';
+    button.classList.toggle('is-busy', S.doorRelocking);
+  }
+}
+
+function ensureDoorUiTimer() {
+  if (S.doorRelocking) {
+    if (S.doorUiTimer) return;
+    S.doorUiTimer = setInterval(() => {
+      updateDoorUi();
+      if (!S.doorRelocking) {
+        clearInterval(S.doorUiTimer);
+        S.doorUiTimer = null;
+      }
+    }, 250);
+    return;
+  }
+
+  clearInterval(S.doorUiTimer);
+  S.doorUiTimer = null;
 }
 
 async function syncDoorState(opts = {}) {
@@ -889,6 +939,8 @@ function startDoorStatusPoll() {
 function clearDoorStatusPoll() {
   clearInterval(S.doorStatusTimer);
   S.doorStatusTimer = null;
+  clearInterval(S.doorUiTimer);
+  S.doorUiTimer = null;
 }
 
 function buildDoorDetectionPayload(result) {
@@ -921,24 +973,21 @@ function queueDoorDetectionSync(result, opts = {}) {
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    RENDER ALL
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
-async function triggerManualDoorLock() {
+async function triggerDoorUnlock() {
   if (!ensureAdmin()) return;
 
-  const button = $('manualDoorLockBtn');
+  const button = $('doorUnlockBtn');
   if (button) button.disabled = true;
 
   try {
-    const state = await api('/door/manual-lock', {
-      method: 'POST',
-      body: { force: true },
-    });
+    const state = await api('/door/manual-unlock', { method: 'POST' });
     applyDoorStateSnapshot(state);
     S.lastDoorDetectionSignal = '';
-    toast('Door locked manually.', 'success');
+    toast('Door unlocked. Auto relock started.', 'success');
   } catch (error) {
     handleErr(error, { toast: true });
   } finally {
-    if (button) button.disabled = !isAdmin();
+    updateDoorUi();
   }
 }
 
@@ -3969,6 +4018,10 @@ function fillSelect(sel, items, opts = {}) {
 
 /* â”€â”€ API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function api(path, opts = {}) {
+  return apiRequest(path, opts, false);
+}
+
+async function apiRequest(path, opts = {}, hasRetried = false) {
   const headers = { ...(opts.headers||{}) };
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
   if (S.token) headers.Authorization = `Bearer ${S.token}`;
@@ -3981,6 +4034,10 @@ async function api(path, opts = {}) {
       S.healthOk = false;
       updateHealthUi();
     }
+    if (!hasRetried && await ensureBackendConnection({ silent: true })) {
+      return apiRequest(path, opts, true);
+    }
+    error.message = 'Failed to fetch. Backend is unreachable. Start the backend or update the API base URL.';
     throw error;
   }
   if (!S.healthOk) {
@@ -4081,7 +4138,7 @@ async function probeHealth(base) {
     clearTimeout(timer);
   }
 }
-async function ensureBackendConnection() {
+async function ensureBackendConnection(opts = {}) {
   for (const base of getApiBaseCandidates()) {
     if (!await probeHealth(base)) continue;
     setApiBase(base);
@@ -4092,6 +4149,9 @@ async function ensureBackendConnection() {
 
   S.healthOk = false;
   updateHealthUi();
+  if (!opts.silent) {
+    console.warn('[Backend] No reachable backend found in candidates:', getApiBaseCandidates());
+  }
   return false;
 }
 
@@ -4233,7 +4293,7 @@ function clearSess() {
     enrollmentZoom:1,
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
-    doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
+    doorCommand:'LOCK', doorUpdatedAt:null, doorRelocking:false, doorRemainingSeconds:0, doorRelockDeadlineAt:0, doorUiTimer:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
     activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},

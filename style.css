@@ -425,9 +425,53 @@ table { width: 100%; border-collapse: collapse; }
   justify-content: flex-end;
 }
 
+.door-pill {
+  min-width: 140px;
+  justify-content: center;
+}
+
+.door-relock-text {
+  min-height: 18px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--amber);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .topbar-door-btn {
   white-space: nowrap;
   min-height: 34px;
+}
+
+.unlock-door-btn {
+  min-width: 158px;
+  border: 0;
+  background: linear-gradient(135deg, #047857 0%, #10b981 45%, #34d399 100%);
+  box-shadow: 0 10px 24px rgba(5, 150, 105, 0.26);
+  transition: transform 0.22s var(--ease-spring), box-shadow 0.22s var(--ease-smooth), filter 0.22s var(--ease-smooth);
+}
+
+.unlock-door-btn:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: 0 14px 28px rgba(5, 150, 105, 0.34);
+  filter: saturate(1.08);
+}
+
+.unlock-door-btn.is-busy {
+  background: linear-gradient(135deg, #b45309 0%, #f59e0b 50%, #fbbf24 100%);
+  box-shadow: 0 10px 24px rgba(217, 119, 6, 0.3);
+  animation: unlockPulse 1s ease-in-out infinite;
+}
+
+.unlock-door-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+@keyframes unlockPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
 }
 
 .topbar-door-btn:disabled {

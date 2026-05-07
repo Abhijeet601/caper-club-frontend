@@ -57,15 +57,13 @@
         </div>
       </div>
       <div class="door-controls">
-        <div class="status-pill" id="doorPill">
+        <div class="status-pill door-pill" id="doorPill">
           <span class="status-dot" id="doorDot"></span>
-          <span id="doorText">Door: Checking...</span>
+          <span id="doorText">🔒 LOCKED</span>
         </div>
-        <button type="button" class="btn-ghost btn-sm topbar-door-btn" id="manualDoorUnlockBtn" disabled>
-          Manual Unlock
-        </button>
-        <button type="button" class="btn-ghost btn-sm danger topbar-door-btn" id="manualDoorLockBtn" disabled>
-          Manual Lock
+        <div class="door-relock-text" id="doorCountdownText"></div>
+        <button type="button" class="btn-primary btn-sm topbar-door-btn unlock-door-btn" id="doorUnlockBtn" disabled>
+          UNLOCK DOOR
         </button>
       </div>
 
