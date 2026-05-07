@@ -766,7 +766,7 @@ function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
     case 'users':
       return activeTab === 'allMembersTab' || activeTab === 'newUserTab' || activeTab === 'membershipTab' || activeTab === 'reportsTab' || activeTab === 'alertsTab' || activeTab === 'settingsTab';
     case 'slots':
-      return activeTab === 'settingsTab' || activeTab === 'membershipTab';
+      return activeTab === 'settingsTab' || activeTab === 'membershipTab' || activeTab === 'newUserTab';
     case 'dashboard':
       return activeTab === 'liveOpsTab';
     case 'sessions':
