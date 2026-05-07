@@ -1014,7 +1014,18 @@ async function triggerDoorUnlock() {
     const state = await api('/door/manual-unlock', { method: 'POST' });
     applyDoorStateSnapshot(state);
     S.lastDoorDetectionSignal = '';
+
     toast('Door unlocked. Auto relock started.', 'success');
+
+    // Server TTS announcement (works after admin button click / user gesture)
+    // Play only when the backend reports UNLOCK.
+    if (String(state?.command || '').toUpperCase() === 'UNLOCK') {
+      const name = S.currentUser?.name ? String(S.currentUser.name).trim() : '';
+      const msg = name
+        ? 'Door unlocked. Please enter.'
+        : 'Door unlocked. Please enter.';
+      speakServerAudio(msg, { cooldownMs: 30000, cooldownKey: 'door-unlock' }).catch(() => {});
+    }
   } catch (error) {
     handleErr(error, { toast: true });
   } finally {
@@ -3403,9 +3414,14 @@ async function handleAnnouncementSubmit(e) {
   e.preventDefault();
   if (!ensureAdmin()) return;
   try {
+    // Auto-include door state in announcements per request.
+    const doorText = S.doorCommand === 'UNLOCK' ? 'Door lock: UNLOCKED' : 'Door lock: LOCKED';
+    const baseMessage = $('announcementMessageInput').value.trim();
+    const finalMessage = baseMessage ? `${baseMessage} | ${doorText}` : doorText;
+
     await api('/admin/announcements', { method:'POST', body: {
       title: $('announcementTitleInput').value.trim(),
-      message: $('announcementMessageInput').value.trim(),
+      message: finalMessage,
       tone: $('announcementToneInput').value,
       userId: $('announcementUserInput').value || null,
     }});
@@ -4262,8 +4278,59 @@ async function doSpeak(item) {
   return false;
 }
 
-async function speakServerAudio(text) {
-  return false;
+async function speakServerAudio(text, opts = {}) {
+  if (!ensureAdmin()) return false;
+  const t = String(text || '').trim();
+  if (!t) return false;
+
+  // Debounce rapid re-triggers
+  const cooldownMs = Number.isFinite(Number(opts.cooldownMs)) ? Number(opts.cooldownMs) : 2000;
+  const key = String(opts.cooldownKey || t);
+  const now = Date.now();
+  const last = Number(S.audioCooldownAt?.[key] || 0);
+  if (cooldownMs > 0 && (now - last) < cooldownMs) return false;
+  if (!S.audioCooldownAt) S.audioCooldownAt = {};
+  S.audioCooldownAt[key] = now;
+
+  try {
+    const audioBlob = await api('/tts', { method: 'POST', body: { text: t }, responseType: 'blob' });
+    if (!audioBlob) return false;
+
+    const url = URL.createObjectURL(audioBlob);
+    const audio = $('ttsAudio');
+    if (!audio) return false;
+
+    // Stop any currently playing server audio
+    try { audio.pause(); } catch {}
+
+    audio.hidden = false;
+    audio.src = url;
+
+    // Ensure playback after user gesture (button click qualifies)
+    await new Promise((resolve, reject) => {
+      const cleanup = () => {
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('error', onError);
+      };
+      const onEnded = () => { cleanup(); resolve(true); };
+      const onError = () => { cleanup(); reject(new Error('Server TTS audio playback error')); };
+      audio.addEventListener('ended', onEnded, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+
+      const p = audio.play();
+      if (p && typeof p.then === 'function') p.then(()=>{}).catch(err => reject(err));
+    });
+
+    // Release URL after playback
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch {}
+    }, 2500);
+
+    return true;
+  } catch (err) {
+    if (!opts.silent) console.error('Server TTS failed:', err);
+    return false;
+  }
 }
 
 async function handleTts(e) {
