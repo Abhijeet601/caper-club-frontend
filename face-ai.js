@@ -1,10 +1,12 @@
 (function initFaceAi(global) {
   'use strict';
 
-  const DEFAULT_THRESHOLD = 0.47;
-  const STRONG_MATCH_THRESHOLD = 0.42;
-  const MIN_MATCH_MARGIN = 0.045;
-  const SUPPORT_DISTANCE_BUFFER = 0.03;
+  const DEFAULT_THRESHOLD = 0.41;
+  const STRONG_MATCH_THRESHOLD = 0.37;
+  const CENTROID_MATCH_THRESHOLD = 0.43;
+  const SAMPLE_MEAN_THRESHOLD = 0.43;
+  const MIN_MATCH_MARGIN = 0.08;
+  const SUPPORT_DISTANCE_BUFFER = 0.02;
   const FULL_FRAME_PASSES = Object.freeze([
     Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
     Object.freeze({ inputSize: 320, scoreThreshold: 0.4, label: 'balanced' }),
@@ -98,7 +100,7 @@
   }
 
   function distanceToConfidence(distance) {
-    const scaled = Math.max(0, Math.min(1, 1 - (distance / 0.65)));
+    const scaled = Math.max(0, Math.min(1, 1 - ((distance - 0.24) / 0.36)));
     return Number(scaled.toFixed(2));
   }
 
@@ -291,7 +293,17 @@
       recommendedZoom: recommendZoom(faceRatio),
       captureMode: String(meta?.captureMode || meta?.label || 'full-frame'),
       detectorPass: String(meta?.label || 'full-frame'),
+      landmarks: bestDetection.landmarks || null,
     };
+  }
+
+  async function countFacesInFrame(input) {
+    const faceapi = ensureFaceApi();
+    const options = getDetectorOptions({ inputSize: 224, scoreThreshold: 0.32 });
+    const detections = await faceapi
+      .detectAllFaces(input, options)
+      .withFaceLandmarks();
+    return Array.isArray(detections) ? detections.length : 0;
   }
 
   async function detectOnSurface(input, sourceWidth, sourceHeight, passes, meta = {}) {
@@ -432,6 +444,15 @@
 
   async function detectFromVideo(video, opts = {}) {
     if (!video || !video.videoWidth || !video.videoHeight) return null;
+
+    const faceCount = await countFacesInFrame(video);
+    if (faceCount > 1) {
+      return { multipleFaces: true, faceCount, score: 0 };
+    }
+    if (faceCount === 0) {
+      return null;
+    }
+
     return detectDescriptor(video, {
       videoMode: true,
       hintBox: opts.hintBox || null,
@@ -522,9 +543,11 @@
     if (!distances.length) return null;
 
     const sampleDistances = distances.filter(item => item.source === 'sample');
+    const centroidDistance = distances.find(item => item.source === 'centroid')?.distance ?? distances[0].distance;
     const supportLimit = threshold + SUPPORT_DISTANCE_BUFFER;
     const supportCount = sampleDistances.filter(item => item.distance <= supportLimit).length;
     const hasSampleSet = sampleDistances.length >= 3;
+    const requiredSupport = sampleDistances.length >= 5 ? 3 : (sampleDistances.length >= 3 ? 2 : 1);
     const topSampleDistances = sampleDistances.slice(0, Math.min(3, sampleDistances.length));
     const sampleMeanDistance = topSampleDistances.length
       ? topSampleDistances.reduce((total, item) => total + item.distance, 0) / topSampleDistances.length
@@ -533,8 +556,10 @@
     return {
       user,
       distance: distances[0].distance,
+      centroidDistance,
       sampleMeanDistance,
       supportCount,
+      requiredSupport,
       sampleCount: sampleDistances.length || Number(user?.sampleCount || 0),
       hasSampleSet,
       bestSource: distances[0].source,
@@ -559,14 +584,24 @@
     const margin = secondDistance - best.distance;
     const strongMatch = best.distance <= STRONG_MATCH_THRESHOLD;
     const separated = !Number.isFinite(secondDistance) || margin >= MIN_MATCH_MARGIN;
-    const sampleSupported = !best.hasSampleSet || best.supportCount >= 2 || strongMatch;
-    const matched = best.distance <= threshold && sampleSupported && (strongMatch || separated);
+    const sampleSupported = !best.hasSampleSet || best.supportCount >= best.requiredSupport || strongMatch;
+    const centroidSupported = best.centroidDistance <= CENTROID_MATCH_THRESHOLD || strongMatch;
+    const sampleMeanSupported = best.sampleMeanDistance <= SAMPLE_MEAN_THRESHOLD || strongMatch;
+    const matched = best.distance <= threshold
+      && sampleSupported
+      && centroidSupported
+      && sampleMeanSupported
+      && (strongMatch || separated);
     let reason = '';
 
     if (best.distance > threshold) {
       reason = 'distance';
     } else if (!sampleSupported) {
       reason = 'sample-support';
+    } else if (!centroidSupported) {
+      reason = 'centroid';
+    } else if (!sampleMeanSupported) {
+      reason = 'sample-mean';
     } else if (!strongMatch && !separated) {
       reason = 'ambiguous';
     }
@@ -574,10 +609,12 @@
     return {
       user: best.user,
       distance: Number(best.distance.toFixed(4)),
+      centroidDistance: Number(best.centroidDistance.toFixed(4)),
       secondDistance: Number.isFinite(secondDistance) ? Number(secondDistance.toFixed(4)) : null,
       margin: Number.isFinite(secondDistance) ? Number(margin.toFixed(4)) : null,
       sampleMeanDistance: Number(best.sampleMeanDistance.toFixed(4)),
       sampleSupport: best.supportCount,
+      requiredSupport: best.requiredSupport,
       sampleCount: best.sampleCount,
       confidence: distanceToConfidence(best.distance),
       matched,

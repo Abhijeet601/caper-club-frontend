@@ -25,6 +25,13 @@ const DEFAULT_CAMERA_FOCUS_X = 0.5;
 const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
 const STARTUP_IDLE_TIMEOUT_MS = 1200;
+const LIVE_VERIFY_REQUIRED_FRAMES = 6;
+const LIVE_VERIFY_STRICT_THRESHOLD = 0.41;
+const LIVE_VERIFY_MIN_DETECTION_SCORE = 0.88;
+const LIVE_VERIFY_MIN_FACE_RATIO = 0.16;
+const LIVE_VERIFY_MAX_CENTER_OFFSET_X = 0.22;
+const LIVE_VERIFY_MAX_CENTER_OFFSET_Y = 0.24;
+const LIVE_VERIFY_READY_CONFIDENCE = 0.58;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -151,6 +158,16 @@ const S = {
   audioUrl: '', audioContext: null, audioUnlocked: false,
   ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
   scanMissStreak: 0,
+  verification: {
+    candidateUserId: '',
+    candidateName: '',
+    streak: 0,
+    requiredFrames: LIVE_VERIFY_REQUIRED_FRAMES,
+    avgConfidence: 0,
+    avgDistance: 1,
+    faceScore: 0,
+    lastReason: '',
+  },
   userFilters: { search: '', sport: '', plan: '', status: '', role: '', expiryStatus: '', paymentMode: '' },
   userPage: 1,
   reportFilter: { search: '', status: '', date: '' },
@@ -1087,15 +1104,22 @@ function renderConsole() {
   const buttonCooldown = { remainingMs: 0 };
   const cooldownActive = false;
   const zoomLabel = S.cameraZoom > 1.05 ? ` | ${formatZoomLabel(S.cameraZoom)}` : '';
+  const verificationLabel = verificationPillLabel();
 
+  const liveLockText = verificationLabel
+    ? `${verificationLabel} | ${Math.round(Number(S.verification?.avgConfidence || 0) * 100)}%`
+    : `Scanning...${zoomLabel}`;
   $('camStatusPrimary').textContent = live ? 'Live scan active' : (cameraReady ? 'Camera ready' : 'Scanner ready');
-  $('camDetect').textContent = live ? `Scanning...${zoomLabel}` : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
-  $('camLastAction').textContent = S.scanResult?.message || 'Waiting';
+  $('camDetect').textContent = live ? liveLockText : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
+  $('camLastAction').textContent = live ? (S.scanStatusText || 'Waiting') : (S.scanResult?.message || 'Waiting');
   $('camSource').textContent = cameraReady ? 'Live camera' : (S.scanImage ? 'Image upload' : 'Camera / Upload');
   $('camArea').textContent = $('scanAreaInput').value || 'Club Entry';
 
   const timerBadge = $('sessionTimerBadge');
-  if (activeSession && timerBadge) {
+  if (verificationLabel && timerBadge) {
+    timerBadge.textContent = verificationLabel;
+    timerBadge.hidden = false;
+  } else if (activeSession && timerBadge) {
     const min = activeSession.remainingMinutes || 0;
     timerBadge.textContent = `â— ${Math.floor(min/60).toString().padStart(2,'0')}:${(min%60).toString().padStart(2,'0')}`;
     timerBadge.hidden = false;
@@ -1277,10 +1301,16 @@ function renderCameraAssistBadge() {
     return;
   }
 
+  const lockProgress = Number(S.verification?.streak || 0)
+    ? ` | ${Math.min(Number(S.verification.streak || 0), LIVE_VERIFY_REQUIRED_FRAMES)}/${LIVE_VERIFY_REQUIRED_FRAMES}`
+    : '';
+  const confidenceText = Number(S.verification?.avgConfidence || 0)
+    ? ` | ${Math.round(Number(S.verification.avgConfidence || 0) * 100)}%`
+    : '';
   const prefix = S.liveDetection.distanceHint === 'long-range'
     ? 'Long range lock'
     : (S.liveDetection.distanceHint === 'mid-range' ? 'Mid range lock' : 'Face lock');
-  badge.textContent = `${prefix} | ${formatZoomLabel(S.cameraZoom)}`;
+  badge.textContent = `${prefix}${lockProgress}${confidenceText} | ${formatZoomLabel(S.cameraZoom)}`;
 }
 
 function renderEnrollmentCameraBadge() {
@@ -1373,6 +1403,117 @@ function setLiveDetection(detection, opts = {}) {
   S.liveDetection = normalizedDetection;
   applyPreviewFocus(normalizedDetection.recommendedZoom, normalizedDetection.faceBox || null);
   renderCameraAssistBadge();
+}
+
+function resetLiveVerification(reason = '') {
+  S.verification = {
+    candidateUserId: '',
+    candidateName: '',
+    streak: 0,
+    requiredFrames: LIVE_VERIFY_REQUIRED_FRAMES,
+    avgConfidence: 0,
+    avgDistance: 1,
+    faceScore: 0,
+    lastReason: reason,
+  };
+}
+
+function detectionCenterOffsets(faceBox) {
+  if (!faceBox) return { x: 1, y: 1 };
+  const centerX = Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2);
+  const centerY = Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2);
+  return {
+    x: Math.abs(centerX - 0.5),
+    y: Math.abs(centerY - 0.46),
+  };
+}
+
+function assessLiveDetectionQuality(detection) {
+  if (!detection) {
+    return { ok: false, code: 'no-face', message: 'Position one face inside the scanner.' };
+  }
+  if (detection.multipleFaces) {
+    return { ok: false, code: 'multiple-faces', message: 'Multiple faces detected. Only one face can be verified at a time.' };
+  }
+
+  const score = Number(detection.score || 0);
+  const faceRatio = Number(detection.faceRatio || 0);
+  const offsets = detectionCenterOffsets(detection.faceBox);
+
+  if (score < LIVE_VERIFY_MIN_DETECTION_SCORE) {
+    return { ok: false, code: 'low-detection-score', message: 'Confidence too low. Hold steady and look at the camera.' };
+  }
+  if (faceRatio < LIVE_VERIFY_MIN_FACE_RATIO) {
+    return { ok: false, code: 'small-face', message: 'Move closer to the camera for secure verification.' };
+  }
+  if (offsets.x > LIVE_VERIFY_MAX_CENTER_OFFSET_X || offsets.y > LIVE_VERIFY_MAX_CENTER_OFFSET_Y) {
+    return { ok: false, code: 'off-center', message: 'Center your face inside the frame and look straight ahead.' };
+  }
+
+  return { ok: true, code: 'ok', message: '' };
+}
+
+function updateLiveVerification(match, detection) {
+  const nextUserId = String(match?.user?.id || '');
+  const nextName = String(match?.user?.name || 'Member');
+  const nextConfidence = Number(match?.confidence || 0);
+  const nextDistance = Number(match?.distance || 1);
+  const nextFaceScore = Number(detection?.score || 0);
+  const previous = S.verification || {};
+  const sameUser = previous.candidateUserId === nextUserId;
+  const streak = sameUser ? Number(previous.streak || 0) + 1 : 1;
+
+  S.verification = {
+    candidateUserId: nextUserId,
+    candidateName: nextName,
+    streak,
+    requiredFrames: LIVE_VERIFY_REQUIRED_FRAMES,
+    avgConfidence: sameUser
+      ? (((Number(previous.avgConfidence || 0) * Number(previous.streak || 0)) + nextConfidence) / streak)
+      : nextConfidence,
+    avgDistance: sameUser
+      ? (((Number(previous.avgDistance || 1) * Number(previous.streak || 0)) + nextDistance) / streak)
+      : nextDistance,
+    faceScore: sameUser
+      ? (((Number(previous.faceScore || 0) * Number(previous.streak || 0)) + nextFaceScore) / streak)
+      : nextFaceScore,
+    lastReason: '',
+  };
+
+  return S.verification;
+}
+
+function verificationPillLabel() {
+  const streak = Number(S.verification?.streak || 0);
+  if (!S.isScanning || !streak) return '';
+  return `Lock ${Math.min(streak, LIVE_VERIFY_REQUIRED_FRAMES)}/${LIVE_VERIFY_REQUIRED_FRAMES}`;
+}
+
+function buildVerificationProgressDetail(match, detection) {
+  const verification = S.verification || {};
+  const confidence = Math.round(Number(verification.avgConfidence || match?.confidence || 0) * 100);
+  const detectorScore = Math.round(Number(detection?.score || verification.faceScore || 0) * 100);
+  const distance = Number(verification.avgDistance || match?.distance || 0).toFixed(3);
+  return `${verification.candidateName || match?.user?.name || 'Member'} locked | frame ${Math.min(Number(verification.streak || 0), LIVE_VERIFY_REQUIRED_FRAMES)}/${LIVE_VERIFY_REQUIRED_FRAMES} | match ${confidence}% | detector ${detectorScore}% | distance ${distance}`;
+}
+
+function buildLocalRetryMessage(match, quality) {
+  if (quality && !quality.ok) return quality.message;
+  const reason = String(match?.reason || '');
+  if (reason === 'ambiguous') return 'Ambiguous identity. Similar face found. Reposition and try again.';
+  if (reason === 'sample-support') return 'Identity consistency too weak. Hold steady for verification.';
+  if (reason === 'centroid' || reason === 'sample-mean') return 'Face not verified. Keep still and face the camera directly.';
+  return 'Unknown person or confidence too low. Reposition and try again.';
+}
+
+function getFaceBoxFocus(faceBox) {
+  if (!faceBox) {
+    return { focusX: DEFAULT_CAMERA_FOCUS_X, focusY: DEFAULT_CAMERA_FOCUS_Y };
+  }
+  return {
+    focusX: clamp(Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2), 0.12, 0.88),
+    focusY: clamp(Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2), 0.14, 0.84),
+  };
 }
 
 /* â”€â”€ CLOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -3126,6 +3267,7 @@ async function startLiveScan(opts = {}) {
   if (S.isScanning) return true;
   S.cameraRequested = true;
   S.scanMissStreak = 0;
+  resetLiveVerification();
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
@@ -3146,6 +3288,7 @@ function stopLiveScan(opts = {}) {
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
+  resetLiveVerification();
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
@@ -3268,7 +3411,89 @@ function getCameraErrorMessage(err) {
 async function runLiveCycle() {
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
-  await runScan({ source: 'camera', showToast: false });
+  const { detection, message } = await detectRecognitionProbe({ source: 'camera' });
+  if (!S.isScanning || S.scanInFlight) return;
+  await processLiveRecognitionProbe(detection, message);
+}
+
+async function processLiveRecognitionProbe(detection, message = '') {
+  if (!detection) {
+    resetLiveVerification('no-face');
+    setLiveDetection(null, { keepSearchZoom: true });
+    setScanState('loading', 'Searching for face', message || 'Center one face in frame to begin secure verification.', 'Search');
+    renderConsole();
+    return;
+  }
+
+  if (detection.multipleFaces) {
+    resetLiveVerification('multiple-faces');
+    setLiveDetection(null, { keepSearchZoom: true });
+    setScanState('denied', 'Multiple faces detected', 'Only one face can be verified at a time.', 'Multi Face');
+    renderConsole();
+    return;
+  }
+
+  setLiveDetection(detection, { keepSearchZoom: true });
+
+  const quality = assessLiveDetectionQuality(detection);
+  if (!quality.ok) {
+    resetLiveVerification(quality.code);
+    setScanState('detected', 'Face not verified', quality.message, 'Quality');
+    renderConsole();
+    return;
+  }
+
+  const match = window.FaceAi.bestMatch(
+    detection.descriptor,
+    S.faceUsers,
+    Math.min(S.recognitionThreshold || LIVE_VERIFY_STRICT_THRESHOLD, LIVE_VERIFY_STRICT_THRESHOLD),
+  );
+
+  if (!match?.matched || !match?.user?.id) {
+    resetLiveVerification(String(match?.reason || 'unknown'));
+    setScanState('denied', 'Unknown person', buildLocalRetryMessage(match, quality), 'Unknown');
+    renderConsole();
+    return;
+  }
+
+  const verification = updateLiveVerification(match, detection);
+  const lockReady = verification.streak >= LIVE_VERIFY_REQUIRED_FRAMES
+    && verification.avgConfidence >= LIVE_VERIFY_READY_CONFIDENCE;
+
+  if (!lockReady) {
+    setScanState('loading', 'Verifying Identity', buildVerificationProgressDetail(match, detection), 'Face Lock');
+    renderConsole();
+    return;
+  }
+
+  if (!canScan(match.user.id)) {
+    setScanState('loading', 'Identity Confirmed', 'Face lock is active. Waiting for secure attendance cooldown.', 'Confirmed');
+    renderConsole();
+    return;
+  }
+
+  const focus = getFaceBoxFocus(detection.faceBox);
+  const captureImage = grabFrame({
+    zoom: Math.max(1, Number(detection.recommendedZoom || 1)),
+    focusX: focus.focusX,
+    focusY: focus.focusY,
+  });
+
+  if (!captureImage) {
+    setScanState('loading', 'Identity Confirmed', 'Camera preview is refreshing. Hold position.', 'Confirmed');
+    renderConsole();
+    return;
+  }
+
+  setScanState('loading', 'Identity Confirmed', 'Secure attendance verification in progress.', 'Confirmed');
+  renderConsole();
+  await runScan({
+    source: 'camera',
+    image: captureImage,
+    showToast: false,
+    userId: match.user.id,
+    capturedFrames: verification.streak,
+  });
 }
 
 function grabFrame(opts = {}) {
@@ -3350,9 +3575,10 @@ async function runScan(opts = {}) {
     const backendResult = await api('/access/scan', {
       method:'POST',
       body:{
+        userId: opts.userId || null,
         area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
         image,
-        capturedFrames: source === 'camera' ? 1 : 3,
+        capturedFrames: Number(opts.capturedFrames || (source === 'camera' ? 1 : 3)),
       },
     });
     const result = buildClientScanResult({
@@ -3412,6 +3638,7 @@ async function runScan(opts = {}) {
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
+    resetLiveVerification();
     S.scanInFlight = false;
     if (S.cameraRequested && !streamHasActiveVideo(S.stream)) {
       startCamera().catch(console.error);

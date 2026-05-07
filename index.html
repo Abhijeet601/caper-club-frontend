@@ -371,7 +371,7 @@
                 <button type="button" class="btn-ghost btn-sm" id="enrollmentZoomInBtn">Zoom In</button>
               </div>
             </div>
-            <div class="btn-row mt8">
+            <div class="btn-row mt8 enrollment-action-row">
               <button type="button" class="btn-capture" id="captureEnrollmentBtn">📷 Capture</button>
               <button type="button" class="btn-ghost btn-sm" id="clearEnrollmentBtn">Clear</button>
               <label class="btn-ghost btn-sm file-lbl">
@@ -511,22 +511,27 @@
           </div>
 
           <!-- Face Upload submit -->
-          <div class="panel-card glass-card">
+          <div class="panel-card glass-card manual-enrollment-card">
             <div class="card-head"><span class="card-title">📤 Enroll Faces</span></div>
-            <form id="faceUploadForm">
-              <label class="field-stack">
-                <span>Search Member</span>
-                <div class="enrollment-search-row">
-                  <input type="search" id="enrollmentUserSearchInput" placeholder="Search by name, member ID, email, mobile">
-                  <button type="button" class="btn-ghost btn-sm" id="enrollmentUserSearchBtn">Search</button>
+            <form id="faceUploadForm" class="manual-enrollment-form">
+              <div class="manual-enrollment-toolbar">
+                <label class="field-stack manual-enrollment-search">
+                  <span>Search Member</span>
+                  <div class="enrollment-search-row">
+                    <input type="search" id="enrollmentUserSearchInput" placeholder="Search by name, member ID, email, mobile">
+                    <button type="button" class="btn-ghost btn-sm" id="enrollmentUserSearchBtn">Search</button>
+                  </div>
+                </label>
+                <label class="field-stack manual-enrollment-member">
+                  <span>Member</span>
+                  <select id="enrollmentUserInput"></select>
+                </label>
+                <div class="manual-enrollment-submit">
+                  <span class="manual-enrollment-label">Action</span>
+                  <button type="submit" class="btn-primary btn-sm full-w">Upload Face Images</button>
                 </div>
-                <span class="enrollment-search-hint" id="enrollmentSearchHint">Showing all members.</span>
-              </label>
-              <label class="field-stack">
-                <span>Member</span>
-                <select id="enrollmentUserInput"></select>
-              </label>
-              <button type="submit" class="btn-primary btn-sm full-w mt8">Upload Face Images</button>
+              </div>
+              <span class="enrollment-search-hint" id="enrollmentSearchHint">Showing all members.</span>
             </form>
           </div>
         </div>
@@ -777,13 +782,12 @@
                 <span class="badge-chip chip-blue" id="allMembersCount">0</span>
               </div>
             </div>
-            <div class="filter-section">
-              <div class="filter-row">
-                <div class="search-group">
+            <div class="filter-section compact-filter-section">
+              <div class="filter-row compact-filter-toolbar">
+                <div class="search-group toolbar-search-group">
                   <input type="search" id="userFilterInput" placeholder="Search by name, email, member ID, mobile…" class="filter-input">
-                  <button class="btn-ghost btn-sm" id="allMembersRefresh" title="Refresh data">🔄</button>
                 </div>
-                <div class="filter-group">
+                <div class="filter-group toolbar-filter-group">
                   <select id="userSportFilterInput" class="filter-select">
                     <option value="">All Sports</option>
                   </select>
@@ -809,7 +813,10 @@
                     <option value="UPI">UPI</option>
                     <option value="Card">Card</option>
                   </select>
-                  <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear Filters</button>
+                </div>
+                <div class="filter-actions toolbar-actions">
+                  <button class="btn-ghost btn-sm icon-only-btn" id="allMembersRefresh" title="Refresh data">🔄</button>
+                  <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear</button>
                 </div>
               </div>
             </div>
