@@ -1018,13 +1018,16 @@ async function triggerDoorUnlock() {
     toast('Door unlocked. Auto relock started.', 'success');
 
     // Server TTS announcement (works after admin button click / user gesture)
-    // Play only when the backend reports UNLOCK.
-    if (String(state?.command || '').toUpperCase() === 'UNLOCK') {
+    // Be defensive: backend payload uses doorOpen/command (do not rely on field name only).
+    const shouldAnnounce = state?.doorOpen === true || String(state?.command || '').toUpperCase() === 'UNLOCK';
+    if (shouldAnnounce) {
       const name = S.currentUser?.name ? String(S.currentUser.name).trim() : '';
-      const msg = name
-        ? 'Door unlocked. Please enter.'
-        : 'Door unlocked. Please enter.';
-      speakServerAudio(msg, { cooldownMs: 30000, cooldownKey: 'door-unlock' }).catch(() => {});
+      const msg = name ? 'Door unlocked. Please enter.' : 'Door unlocked. Please enter.';
+      speakServerAudio(msg, { cooldownMs: 30000, cooldownKey: 'door-unlock' })
+        .catch(err => {
+          console.error('Door unlock server TTS failed:', err);
+          toast('Door unlocked, but announcement failed.', 'warning');
+        });
     }
   } catch (error) {
     handleErr(error, { toast: true });
