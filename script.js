@@ -586,14 +586,14 @@ async function ensureFaceModelsLoaded() {
   try {
     await ensureFaceAiLibraryLoaded();
     if (!window.FaceAi) throw new Error('Face recognition library failed to load.');
-    // Force offline model loading from the app's /models folder (not a relative path like "models").
-    await window.FaceAi.loadModels('/models');
+    const modelsBase = `${norm(S.apiBase)}/models`;
+    await window.FaceAi.loadModels(modelsBase);
 
     S.faceModelsReady = true;
     return true;
   } catch (err) {
     S.faceModelsReady = false;
-    S.faceModelsError = err?.message || 'Unable to load local AI models.';
+    S.faceModelsError = err?.message || 'Unable to load Railway AI models.';
     return false;
   } finally {
     S.faceModelsLoading = false;
@@ -614,16 +614,27 @@ async function loadRecognitionEmbeddings() {
 
 async function ensureRecognitionReady() {
   if (!ensureAdmin()) return false;
+  const modelsReady = await ensureFaceModelsLoaded();
+  if (!modelsReady) {
+    const detail = S.faceModelsError || 'Browser face recognition models are unavailable.';
+    setScanState('detected', 'AI Models Offline', detail, 'Models Offline');
+    toast(detail, 'error');
+    return false;
+  }
   if (!S.faceUsers.length) {
     try {
       await loadRecognitionEmbeddings();
     } catch (err) {
-      toast(err?.message || 'Unable to load enrolled face descriptors.', 'error');
+      const detail = err?.message || 'Unable to load enrolled face descriptors.';
+      setScanState('detected', 'Embeddings Unavailable', detail, 'Embeddings');
+      toast(detail, 'error');
       return false;
     }
   }
   if (!S.faceUsers.length) {
-    toast('No enrolled face embeddings found.', 'error');
+    const detail = 'No enrolled face embeddings found.';
+    setScanState('detected', 'No Face Data', detail, 'Embeddings');
+    toast(detail, 'error');
     return false;
   }
   return true;
@@ -1130,6 +1141,45 @@ function renderScannerStatus() {
   else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
   else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'FACE FOUND'; }
   renderCameraAssistBadge();
+}
+
+function describeScanFailure(err) {
+  const message = String(err?.message || '').trim();
+  const lowered = message.toLowerCase();
+
+  if (!S.healthOk || lowered.includes('failed to fetch') || lowered.includes('backend is unreachable')) {
+    return {
+      mode: 'detected',
+      title: 'Backend Unreachable',
+      detail: message || 'Scanner cannot reach the backend API.',
+      pill: 'Backend Offline',
+    };
+  }
+
+  if (lowered.includes('face recognition') || lowered.includes('face models') || lowered.includes('ai models')) {
+    return {
+      mode: 'detected',
+      title: 'AI Models Offline',
+      detail: message || 'Browser face recognition models failed to load.',
+      pill: 'Models Offline',
+    };
+  }
+
+  if (lowered.includes('embeddings')) {
+    return {
+      mode: 'detected',
+      title: 'Embeddings Unavailable',
+      detail: message || 'Face embeddings could not be loaded.',
+      pill: 'Embeddings',
+    };
+  }
+
+  return {
+    mode: 'detected',
+    title: 'Scan Error',
+    detail: message || 'Scan failed.',
+    pill: 'Scanner Error',
+  };
 }
 
 function updateFaceBoxOverlay(faceBox) {
@@ -3359,7 +3409,8 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
+    const failure = describeScanFailure(err);
+    setScanState(failure.mode, failure.title, failure.detail, failure.pill);
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
