@@ -3095,14 +3095,7 @@ function handleSessionsClick(e) {
 }
 async function endSession(id) {
   if (!ensureAdmin()) return;
-  try {
-    const session = toArr(S.sessions).find(item => String(item.id) === String(id));
-    await api('/session/end', { method:'POST', body: { sessionId: id } });
-    if (session?.userId) stopSessionTimer(session.userId);
-    toast('Session ended.','success');
-    await refreshAll();
-  }
-  catch (err) { handleErr(err, { toast: true }); }
+  toast('Manual checkout is disabled. Sessions end automatically after 70 minutes.', 'warning');
 }
 
 /* â”€â”€ ANNOUNCEMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -5243,11 +5236,6 @@ function renderActiveSessionsPanel(force = false) {
     const remainStr = formatSessionRemainingLabel(remaining);
     const isEnding = remaining <= 5 * 60 * 1000 && remaining > 0;
     const isExpired = remaining <= 0;
-    const endAction = sess.sessionId
-      ? `endSession(${JSON.stringify(sess.sessionId)})`
-      : `stopSessionTimer(${JSON.stringify(userId)})`;
-    const endLabel = sess.sessionId ? 'End' : 'Clear';
-
     const cardClass = isExpired ? 'sess-card expired' : isEnding ? 'sess-card ending' : 'sess-card';
     const statusLabel = isExpired ? 'Expired' : isEnding ? 'Ending Soon' : 'Active';
     const statusTone = isExpired ? 'tone-red' : isEnding ? 'tone-amber' : 'tone-green';
@@ -5261,7 +5249,6 @@ function renderActiveSessionsPanel(force = false) {
           <div class="sess-id">Window: ${esc(windowStr)} | Elapsed: ${esc(elapsedStr)}</div>
         </div>
         <span class="status-chip ${statusTone}">${statusLabel}</span>
-        <button class="mini-btn del" onclick='${endAction}'>${endLabel}</button>
       </div>
       <div class="sess-times">
         <div class="sess-time-block full">
