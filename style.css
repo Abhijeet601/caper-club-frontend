@@ -2301,6 +2301,8 @@ textarea { min-height: 62px; resize: none; }
 .sess-time-value { font-family: var(--font-display); font-size: 1.16rem; font-weight: 800; letter-spacing: -0.03em; color: var(--text); }
 .sess-time-value.ending-text { color: var(--amber); }
 .sess-time-value.expired-text { color: var(--rose); }
+.sess-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sess-end-btn { min-width: 64px; }
 
 #activeSessionsPanel {
   max-height: 600px; overflow-y: auto; overflow-x: hidden;

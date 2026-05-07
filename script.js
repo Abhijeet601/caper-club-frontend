@@ -550,6 +550,7 @@ function bindEvents() {
   }
   if ($('sessionStartForm')) $('sessionStartForm').addEventListener('submit', handleSessionStart);
   if ($('sessionsTableBody')) $('sessionsTableBody').addEventListener('click', handleSessionsClick);
+  if ($('activeSessionsPanel')) $('activeSessionsPanel').addEventListener('click', handleSessionsClick);
 
   // Announcements
   $('announcementForm').addEventListener('submit', handleAnnouncementSubmit);
@@ -2186,6 +2187,15 @@ function getReportPayments() {
     }));
 }
 
+function getReportSessions() {
+  return toArr(S.sessions);
+}
+
+function getTodayCheckinSessions() {
+  const today = localDateKey();
+  return getReportSessions().filter(session => localDateKey(session?.startedAt) === today);
+}
+
 function getPaidReportPayments() {
   return getReportPayments().filter(payment => String(payment?.paymentStatus || '').toLowerCase() === 'paid');
 }
@@ -2203,6 +2213,14 @@ function isAdmissionPayment(payment) {
   return source.includes('onboarding') || source.includes('admission');
 }
 
+function isRenewalPayment(payment) {
+  return !isAdmissionPayment(payment);
+}
+
+function getPaymentUser(payment) {
+  return S.users.find(user => String(user?.id || '') === String(payment?.userId || '')) || null;
+}
+
 function sumPaymentAmounts(payments) {
   return toArr(payments).reduce((sum, payment) => sum + Number(payment?.amount || 0), 0);
 }
@@ -2210,7 +2228,7 @@ function sumPaymentAmounts(payments) {
 function renderReportsAll() {
   renderSummaryCards();
   renderQuickFilterCards();
-  renderAdmissionTable();
+  renderAdmissionTableV2();
   renderPaymentSummary();
   renderRenewalList();
   renderAttendanceAnalytics();
@@ -2218,17 +2236,16 @@ function renderReportsAll() {
 }
 
 function renderQuickFilterCards() {
-  const today = localDateKey();
-  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
+  const todaySessions = getTodayCheckinSessions();
   const todayPayments = getTodayPaidReportPayments();
   const todayAdmissions = todayPayments.filter(isAdmissionPayment);
-  const todayRenewals = todayPayments.filter(p => !isAdmissionPayment(p));
+  const todayRenewals = todayPayments.filter(isRenewalPayment);
   const cashToday = todayPayments.filter(p => p.paymentMode === 'Cash');
   const upiToday = todayPayments.filter(p => p.paymentMode === 'UPI');
   const cardToday = todayPayments.filter(p => p.paymentMode === 'Card');
   const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
 
-  if ($('qcardAll')) $('qcardAll').textContent = String(S.sessions.length);
+  if ($('qcardAll')) $('qcardAll').textContent = String(getReportPayments().length);
   if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length);
   if ($('qcardTodayRenewals')) $('qcardTodayRenewals').textContent = String(todayRenewals.length);
   if ($('qcardTodayCheckins')) $('qcardTodayCheckins').textContent = String(todaySessions.length);
@@ -2247,7 +2264,7 @@ function renderSummaryCards() {
     const days = (new Date(u.membershipExpiry) - now) / 86400000;
     return days >= 0 && days <= 7;
   });
-  const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === localDateKey());
+  const todaySessions = getTodayCheckinSessions();
   const todayRevenue = sumPaymentAmounts(getTodayPaidReportPayments());
 
   $('rptTotalMembersVal').textContent = users.length;
@@ -2255,41 +2272,65 @@ function renderSummaryCards() {
   $('rptExpiringSoonVal').textContent = expiring.length;
   $('rptTodayRevenueVal').textContent = fmtMoney(todayRevenue);
   $('rptTodayCheckinsVal').textContent = todaySessions.length;
-  $('rptAdmissionCount').textContent = getFilteredAdmissions().length;
+  $('rptAdmissionCount').textContent = getFilteredReportEntries().length;
+}
+
+function getFilteredAdmissionPayments() {
+  return getReportPayments().filter(payment => {
+    const user = getPaymentUser(payment);
+    const memberName = String(payment?.userName || user?.name || '').toLowerCase();
+    const memberId = String(payment?.memberId || user?.memberId || '').toLowerCase();
+    const paymentDateKey = localDateKey(payment?.createdAt || payment?.membershipStart);
+
+    if (RPT.search) {
+      const q = RPT.search.toLowerCase();
+      if (!memberName.includes(q) && !memberId.includes(q)) return false;
+    }
+    if (RPT.plan && String(payment?.plan || user?.membershipPlan || '') !== RPT.plan) return false;
+    if (RPT.payment && String(payment?.paymentStatus || user?.paymentStatus || '') !== RPT.payment) return false;
+    if (RPT.mode && String(payment?.paymentMode || user?.paymentMode || '') !== RPT.mode) return false;
+    if (RPT.enrollment === 'enrolled' && user && getFaceCount(user) === 0) return false;
+    if (RPT.enrollment === 'not-enrolled' && user && getFaceCount(user) > 0) return false;
+    if (RPT.date && paymentDateKey !== RPT.date) return false;
+    if (RPT.quickFilter === 'today-admissions' && !isAdmissionPayment(payment)) return false;
+    if (RPT.quickFilter === 'today-renewals' && !isRenewalPayment(payment)) return false;
+    if (RPT.quickFilter === 'cash' && String(payment?.paymentMode || '') !== 'Cash') return false;
+    if (RPT.quickFilter === 'upi' && String(payment?.paymentMode || '') !== 'UPI') return false;
+    if (RPT.quickFilter === 'card' && String(payment?.paymentMode || '') !== 'Card') return false;
+    if (RPT.quickFilter === 'today-checkins') return false;
+    return true;
+  });
+}
+
+function getFilteredCheckinSessions() {
+  return getReportSessions().filter(session => {
+    const user = S.users.find(u => String(u?.id || '') === String(session?.userId || ''));
+    if (!user) return false;
+    const sessionDateKey = localDateKey(session?.startedAt);
+
+    if (RPT.search) {
+      const q = RPT.search.toLowerCase();
+      if (!(user.name || '').toLowerCase().includes(q) && !(user.memberId || '').toLowerCase().includes(q)) return false;
+    }
+    if (RPT.plan && String(user?.membershipPlan || '') !== RPT.plan) return false;
+    if (RPT.payment && String(user?.paymentStatus || '') !== RPT.payment) return false;
+    if (RPT.mode && String(user?.paymentMode || '') !== RPT.mode) return false;
+    if (RPT.enrollment === 'enrolled' && getFaceCount(user) === 0) return false;
+    if (RPT.enrollment === 'not-enrolled' && getFaceCount(user) > 0) return false;
+    if (RPT.date && sessionDateKey !== RPT.date) return false;
+    if (RPT.quickFilter === 'today-checkins' && sessionDateKey !== localDateKey()) return false;
+    return true;
+  });
+}
+
+function getFilteredReportEntries() {
+  return RPT.quickFilter === 'today-checkins'
+    ? getFilteredCheckinSessions()
+    : getFilteredAdmissionPayments();
 }
 
 function getFilteredAdmissions() {
-  const todayPaymentsByUser = new Map();
-  getTodayPaidReportPayments().forEach(payment => {
-    const userId = String(payment.userId || '');
-    if (!userId) return;
-    const existing = todayPaymentsByUser.get(userId) || [];
-    existing.push(payment);
-    todayPaymentsByUser.set(userId, existing);
-  });
-
-  return S.sessions.filter(s => {
-    const user = S.users.find(u => u.id === s.userId);
-    if (!user) return false;
-    const userTodayPayments = todayPaymentsByUser.get(String(user.id)) || [];
-    if (RPT.search) {
-      const q = RPT.search.toLowerCase();
-      if (!(user.name||'').toLowerCase().includes(q) &&
-          !(user.memberId||'').toLowerCase().includes(q)) return false;
-    }
-    if (RPT.plan && user.membershipPlan !== RPT.plan) return false;
-    if (RPT.payment && user.paymentStatus !== RPT.payment) return false;
-    if (RPT.mode && user.paymentMode !== RPT.mode) return false;
-    if (RPT.enrollment === 'enrolled' && getFaceCount(user) === 0) return false;
-    if (RPT.enrollment === 'not-enrolled' && getFaceCount(user) > 0) return false;
-    if (RPT.date && !localDateKey(s.startedAt).startsWith(RPT.date)) return false;
-    if (RPT.quickFilter === 'today-admissions' && !userTodayPayments.some(isAdmissionPayment)) return false;
-    if (RPT.quickFilter === 'today-renewals' && !userTodayPayments.some(payment => !isAdmissionPayment(payment))) return false;
-    if (RPT.quickFilter === 'cash' && !userTodayPayments.some(payment => payment.paymentMode === 'Cash')) return false;
-    if (RPT.quickFilter === 'upi' && !userTodayPayments.some(payment => payment.paymentMode === 'UPI')) return false;
-    if (RPT.quickFilter === 'card' && !userTodayPayments.some(payment => payment.paymentMode === 'Card')) return false;
-    return true;
-  });
+  return getFilteredReportEntries();
 }
 
 function hasActualCheckout(session) {
@@ -2328,6 +2369,72 @@ function renderAdmissionTable() {
 <td>${chip(user.paymentStatus||'slate', user.paymentStatus||'-')}</td>
           <td class="t-secondary">${fmtMoney(user.paymentAmount||0)}</td>
           <td><span class="status-chip ${renewTone}">${renewalStatus}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="8"><div class="empty-hint">No records match the filters.</div></td></tr>`;
+}
+
+function renderAdmissionTableV2() {
+  const records = getFilteredReportEntries();
+  const showingCheckins = RPT.quickFilter === 'today-checkins';
+  const tableWrap = document.querySelector('.rpt-table-wrap');
+  const titleEl = $('rptTableTitle');
+  const tableHeadRow = document.querySelector('#admissionTable thead tr');
+  if (tableWrap) {
+    const isFiltered = Boolean(RPT.search || RPT.plan || RPT.payment || RPT.date || RPT.mode || RPT.enrollment || RPT.quickFilter !== 'all');
+    tableWrap.classList.toggle('is-filtered', isFiltered);
+  }
+  if (titleEl) titleEl.textContent = showingCheckins ? 'Daily Check-in Report' : 'Daily Admissions & Renewals';
+  if (tableHeadRow) {
+    tableHeadRow.innerHTML = showingCheckins
+      ? '<th>Member</th><th>Check-in</th><th>Check-out</th><th>Plan</th><th>Status</th><th>Area</th><th>Duration</th><th>Session</th>'
+      : '<th>Member</th><th>Entry Date</th><th>Type</th><th>Plan</th><th>Mode</th><th>Status</th><th>Amount</th><th>Membership</th>';
+  }
+  $('rptAdmissionCount').textContent = records.length;
+  $('admissionTableBody').innerHTML = records.length
+    ? records.map(record => {
+        const user = showingCheckins
+          ? (S.users.find(u => String(u?.id || '') === String(record?.userId || '')) || {})
+          : (getPaymentUser(record) || {});
+        const now = new Date();
+        const exp = user.membershipExpiry ? new Date(user.membershipExpiry) : null;
+        const daysLeft = exp ? Math.ceil((exp - now) / 86400000) : null;
+        const renewalStatus = !exp ? 'Unknown'
+          : daysLeft < 0 ? 'Expired'
+          : daysLeft <= 7 ? 'Expiring'
+          : 'Active';
+        const renewTone = renewalStatus === 'Expired' ? 'tone-red'
+          : renewalStatus === 'Expiring' ? 'tone-amber' : 'tone-green';
+
+        if (showingCheckins) {
+          return `<tr class="rpt-row" data-session-id="${esc(record.id)}" data-user-id="${esc(record.userId)}">
+            <td>
+              <div class="t-primary">${esc(user.name||record.name||'Unknown')}</div>
+              <div class="t-secondary">${esc(user.memberId||record.memberId||'-')}</div>
+            </td>
+            <td class="t-secondary">${esc(fmtDT(record.startedAt))}</td>
+            <td class="t-secondary">${hasActualCheckout(record) ? esc(fmtDT(record.endedAt)) : (String(record.status || '').toLowerCase() === 'active' ? '<span class="status-chip tone-green">Active</span>' : '–')}</td>
+            <td>${chip(user.membershipPlan||record.membershipPlan||'slate', user.membershipPlan||record.membershipPlan||'-')}</td>
+            <td>${chip(record.status||'slate', record.status||'-')}</td>
+            <td class="t-secondary">${esc(record.area||'-')}</td>
+            <td class="t-secondary">${esc(fmtDur(record.durationMinutes))}</td>
+            <td><span class="status-chip ${renewTone}">${renewalStatus}</span></td>
+          </tr>`;
+        }
+
+        const membershipWindow = `${record.membershipStart || user.membershipStart || '-'} to ${record.membershipExpiry || user.membershipExpiry || '-'}`;
+        return `<tr class="rpt-row" data-payment-id="${esc(record.id)}" data-user-id="${esc(record.userId)}">
+          <td>
+            <div class="t-primary">${esc(record.userName||user.name||'Unknown')}</div>
+            <div class="t-secondary">${esc(record.memberId||user.memberId||'-')}</div>
+          </td>
+          <td class="t-secondary">${esc(fmtDT(record.createdAt || record.membershipStart))}</td>
+          <td>${chip(isAdmissionPayment(record) ? 'tone-green' : 'tone-blue', isAdmissionPayment(record) ? 'New Admission' : 'Renewal')}</td>
+          <td>${chip(record.plan||user.membershipPlan||'slate', record.plan||user.membershipPlan||'-')}</td>
+          <td class="t-secondary">${esc(record.paymentMode||user.paymentMode||'-')}</td>
+          <td>${chip(record.paymentStatus||user.paymentStatus||'slate', record.paymentStatus||user.paymentStatus||'-')}</td>
+          <td class="t-secondary">${fmtMoney(record.amount||0)}</td>
+          <td><span class="status-chip ${renewTone}">${esc(membershipWindow)}</span></td>
         </tr>`;
       }).join('')
     : `<tr><td colspan="8"><div class="empty-hint">No records match the filters.</div></td></tr>`;
@@ -2552,16 +2659,38 @@ function renderSlotEngagement() {
 }
 
 function exportReportCSV() {
-  const records = getFilteredAdmissions();
+  const records = getFilteredReportEntries();
+  const showingCheckins = RPT.quickFilter === 'today-checkins';
   if (!records.length) { toast('No data to export.', 'warning'); return; }
-  const headers = ['Name','Member ID','Check-in','Check-out','Plan','Payment','Amount'];
-  const rows = records.map(s => {
-    const u = S.users.find(x => x.id === s.userId) || {};
-    return [
-      u.name||'', u.memberId||'', fmtDT(s.startedAt),
-      hasActualCheckout(s) ? fmtDT(s.endedAt) : '',
-      u.membershipPlan||'', u.paymentStatus||'', u.paymentAmount||0
-    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+  const headers = showingCheckins
+    ? ['Name','Member ID','Check-in','Check-out','Plan','Status','Area','Duration']
+    : ['Name','Member ID','Entry Date','Type','Plan','Mode','Payment Status','Amount'];
+  const rows = records.map(record => {
+    const user = showingCheckins
+      ? (S.users.find(x => String(x?.id || '') === String(record?.userId || '')) || {})
+      : (getPaymentUser(record) || {});
+    const values = showingCheckins
+      ? [
+          user.name || record.name || '',
+          user.memberId || record.memberId || '',
+          fmtDT(record.startedAt),
+          hasActualCheckout(record) ? fmtDT(record.endedAt) : '',
+          user.membershipPlan || record.membershipPlan || '',
+          record.status || '',
+          record.area || '',
+          fmtDur(record.durationMinutes),
+        ]
+      : [
+          record.userName || user.name || '',
+          record.memberId || user.memberId || '',
+          fmtDT(record.createdAt || record.membershipStart),
+          isAdmissionPayment(record) ? 'New Admission' : 'Renewal',
+          record.plan || user.membershipPlan || '',
+          record.paymentMode || user.paymentMode || '',
+          record.paymentStatus || user.paymentStatus || '',
+          record.amount || 0,
+        ];
+    return values.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
   });
   const csv = [headers.join(','), ...rows].join('\n');
   const a = document.createElement('a');
@@ -3232,11 +3361,38 @@ async function handleSessionStart(e) {
   } catch (err) { handleErr(err, { toast: true }); }
 }
 function handleSessionsClick(e) {
-  if (e.target.dataset.sessionEnd) endSession(e.target.dataset.sessionEnd);
+  const button = e.target.closest('[data-session-end]');
+  if (button?.dataset.sessionEnd) endSession(button.dataset.sessionEnd);
 }
 async function endSession(id) {
   if (!ensureAdmin()) return;
-  toast('Manual checkout is disabled. Sessions end automatically after 70 minutes.', 'warning');
+  const session = toArr(S.sessions).find(item => String(item?.id || '') === String(id || ''));
+  if (!session) {
+    toast('Session not found.', 'error');
+    return;
+  }
+  if (String(session.status || '').toLowerCase() !== 'active') {
+    toast('This session is already closed.', 'warning');
+    return;
+  }
+  if (!confirm(`End active session for ${session.name || 'this member'}?`)) return;
+
+  try {
+    const endedSession = await api('/session/end', {
+      method: 'POST',
+      body: { sessionId: id },
+    });
+    if (endedSession) {
+      upsertSessionLocal(endedSession);
+      syncActiveSessionsFromBackend();
+    }
+    renderSessions();
+    renderSystemStatus();
+    renderReports();
+    toast(`Session ended for ${session.name || 'member'}.`, 'success');
+  } catch (err) {
+    handleErr(err, { toast: true });
+  }
 }
 
 /* â”€â”€ ANNOUNCEMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -3598,7 +3754,11 @@ async function runScan(opts = {}) {
 
     if (source === 'camera') {
       if (result.faceBox) {
-        setLiveDetection({ faceBox: result.faceBox, recommendedZoom: 1.18 }, { keepSearchZoom: true });
+        const retainedZoom = Math.max(
+          1.25,
+          Number(S.liveDetection?.recommendedZoom || 1),
+        );
+        setLiveDetection({ faceBox: result.faceBox, recommendedZoom: retainedZoom }, { keepSearchZoom: true });
         setScanState('loading', 'Face locked', buildDetectionAssistDetail({
           faceBox: result.faceBox,
           captureMode: 'backend-scan',
@@ -5467,6 +5627,9 @@ function renderActiveSessionsPanel(force = false) {
     const statusLabel = isExpired ? 'Expired' : isEnding ? 'Ending Soon' : 'Active';
     const statusTone = isExpired ? 'tone-red' : isEnding ? 'tone-amber' : 'tone-green';
     const barColor = isExpired ? '#e11d48' : isEnding ? '#d97706' : '#059669';
+    const endButton = sess.sessionId && !isExpired
+      ? `<button class="mini-btn sess-end-btn" data-session-end="${esc(sess.sessionId)}">End</button>`
+      : '';
 
     return `<div class="${cardClass}" data-uid="${esc(userId)}">
       <div class="sess-card-top">
@@ -5475,7 +5638,10 @@ function renderActiveSessionsPanel(force = false) {
           <div class="sess-name">${esc(sess.name)}</div>
           <div class="sess-id">Window: ${esc(windowStr)} | Elapsed: ${esc(elapsedStr)}</div>
         </div>
-        <span class="status-chip ${statusTone}">${statusLabel}</span>
+        <div class="sess-card-actions">
+          <span class="status-chip ${statusTone}">${statusLabel}</span>
+          ${endButton}
+        </div>
       </div>
       <div class="sess-times">
         <div class="sess-time-block full">
