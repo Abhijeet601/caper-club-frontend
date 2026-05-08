@@ -28,12 +28,12 @@ const STARTUP_IDLE_TIMEOUT_MS = 1200;
 // Require fewer frames for lock to prevent “confidence too low” blocks.
 const LIVE_VERIFY_REQUIRED_FRAMES = 1;
 const LIVE_VERIFY_STRICT_THRESHOLD = 0.41;
-const LIVE_VERIFY_MIN_DETECTION_SCORE = 0.88;
+const LIVE_VERIFY_MIN_DETECTION_SCORE = 0.62;
 const LIVE_VERIFY_MIN_FACE_RATIO = 0.16;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_X = 0.22;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_Y = 0.24;
-// Lowered to reduce false negatives when detector quality is slightly lower.
-const LIVE_VERIFY_READY_CONFIDENCE = 0.48;
+// Require stronger recognition confidence before allowing attendance.
+const LIVE_VERIFY_READY_CONFIDENCE = 0.60;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -1405,6 +1405,16 @@ async function ensureEnrollmentLivePreview() {
   await startCamera();
 }
 
+function calculateAutoZoom(faceBox) {
+  if (!faceBox) return 1;
+  const width = clamp(Number(faceBox.width || 0.2), 0.08, 0.9);
+  const height = clamp(Number(faceBox.height || 0.2), 0.1, 0.9);
+  const targetFaceSize = 0.28;
+  const zoomByWidth = targetFaceSize / width;
+  const zoomByHeight = targetFaceSize / height;
+  return clamp(Math.max(1, Math.min(zoomByWidth, zoomByHeight)), 1, MAX_PREVIEW_ZOOM);
+}
+
 function setLiveDetection(detection, opts = {}) {
   if (!detection) {
     S.liveDetection = null;
@@ -1417,8 +1427,12 @@ function setLiveDetection(detection, opts = {}) {
     ...detection,
     recommendedZoom: clamp(Number(detection.recommendedZoom || 1), 1, MAX_PREVIEW_ZOOM),
   };
+  const faceBox = normalizedDetection.faceBox || null;
+  const autoZoom = faceBox ? calculateAutoZoom(faceBox) : 1;
+  normalizedDetection.recommendedZoom = clamp(Math.max(normalizedDetection.recommendedZoom, autoZoom), 1, MAX_PREVIEW_ZOOM);
+
   S.liveDetection = normalizedDetection;
-  applyPreviewFocus(normalizedDetection.recommendedZoom, normalizedDetection.faceBox || null);
+  applyPreviewFocus(normalizedDetection.recommendedZoom, faceBox);
   renderCameraAssistBadge();
 }
 
