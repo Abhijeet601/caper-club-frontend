@@ -28,8 +28,8 @@ const STARTUP_IDLE_TIMEOUT_MS = 1200;
 // Require fewer frames for lock to prevent “confidence too low” blocks.
 const LIVE_VERIFY_REQUIRED_FRAMES = 1;
 const LIVE_VERIFY_STRICT_THRESHOLD = 0.41;
-const LIVE_VERIFY_MIN_DETECTION_SCORE = 0.62;
-const LIVE_VERIFY_MIN_FACE_RATIO = 0.16;
+const LIVE_VERIFY_MIN_DETECTION_SCORE = 0.46;
+const LIVE_VERIFY_MIN_FACE_RATIO = 0.11;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_X = 0.22;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_Y = 0.24;
 // Require stronger recognition confidence before allowing attendance.
@@ -613,7 +613,7 @@ async function ensureFaceModelsLoaded() {
     return true;
   } catch (err) {
     S.faceModelsReady = false;
-    S.faceModelsError = err?.message || 'Unable to load Railway AI models.';
+    S.faceModelsError = err?.message || 'Unable to load face recognition models.';
     return false;
   } finally {
     S.faceModelsLoading = false;
@@ -1470,11 +1470,14 @@ function assessLiveDetectionQuality(detection) {
   const score = Number(detection.score || 0);
   const faceRatio = Number(detection.faceRatio || 0);
   const offsets = detectionCenterOffsets(detection.faceBox);
+  const isFocusLock = String(detection.captureMode || '') === 'focus-lock';
+  const minDetectionScore = isFocusLock ? 0.38 : LIVE_VERIFY_MIN_DETECTION_SCORE;
+  const minFaceRatio = isFocusLock ? 0.09 : LIVE_VERIFY_MIN_FACE_RATIO;
 
-  if (score < LIVE_VERIFY_MIN_DETECTION_SCORE) {
+  if (score < minDetectionScore) {
     return { ok: false, code: 'low-detection-score', message: 'Confidence too low. Hold steady and look at the camera.' };
   }
-  if (faceRatio < LIVE_VERIFY_MIN_FACE_RATIO) {
+  if (faceRatio < minFaceRatio) {
     return { ok: false, code: 'small-face', message: 'Move closer to the camera for secure verification.' };
   }
   if (offsets.x > LIVE_VERIFY_MAX_CENTER_OFFSET_X || offsets.y > LIVE_VERIFY_MAX_CENTER_OFFSET_Y) {

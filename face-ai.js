@@ -218,15 +218,27 @@
 
   async function loadModels(modelPath) {
     const faceapi = ensureFaceApi();
-    const base = String(modelPath || 'models').replace(/\/+$/, '');
+    const candidates = Array.from(new Set([
+      String(modelPath || '').trim().replace(/\/+$/, ''),
+      'models',
+      './models',
+    ].filter(Boolean)));
 
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(base),
-      faceapi.nets.faceLandmark68Net.loadFromUri(base),
-      faceapi.nets.faceRecognitionNet.loadFromUri(base),
-    ]);
+    let lastError = null;
+    for (const base of candidates) {
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(base),
+          faceapi.nets.faceLandmark68Net.loadFromUri(base),
+          faceapi.nets.faceRecognitionNet.loadFromUri(base),
+        ]);
+        return true;
+      } catch (err) {
+        lastError = err;
+      }
+    }
 
-    return true;
+    throw lastError || new Error('Unable to load face recognition models.');
   }
 
   async function imageFromDataUrl(dataUrl) {
@@ -299,10 +311,8 @@
 
   async function countFacesInFrame(input) {
     const faceapi = ensureFaceApi();
-    const options = getDetectorOptions({ inputSize: 224, scoreThreshold: 0.32 });
-    const detections = await faceapi
-      .detectAllFaces(input, options)
-      .withFaceLandmarks();
+    const options = getDetectorOptions({ inputSize: 320, scoreThreshold: 0.24 });
+    const detections = await faceapi.detectAllFaces(input, options);
     return Array.isArray(detections) ? detections.length : 0;
   }
 
@@ -445,20 +455,19 @@
   async function detectFromVideo(video, opts = {}) {
     if (!video || !video.videoWidth || !video.videoHeight) return null;
 
-    const faceCount = await countFacesInFrame(video);
-    if (faceCount > 1) {
-      return { multipleFaces: true, faceCount, score: 0 };
-    }
-    if (faceCount === 0) {
-      return null;
-    }
-
-    return detectDescriptor(video, {
+    const detection = await detectDescriptor(video, {
       videoMode: true,
       hintBox: opts.hintBox || null,
       allowLongRange: opts.allowLongRange !== false,
       recoveryMode: Boolean(opts.recoveryMode),
     });
+
+    const faceCount = await countFacesInFrame(video).catch(() => (detection ? 1 : 0));
+    if (faceCount > 1) {
+      return { multipleFaces: true, faceCount, score: 0 };
+    }
+
+    return detection || null;
   }
 
   async function detectFromDataUrl(dataUrl) {
