@@ -585,6 +585,26 @@ function bindEvents() {
     });
   }
 
+  // Member Images Gallery
+  if ($('closeImagesModal')) {
+    $('closeImagesModal').addEventListener('click', () => {
+      const modal = $('imageGalleryModal');
+      if (modal) modal.hidden = true;
+    });
+  }
+  if ($('viewImagesBtn')) {
+    $('viewImagesBtn').addEventListener('click', () => {
+      const userId = S.memberProfile?.memberId || S.memberProfile?.id;
+      if (userId) showAllMemberImages(userId);
+    });
+  }
+  const imageGalleryModal = $('imageGalleryModal');
+  if (imageGalleryModal) {
+    imageGalleryModal.addEventListener('click', (e) => {
+      if (e.target === imageGalleryModal) imageGalleryModal.hidden = true;
+    });
+  }
+
   // TTS
   $('ttsForm').addEventListener('submit', handleTts);
 }
@@ -2913,6 +2933,9 @@ function renderMember() {
       <div class="alert-top"><span class="alert-name">${esc(n.title||'Notification')}</span>${chip(n.tone||'blue', n.tone||'note')}</div>
       <p class="alert-msg">${esc(n.message||'')}</p>
     </div>`, 'No notifications.');
+
+  const userId = S.memberProfile?.memberId || S.memberProfile?.id;
+  if (userId) loadAndRenderMemberImages(userId);
 }
 
 /* â”€â”€ TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -3190,6 +3213,54 @@ function beginUserEdit(id) {
   $('userSubmitBtn').textContent = 'Update Member';
   syncSlotField();
   syncUserPlanDates();
+}
+
+async function loadAndRenderMemberImages(userId) {
+  const imagesSection = $('memberImagesSection');
+  if (!imagesSection || !userId) return;
+  
+  try {
+    const response = await api(`/admin/user/${userId}/images`, { method: 'GET' });
+    const images = Array.isArray(response) ? response : [];
+    
+    if (images.length > 0) {
+      imagesSection.hidden = false;
+      const gallery = $('memberImagesGallery');
+      gallery.innerHTML = images.slice(0, 4).map((img, i) => `
+        <div class="thumb-item">
+          <img src="${img.url}" alt="Image ${i+1}" loading="lazy" style="cursor:pointer;" onclick="showAllMemberImages('${userId}')">
+          <span class="thumb-num">${i+1}</span>
+        </div>`).join('');
+    } else {
+      imagesSection.hidden = true;
+    }
+  } catch (err) {
+    imagesSection.hidden = true;
+  }
+}
+
+async function showAllMemberImages(userId) {
+  const modal = $('imageGalleryModal');
+  const gallery = $('imageGalleryGrid');
+  if (!modal || !gallery) return;
+  
+  try {
+    const response = await api(`/admin/user/${userId}/images`, { method: 'GET' });
+    const images = Array.isArray(response) ? response : [];
+    
+    if (images.length > 0) {
+      gallery.innerHTML = images.map((img, i) => `
+        <div class="gallery-item">
+          <img src="${img.url}" alt="Image ${i+1}" loading="lazy">
+          <span class="image-time">${fmtDT(img.modified)}</span>
+        </div>`).join('');
+      modal.hidden = false;
+    } else {
+      toast('No images available for this user.', 'info');
+    }
+  } catch (err) {
+    toast('Error loading images.', 'error');
+  }
 }
 
 async function deleteUser(id) {

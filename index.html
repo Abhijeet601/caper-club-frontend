@@ -1091,6 +1091,12 @@
             <div id="memberProfileCard"></div>
           </div>
 
+          <!-- Member Images Gallery -->
+          <div class="panel-card glass-card" id="memberImagesSection" hidden>
+            <div class="card-head"><span class="card-title">📸 Captured Images</span><button id="viewImagesBtn" class="btn-primary btn-sm" style="margin-left: auto;">View All</button></div>
+            <div id="memberImagesGallery" class="thumb-grid" style="max-height: 400px; overflow-y: auto;"></div>
+          </div>
+
           <!-- My Records -->
           <div class="panel-card glass-card" id="myRecordsSection" hidden>
             <div class="card-head"><span class="card-title">📂 My Records</span></div>
@@ -1104,6 +1110,17 @@
         </div>
       </div>
     </main>
+
+    <!-- User Images Gallery Modal -->
+    <div id="imageGalleryModal" class="modal-overlay" hidden>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>User's Captured Images</h2>
+          <button class="modal-close-btn" id="closeImagesModal">&times;</button>
+        </div>
+        <div id="imageGalleryGrid" class="image-gallery-grid"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Scan preview hidden canvas helper -->
