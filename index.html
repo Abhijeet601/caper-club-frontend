@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caper Sports Club | AI Attendance System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Mesh BG -->
+  <div class="mesh-bg">
+    <div class="mesh-orb m1"></div>
+    <div class="mesh-orb m2"></div>
+    <div class="mesh-orb m3"></div>
+    <div class="mesh-orb m4"></div>
+    <div class="mesh-orb m5"></div>
+    <div class="mesh-orb m6"></div>
+  </div>
+  <canvas id="particleCanvas"></canvas>
+
+  <div class="app-shell">
+
+    <!-- ═══ TOP BAR ═══ -->
+    <header class="top-bar glass-card">
+      <div class="brand">
+        <div class="brand-icon">
+          <img src="logo.svg" alt="Caper Club logo" class="brand-logo">
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-name">Caper Sports Club</h1>
+          <p class="brand-sub" id="typingSubtitle"></p>
+          <p class="brand-powered">
+            Powered by
+            <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a>
+          </p>
+        </div>
+      </div>
+
+      <div class="top-bar-center">
+        <div class="status-pills">
+          <div class="status-pill" id="healthPill">
+            <span class="status-dot" id="healthDot"></span>
+            <span id="healthText">Checking…</span>
+          </div>
+          <div class="status-pill" id="authPill">
+            <span class="status-dot" id="authDot"></span>
+            <span id="authText">Signed out</span>
+          </div>
+          <div class="status-pill live-pill">
+            <span class="live-dot"></span>
+            <span>LIVE</span>
+          </div>
+        </div>
+      </div>
+      <div class="status-pill" id="doorPill">
+  <span class="status-dot" id="doorDot"></span>
+  <span id="doorText">Door: Checking...</span>
+</div>
+
+      <div class="top-bar-right">
+        <div class="scan-toggle-group">
+          <span class="toggle-label">Live Scan</span>
+          <label class="toggle-wrap" for="enableCameraInput">
+            <input type="checkbox" id="enableCameraInput">
+            <span class="toggle-track">
+              <span class="toggle-thumb">
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                  <rect x="1" y="3" width="9" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+                  <path d="M10 6L13 4.5V9.5L10 8V6Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+                </svg>
+              </span>
+            </span>
+            <span class="toggle-state" id="liveScanStateText">OFF</span>
+          </label>
+        </div>
+
+        <!-- Door quick controls (admin only) -->
+        <div class="door-quick-controls" style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="btn-primary btn-sm" id="doorUnlockNavbarBtn" title="Unlock door for 5 seconds">
+            🔓 Unlock (5s)
+          </button>
+        </div>
+
+        <div class="clock-block">
+          <div class="clock-time" id="liveTime">00:00:00</div>
+          <div class="clock-date" id="liveDate">—</div>
+        </div>
+      </div>
+    </header>
+    
+
+    <!-- ═══ TAB NAV ═══ -->
+    <nav class="tab-nav glass-card">
+      <div class="tab-nav-inner">
+        <button class="nav-tab active" data-tab="liveOpsTab">
+          <span class="nav-tab-dot green"></span>
+          Live Ops
+        </button>
+        <button class="nav-tab" data-tab="newUserTab">
+          <span class="nav-tab-dot blue"></span>
+          New User
+        </button>
+        <button class="nav-tab" data-tab="faceEnrollmentTab">
+          <span class="nav-tab-dot violet"></span>
+          Enrollment Status
+        </button>
+        <button class="nav-tab" data-tab="reportsTab">
+          <span class="nav-tab-dot violet"></span>
+          Reports
+        </button>
+        <button class="nav-tab" data-tab="allMembersTab">
+          <span class="nav-tab-dot slate"></span>
+          All Members
+        </button>
+        <button class="nav-tab" data-tab="membershipTab">
+          <span class="nav-tab-dot amber"></span>
+          Membership
+        </button>
+        <button class="nav-tab" data-tab="alertsTab">
+          <span class="nav-tab-dot rose"></span>
+          Alerts
+          <span class="nav-tab-badge" id="alertBadge" hidden>0</span>
+        </button>
+        <button class="nav-tab" data-tab="settingsTab">
+          <span class="nav-tab-dot slate"></span>
+          Settings
+        </button>
+      </div>
+    </nav>
+
+    <!-- ═══ MAIN AREA ═══ -->
+    <main class="main-area-full">
+
+      <!-- ══ LIVE OPS TAB (scanner + right panels together) ══ -->
+      <div class="tab-page active" id="liveOpsTab">
+        <div class="liveops-layout">
+
+      <!-- Scanner (only here) -->
+      <section class="scanner-panel glass-card">
+
+        <!-- Scanner Header -->
+        <div class="scanner-header">
+          <div class="scanner-title-row">
+            <div class="scanner-icon-badge">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <rect x="1.5" y="4" width="11" height="10" rx="2" stroke="currentColor" stroke-width="1.4"/>
+                <path d="M12.5 7.5L16.5 5.5V12.5L12.5 10.5V7.5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <circle cx="7" cy="9" r="2" stroke="currentColor" stroke-width="1.2"/>
+              </svg>
+            </div>
+            <span class="scanner-title">Live Scanner — CAM-01</span>
+          </div>
+          <div class="scanner-badges">
+            <span class="scanner-badge blink-badge" id="camStatusPrimary">Ready</span>
+            <span class="scanner-badge live-badge">● REC</span>
+            <span class="scanner-badge session-badge" id="sessionTimerBadge" hidden>● 00:00</span>
+          </div>
+        </div>
+
+        <!-- Status strip -->
+        <div class="scan-status-strip" id="scannerStatusPanel" data-scan-state="idle">
+          <span class="scan-state-pill" id="scannerStatusPill">Idle</span>
+          <div class="scan-state-text">
+            <strong id="scanStatusText">Live scanner is offline</strong>
+            <span id="scanStatusDetail">Enable Live Scan in the header to start.</span>
+          </div>
+          <div class="scan-state-loader" id="scannerStatusLoader" hidden>
+            <div class="spin-ring"></div>
+          </div>
+        </div>
+
+        <!-- Viewport -->
+        <div class="cam-viewport camera-shell" id="cameraShell">
+          <video id="cameraPreview" autoplay muted playsinline></video>
+          <div class="camera-assist-badge" id="cameraAssistBadge">Search mode | 1.0x</div>
+
+          <div class="scan-overlay">
+            <div class="scan-line"></div>
+            <div class="scan-grid"></div>
+          </div>
+
+          <div class="corner tl"></div><div class="corner tr"></div>
+          <div class="corner bl"></div><div class="corner br"></div>
+
+          <div class="face-box" id="faceDetectBox">
+            <div class="fc tl"></div><div class="fc tr"></div>
+            <div class="fc bl"></div><div class="fc br"></div>
+            <div class="face-label" id="faceDetectLabel">Scanning…</div>
+          </div>
+
+          <div class="cam-placeholder" id="cameraPlaceholder">
+            <div class="eye-anim">
+              <div class="eye-ring outer"></div>
+              <div class="eye-ring mid"></div>
+              <div class="eye-ring inner"></div>
+              <div class="eye-pupil"></div>
+              <div class="eye-scan-line"></div>
+            </div>
+            <p>Enable Live Scan to activate</p>
+            <span class="placeholder-sub">AI-powered biometric attendance</span>
+          </div>
+        </div>
+
+        <!-- Scanner Footer -->
+        <div class="scanner-footer">
+          <div class="scan-meta-row">
+            <div class="scan-meta-item">
+              <span class="meta-key">STATUS</span>
+              <span class="meta-val" id="camDetect">No scan yet</span>
+            </div>
+            <div class="scan-meta-item">
+              <span class="meta-key">LAST ACTION</span>
+              <span class="meta-val" id="camLastAction">Waiting</span>
+            </div>
+            <div class="scan-meta-item">
+              <span class="meta-key">SOURCE</span>
+              <span class="meta-val" id="camSource">Camera / Upload</span>
+            </div>
+            <div class="scan-meta-item">
+              <span class="meta-key">AREA</span>
+              <span class="meta-val" id="camArea">Club Entry</span>
+            </div>
+          </div>
+
+          <!-- Scan controls -->
+          <div class="scan-controls">
+            <label class="field-inline">
+              <span>Area</span>
+              <input type="text" id="scanAreaInput" value="Capper Sports Club Entry">
+            </label>
+            <label class="field-inline">
+              <span>Image</span>
+              <input type="file" id="scanFileInput" accept="image/*">
+            </label>
+            <div class="scan-btns">
+              <button type="button" class="btn-capture" id="captureScanBtn">📷 Capture</button>
+              <button type="button" class="btn-scan" id="runScanBtn">▶ Run Scan</button>
+            </div>
+          </div>
+
+          <!-- Scan result -->
+          <div class="scan-result-card" id="scanResult">
+            <div class="empty-hint">Scan results appear here</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right panels for Live Ops -->
+      <aside class="right-panel">
+
+          <!-- Voice Control Card -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">🎤 Voice Control</span>
+              <span class="badge-chip chip-blue" id="ttsModeChip">READY</span>
+            </div>
+            <p class="card-sub" id="ttsStatusText">Preparing the browser voice assistant.</p>
+            <form id="ttsForm" class="voice-form">
+              <textarea id="ttsText" rows="2" placeholder="Type an announcement…"></textarea>
+              <button type="submit" class="btn-primary btn-sm">🔊 Speak</button>
+            </form>
+            <audio id="ttsAudio" controls class="audio-bar" hidden></audio>
+          </div>
+
+          <!-- System Status Card -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">⚙ System Status</span>
+            </div>
+            <div class="sys-status-grid" id="statsGrid">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Active Sessions Panel -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">🏃 Active Sessions</span>
+              <span class="badge-chip chip-green" id="activeSessionCount">0</span>
+            </div>
+            <div id="activeSessionsPanel">
+              <div class="empty-hint">No active sessions.</div>
+            </div>
+          </div>
+
+          <!-- Quick Info: Live Feed -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">⚡ Live Feed</span>
+              <div class="btn-row">
+                <button type="button" class="btn-ghost btn-sm" id="clearLiveFeedBtn">Clear</button>
+                <span class="badge-chip chip-green" id="feedCount">0</span>
+              </div>
+            </div>
+            <div class="feed-list" id="liveFeedList">
+              <div class="empty-hint">No live events yet.</div>
+            </div>
+          </div>
+
+          <!-- Sign-In / Account (right panel) -->
+          <div class="panel-card glass-card" id="authCard">
+            <div class="card-head">
+              <span class="card-title">🔐 Admin Sign In</span>
+            </div>
+            <form id="loginForm" class="compact-form">
+              <input type="email" id="loginEmail" placeholder="admin@caperclub.ai" required>
+              <input type="password" id="loginPassword" placeholder="Password" required>
+              <button type="submit" class="btn-primary btn-sm full-w">Sign In</button>
+            </form>
+            <div id="accountSummary" class="account-block" hidden>
+              <!-- Rendered by JS -->
+            </div>
+            <div class="btn-row mt8" id="accountActions" hidden>
+              <button type="button" class="btn-ghost btn-sm" id="loadMeBtn">Refresh</button>
+              <button type="button" class="btn-ghost btn-sm danger" id="logoutBtn">Sign Out</button>
+            </div>
+          </div>
+
+          <!-- Backend Config -->
+          <div class="panel-card glass-card">
+            <div class="card-head"><span class="card-title">🔗 Backend</span></div>
+            <form id="apiConfigForm" class="compact-form">
+              <input type="url" id="apiBaseInput" placeholder="http://localhost:8001">
+              <div class="btn-row">
+                <button type="submit" class="btn-primary btn-sm">Save</button>
+                <button type="button" class="btn-ghost btn-sm" id="refreshAllBtn">Refresh All</button>
+              </div>
+            </form>
+          </div>
+
+      </aside>
+        </div>
+      </div>
+
+      <!-- ══ NEW USER TAB ══ -->
+      <div class="tab-page" id="newUserTab">
+        <div class="single-col-layout">
+
+          <!-- Enrollment Camera -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">📸 Face Capture</span>
+              <span class="badge-chip chip-violet" id="enrollCountChip">0/5</span>
+            </div>
+            <div class="enroll-progress-bar"><div id="enrollProgress" style="width:0%"></div></div>
+            <div id="enrollmentGallery" class="thumb-grid">
+              <div class="empty-hint">Capture 3–5 clear face images</div>
+            </div>
+            <div class="cam-viewport camera-shell enrollment-cam-viewport" id="enrollmentCameraShell">
+              <video id="enrollmentCameraPreview" autoplay muted playsinline></video>
+              <div class="camera-assist-badge" id="enrollmentCameraBadge">Live preview | 1.0x</div>
+              <div class="cam-placeholder" id="enrollmentCameraPlaceholder">
+                <div class="eye-anim">
+                  <div class="eye-ring outer"></div>
+                  <div class="eye-ring mid"></div>
+                  <div class="eye-ring inner"></div>
+                  <div class="eye-pupil"></div>
+                  <div class="eye-scan-line"></div>
+                </div>
+                <p>Live camera preview appears here</p>
+                <span class="placeholder-sub">Check framing before capture</span>
+              </div>
+            </div>
+            <div class="enrollment-zoom-row mt8">
+              <span class="enrollment-zoom-label">Capture Zoom</span>
+              <div class="enrollment-zoom-actions">
+                <button type="button" class="btn-ghost btn-sm" id="enrollmentZoomOutBtn">Zoom Out</button>
+                <span class="enrollment-zoom-value" id="enrollmentZoomValue">1.0x</span>
+                <button type="button" class="btn-ghost btn-sm" id="enrollmentZoomInBtn">Zoom In</button>
+              </div>
+            </div>
+            <div class="btn-row mt8">
+              <button type="button" class="btn-capture" id="captureEnrollmentBtn">📷 Capture</button>
+              <button type="button" class="btn-ghost btn-sm" id="clearEnrollmentBtn">Clear</button>
+              <label class="btn-ghost btn-sm file-lbl">
+                Upload
+                <input type="file" id="enrollmentFilesInput" accept="image/*" multiple hidden>
+              </label>
+            </div>
+          </div>
+
+          <!-- User Form -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title" id="userFormTitle">➕ Create Member</span>
+            </div>
+            <form id="userForm" class="user-form">
+              <input type="hidden" id="userIdInput">
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Full Name</span>
+                  <input type="text" id="userNameInput" required placeholder="Rahul Sharma">
+                </label>
+                <label class="field-stack">
+                  <span>Member ID</span>
+                  <input type="text" id="userMemberIdInput" placeholder="Auto-generated" readonly>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Email</span>
+                  <input type="email" id="userEmailInput" required placeholder="member@email.com">
+                </label>
+                <label class="field-stack">
+                  <span>Password</span>
+                  <input type="password" id="userPasswordInput" minlength="8" required placeholder="Min 8 characters">
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Mobile</span>
+                  <input type="text" id="userMobileInput" placeholder="Mobile number">
+                </label>
+                <label class="field-stack">
+                  <span>Role</span>
+                  <select id="userRoleInput" required>
+                    <option value="user">Member</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Sport / Activity</span>
+                  <select id="userSportInput">
+                    <option value="Swimming">🏊 Swimming</option>
+                    <option value="Cricket">🏏 Cricket</option>
+                    <option value="Zumba">💃 Zumba</option>
+                    <option value="Tennis">🎾 Tennis</option>
+                    <option value="Skating">⛸ Skating</option>
+                    <option value="General">🏃 General</option>
+                  </select>
+                </label>
+                <label class="field-stack">
+                  <span>Membership Level</span>
+                  <input type="text" id="userLevelInput" placeholder="Enter membership level">
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Plan</span>
+                  <select id="userPlanInput">
+                    <option value="Monthly">Monthly (30 days)</option>
+                    <option value="2 Month">2 Month (60 days)</option>
+                    <option value="Quarterly">Quarterly (90 days)</option>
+                    <option value="Half-Yearly">Half-Yearly (180 days)</option>
+                    <option value="Yearly">Yearly (365 days)</option>
+                    <option value="Custom">Custom (1–29 days)</option>
+                  </select>
+                </label>
+                <label class="field-stack">
+                  <span>Payment</span>
+                  <select id="userPaymentModeInput">
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Amount (₹)</span>
+                  <input type="number" id="userAmountInput" min="0" step="0.01" value="0" required>
+                </label>
+                <label class="field-stack">
+                  <span>Due Amount (₹)</span>
+                  <input type="number" id="userDueAmountInput" min="0" step="0.01" value="0">
+                </label>
+              </div>
+              <label class="field-stack">
+                <span>Visit Limit Override</span>
+                <input type="number" id="userVisitLimitInput" min="0" step="1" placeholder="Blank = plan default, e.g. 5">
+              </label>
+              <label class="field-stack">
+                <span>Pay Status</span>
+                <select id="userPaymentStatusInput">
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Expired">Expired</option>
+                </select>
+              </label>
+              <div class="form-row">
+                <label class="field-stack">
+                  <span>Start Date</span>
+                  <input type="date" id="userStartInput" required>
+                </label>
+                <label class="field-stack">
+                  <span>Expiry Date</span>
+                  <input type="date" id="userExpiryInput" required>
+                </label>
+              </div>
+              <label class="field-stack">
+                <span>Assigned Slot</span>
+                <select id="userSlotInput"></select>
+              </label>
+              <label class="field-stack">
+                <span>Admin Note</span>
+                <textarea id="userNoteInput" rows="2" placeholder="Optional note"></textarea>
+              </label>
+              <div class="btn-row mt8">
+                <button type="submit" class="btn-primary btn-sm" id="userSubmitBtn">Create Member</button>
+                <button type="button" class="btn-ghost btn-sm" id="userResetBtn">Clear</button>
+              </div>
+              <!-- Success animation overlay -->
+              <div class="form-success" id="userFormSuccess" hidden>
+                <div class="success-check">✓</div>
+                <p>Member Created!</p>
+              </div>
+            </form>
+          </div>
+
+          <!-- Face Upload submit -->
+          <div class="panel-card glass-card">
+            <div class="card-head"><span class="card-title">📤 Enroll Faces</span></div>
+            <form id="faceUploadForm">
+              <label class="field-stack">
+                <span>Search Member</span>
+                <div class="enrollment-search-row">
+                  <input type="search" id="enrollmentUserSearchInput" placeholder="Search by name, member ID, email, mobile">
+                  <button type="button" class="btn-ghost btn-sm" id="enrollmentUserSearchBtn">Search</button>
+                </div>
+                <span class="enrollment-search-hint" id="enrollmentSearchHint">Showing all members.</span>
+              </label>
+              <label class="field-stack">
+                <span>Member</span>
+                <select id="enrollmentUserInput"></select>
+              </label>
+              <button type="submit" class="btn-primary btn-sm full-w mt8">Upload Face Images</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ FACE ENROLLMENT STATUS TAB ══ -->
+      <div class="tab-page" id="faceEnrollmentTab"></div>
+
+      <!-- ══ FACE ENROLLMENT STATUS TAB ══ -->
+      <div class="tab-page" id="faceEnrollmentTab">
+        <object data="faceEnrollmentTab.html" type="text/html" style="width:100%;height:100vh;border:none;"></object>
+      </div>
+
+      <!-- ══ REPORTS TAB ══ -->
+      <div class="tab-page" id="reportsTab">
+
+        <div class="single-col-layout">
+
+    <!-- Summary Cards Row -->
+    <div class="rpt-summary-grid panel-card glass-card">
+      <div class="rpt-stat-card" id="rptTotalMembers" data-card-filter="all">
+        <span class="rpt-stat-icon">👥</span>
+        <div class="rpt-stat-val" id="rptTotalMembersVal">0</div>
+        <div class="rpt-stat-label">Total Members</div>
+      </div>
+      <div class="rpt-stat-card active" id="rptActiveMembers" data-card-filter="active">
+        <span class="rpt-stat-icon">✅</span>
+        <div class="rpt-stat-val" id="rptActiveMembersVal">0</div>
+        <div class="rpt-stat-label">Active</div>
+      </div>
+      <div class="rpt-stat-card warning" id="rptExpiringSoon" data-card-filter="expiring">
+        <span class="rpt-stat-icon">⚠</span>
+        <div class="rpt-stat-val" id="rptExpiringSoonVal">0</div>
+        <div class="rpt-stat-label">Expiring Soon</div>
+      </div>
+      <div class="rpt-stat-card revenue" id="rptTodayRevenue" data-card-filter="all">
+        <span class="rpt-stat-icon">₹</span>
+        <div class="rpt-stat-val" id="rptTodayRevenueVal">₹0</div>
+        <div class="rpt-stat-label">Today's Revenue</div>
+      </div>
+      <div class="rpt-stat-card info" id="rptTodayCheckins" data-card-filter="all">
+        <span class="rpt-stat-icon">🔑</span>
+        <div class="rpt-stat-val" id="rptTodayCheckinsVal">0</div>
+        <div class="rpt-stat-label">Today's Check-ins</div>
+      </div>
+    </div>
+
+    <div class="rpt-quick-card-grid">
+      <button class="rpt-quick-card active" data-qfilter="all">
+        <span class="rpt-quick-card-label">All Sessions</span>
+        <span class="rpt-quick-card-value" id="qcardAll">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="today-admissions">
+        <span class="rpt-quick-card-label">Today's Admissions</span>
+        <span class="rpt-quick-card-value" id="qcardTodayAdmissions">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="today-renewals">
+        <span class="rpt-quick-card-label">Today's Renewals</span>
+        <span class="rpt-quick-card-value" id="qcardTodayRenewals">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="today-checkins">
+        <span class="rpt-quick-card-label">Today's Check-ins</span>
+        <span class="rpt-quick-card-value" id="qcardTodayCheckins">0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="cash">
+        <span class="rpt-quick-card-label">Cash Today</span>
+        <span class="rpt-quick-card-value" id="qcardCash">₹0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="upi">
+        <span class="rpt-quick-card-label">UPI Today</span>
+        <span class="rpt-quick-card-value" id="qcardUpi">₹0</span>
+      </button>
+      <button class="rpt-quick-card" data-qfilter="card">
+        <span class="rpt-quick-card-label">Card Today</span>
+        <span class="rpt-quick-card-value" id="qcardCard">₹0</span>
+      </button>
+      <button type="button" class="rpt-quick-card rpt-quick-card-static">
+        <span class="rpt-quick-card-label">Total Revenue</span>
+        <span class="rpt-quick-card-value" id="qcardTotalRevenue">₹0</span>
+      </button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="panel-card glass-card rpt-filter-bar">
+      <input type="search" id="rptSearch" placeholder="Search user…" class="rpt-input">
+      <select id="rptFilterPlan" class="rpt-select">
+        <option value="">All Plans</option>
+        <option value="Monthly">Monthly</option>
+        <option value="Quarterly">Quarterly</option>
+        <option value="Half-Yearly">Half-Yearly</option>
+        <option value="Yearly">Yearly</option>
+        <option value="Custom">Custom</option>
+      </select>
+      <select id="rptFilterPayment" class="rpt-select">
+        <option value="">All Payments</option>
+        <option value="Paid">Paid</option>
+        <option value="Pending">Pending</option>
+        <option value="Expired">Expired</option>
+      </select>
+      <select id="rptFilterMode" class="rpt-select">
+        <option value="">All Modes</option>
+        <option value="Cash">Cash</option>
+        <option value="UPI">UPI</option>
+        <option value="Card">Card</option>
+      </select>
+      <select id="rptFilterEnrollment" class="rpt-select">
+        <option value="">All Enrollment</option>
+        <option value="enrolled">Enrolled</option>
+        <option value="not-enrolled">Not Enrolled</option>
+      </select>
+      <input type="date" id="rptFilterDate" class="rpt-date">
+      <button class="btn-ghost btn-sm" id="rptClearFilters">Clear</button>
+      <button class="btn-primary btn-sm" id="rptExportBtn">⬇ Export</button>
+    </div>
+
+    <!-- Daily Admission Report Table -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">🧾 Daily Admission Report</span>
+        <span class="badge-chip chip-blue" id="rptAdmissionCount">0</span>
+      </div>
+      <div class="rpt-table-wrap">
+        <table class="rpt-table" id="admissionTable">
+          <thead>
+<tr>
+              <th>Member</th>
+              <th>Check-in</th>
+              <th>Check-out</th>
+              <th>Plan</th>
+              <th>Mode</th>
+              <th>Status</th>
+              <th>Amount</th>
+              <th>Renewal</th>
+            </tr>
+          </thead>
+          <tbody id="admissionTableBody">
+            <tr><td colspan="7"><div class="empty-hint">No admission records.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Row Detail Drawer -->
+    <div class="panel-card glass-card" id="rptDetailDrawer" hidden>
+      <div class="card-head">
+        <span class="card-title" id="rptDetailTitle">Member Detail</span>
+        <button class="icon-btn" id="rptDetailClose">✕</button>
+      </div>
+      <div id="rptDetailBody"></div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="rpt-charts-row">
+
+      <!-- Attendance Analytics -->
+      <div class="panel-card glass-card rpt-chart-card">
+        <div class="card-head"><span class="card-title">📈 Attendance Analytics</span></div>
+        <div class="rpt-analytics-grid" id="rptAnalyticsGrid">
+          <div class="rpt-analytic-item blue">
+            <div class="rpt-analytic-val" id="anaCheckins">0</div>
+            <div class="rpt-analytic-lbl">Check-ins</div>
+          </div>
+          <div class="rpt-analytic-item green">
+            <div class="rpt-analytic-val" id="anaCheckouts">0</div>
+            <div class="rpt-analytic-lbl">Check-outs</div>
+          </div>
+          <div class="rpt-analytic-item violet">
+            <div class="rpt-analytic-val" id="anaActive">0</div>
+            <div class="rpt-analytic-lbl">Active Now</div>
+          </div>
+          <div class="rpt-analytic-item amber">
+            <div class="rpt-analytic-val" id="anaPeak">–</div>
+            <div class="rpt-analytic-lbl">Peak Slot</div>
+          </div>
+        </div>
+        <div style="position:relative;height:180px;margin-top:10px;">
+          <canvas id="weeklyAttendanceChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Slot Engagement -->
+      <div class="panel-card glass-card rpt-chart-card">
+        <div class="card-head"><span class="card-title">🕒 Slot Engagement</span></div>
+        <div id="slotEngagementBars" class="slot-bars"></div>
+      </div>
+
+    </div>
+
+    <!-- Payment Details -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">💰 Payment Summary</span>
+      </div>
+      <div class="rpt-payment-grid">
+        <div class="rpt-pay-card green">
+          <div class="rpt-pay-label">Daily</div>
+          <div class="rpt-pay-val" id="payDaily">₹0</div>
+        </div>
+        <div class="rpt-pay-card blue">
+          <div class="rpt-pay-label">Weekly</div>
+          <div class="rpt-pay-val" id="payWeekly">₹0</div>
+        </div>
+        <div class="rpt-pay-card violet">
+          <div class="rpt-pay-label">Monthly</div>
+          <div class="rpt-pay-val" id="payMonthly">₹0</div>
+        </div>
+        <div class="rpt-pay-card amber">
+          <div class="rpt-pay-label">Pending</div>
+          <div class="rpt-pay-val" id="payPending">₹0</div>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-top:10px;">
+        <table class="report-table">
+          <thead><tr><th>Member</th><th>Plan</th><th>Amount</th><th>Mode</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody id="payHistoryBody">
+            <tr><td colspan="6"><div class="empty-hint">No payment records.</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Renewal Details -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">🔄 Renewal Tracker</span>
+      </div>
+      <div class="rpt-renewal-tabs">
+        <button class="rpt-rtab active" data-rtab="expiring">⚠ Expiring</button>
+        <button class="rpt-rtab" data-rtab="expired">🔴 Expired</button>
+        <button class="rpt-rtab" data-rtab="renewed">✅ Renewed</button>
+      </div>
+      <div id="renewalList" class="alert-list mt8">
+        <div class="empty-hint">No renewal data.</div>
+      </div>
+    </div>
+
+  </div>
+
+      </div>
+
+      <!-- ══ ALL MEMBERS TAB ══ -->
+      <div class="tab-page" id="allMembersTab">
+        <div class="single-col-layout all-members-layout">
+          <div class="panel-card glass-card all-members-panel">
+            <div class="card-head">
+              <span class="card-title">👥 All Members</span>
+              <div class="btn-row all-members-toolbar">
+                <span class="badge-chip chip-blue" id="allMembersCount">0</span>
+              </div>
+            </div>
+            <div class="filter-section">
+              <div class="filter-row">
+                <div class="search-group">
+                  <input type="search" id="userFilterInput" placeholder="Search by name, email, member ID, mobile…" class="filter-input">
+                  <button class="btn-ghost btn-sm" id="allMembersRefresh" title="Refresh data">🔄</button>
+                </div>
+                <div class="filter-group">
+                  <select id="userSportFilterInput" class="filter-select">
+                    <option value="">All Sports</option>
+                  </select>
+                  <select id="userPlanFilterInput" class="filter-select">
+                    <option value="">All Plans</option>
+                  </select>
+                  <select id="userStatusFilterInput" class="filter-select">
+                    <option value="">All Statuses</option>
+                  </select>
+                  <select id="userRoleFilterInput" class="filter-select">
+                    <option value="">All Roles</option>
+                  </select>
+                  <select id="userExpiryStatusFilterInput" class="filter-select">
+                    <option value="">All Memberships</option>
+                    <option value="active">Active</option>
+                    <option value="expiring">Expiring Soon</option>
+                    <option value="expired">Expired</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                  <select id="userPaymentModeFilterInput" class="filter-select">
+                    <option value="">All Modes</option>
+                    <option value="Cash">Cash</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Card">Card</option>
+                  </select>
+                  <button class="btn-ghost btn-sm" id="allMembersClearFilters">Clear Filters</button>
+                </div>
+              </div>
+            </div>
+            <div class="all-members-insights" id="allMembersInsights">
+              <div class="insight-grid">
+                <div class="insight-card" data-filter="all" title="Click to show all members">
+                  <div class="insight-icon">👁️</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersVisibleCount">0</div>
+                    <div class="insight-label">Total Members</div>
+                    <div class="insight-sub">All registered members</div>
+                  </div>
+                </div>
+                <div class="insight-card" data-filter="face-enrolled" title="Click to show face enrolled members">
+                  <div class="insight-icon">🤖</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersFaceEnrolled">0</div>
+                    <div class="insight-label">Face Enrolled</div>
+                    <div class="insight-sub">Total enrolled members</div>
+                  </div>
+                </div>
+                <div class="insight-card" data-filter="face-pending" title="Click to show face pending members">
+                  <div class="insight-icon">📷</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersFacePending">0</div>
+                    <div class="insight-label">Face Pending</div>
+                    <div class="insight-sub">Total pending enrollment</div>
+                  </div>
+                </div>
+                <div class="insight-card" data-filter="active" title="Click to show active membership members">
+                  <div class="insight-icon">✅</div>
+                  <div class="insight-content">
+                    <div class="insight-value" id="allMembersActiveMembership">0 / 0</div>
+                    <div class="insight-label">Active Memberships</div>
+                    <div class="insight-sub">Valid out of total</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="help-note">
+              <p>💡 <strong>Pro Tips:</strong> Use filters to find members quickly. All stats show totals from all members. Click member actions for detailed reports or management.</p>
+            </div>
+            <div class="table-scroll">
+              <table class="report-table all-members-table">
+                <thead><tr><th>Member</th><th>Sport / Plan</th><th>Status</th><th>Face Recognition</th><th>Actions</th></tr></thead>
+                <tbody id="usersTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="panel-card glass-card all-member-report-panel" id="allMemberReportDrawer" hidden>
+            <div class="card-head">
+              <div>
+                <span class="card-title" id="allMemberReportTitle">Individual Member Report</span>
+                <p class="card-sub" id="allMemberReportSubtitle">Choose a member and open Report to see their full attendance, payment, and profile details.</p>
+              </div>
+              <button class="icon-btn" id="allMemberReportClose">✕</button>
+            </div>
+            <div class="all-member-report-body" id="allMemberReportBody"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ MEMBERSHIP TAB ══ -->
+      <div class="tab-page" id="membershipTab">
+        <div class="single-col-layout">
+
+    <!-- Plan Calculator -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">🧮 Plan Calculator</span>
+      </div>
+      <div class="plan-calc-grid">
+        <label class="field-stack">
+          <span>Plan Type</span>
+          <select id="planCalcType">
+            <option value="Monthly">Monthly (30 days)</option>
+            <option value="Quarterly">Quarterly (90 days)</option>
+            <option value="Half-Yearly">Half-Yearly (180 days)</option>
+            <option value="Yearly">Yearly (365 days)</option>
+            <option value="Custom">Custom (1–29 days)</option>
+          </select>
+        </label>
+        <label class="field-stack" id="planCalcCustomWrap" hidden>
+          <span>Custom Days (1–29)</span>
+          <input type="number" id="planCalcDays" min="1" max="29" value="7" placeholder="e.g. 15">
+        </label>
+        <label class="field-stack">
+          <span>Start Date</span>
+          <input type="date" id="planCalcStart">
+        </label>
+        <label class="field-stack">
+          <span>Calculated Expiry</span>
+          <input type="date" id="planCalcExpiry" readonly placeholder="Auto-calculated">
+        </label>
+      </div>
+      <div class="plan-calc-result" id="planCalcResult" hidden>
+        <span class="plan-calc-badge" id="planCalcBadge">30 days</span>
+        <span id="planCalcText">Monthly plan · Expires on —</span>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="panel-card glass-card membership-filters">
+      <button class="filter-chip active" data-mfilter="all">All</button>
+      <button class="filter-chip" data-mfilter="active">🟢 Active</button>
+      <button class="filter-chip" data-mfilter="expiring">🟡 Expiring</button>
+      <button class="filter-chip" data-mfilter="expired">🔴 Expired</button>
+    </div>
+
+    <!-- Members list -->
+    <div class="panel-card glass-card">
+      <div class="card-head">
+        <span class="card-title">💳 Members</span>
+        <span class="badge-chip" id="membershipCountChip">0</span>
+      </div>
+      <div class="membership-list" id="membershipList">
+        <div class="empty-hint">No membership data.</div>
+      </div>
+    </div>
+
+    <!-- Create membership -->
+    <div class="panel-card glass-card">
+      <div class="card-head"><span class="card-title">➕ Add Membership</span></div>
+      <form id="membershipForm" class="compact-form">
+        <input type="search" id="membershipUserSearchInput" placeholder="Search member, email, ID, mobile…" class="rpt-input">
+        <select id="membershipUserInput" required></select>
+        <div class="form-row">
+          <select id="membershipPlanInput">
+            <option value="Monthly">Monthly</option>
+            <option value="Quarterly">Quarterly</option>
+            <option value="Half-Yearly">Half-Yearly</option>
+            <option value="Yearly">Yearly</option>
+            <option value="Custom">Custom</option>
+          </select>
+          <select id="membershipModeInput">
+            <option value="Cash">Cash</option>
+            <option value="UPI">UPI</option>
+            <option value="Card">Card</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <input type="date" id="membershipStartInput" required>
+          <input type="date" id="membershipExpiryInput" required>
+        </div>
+        <div class="form-row">
+          <input type="number" id="membershipAmountInput" min="0" value="0" placeholder="Amount ₹">
+          <select id="membershipStatusInput">
+            <option value="Paid">Paid</option>
+            <option value="Pending">Pending</option>
+            <option value="Expired">Expired</option>
+          </select>
+        </div>
+        <input type="number" id="membershipVisitLimitInput" min="0" step="1" placeholder="Visit limit override (blank = plan default)">
+        <input type="text" id="membershipSourceInput" value="Frontend renewal">
+        <button type="submit" class="btn-primary btn-sm full-w">Create Membership</button>
+      </form>
+    </div>
+
+  </div>
+
+      </div>
+
+      <!-- ══ ALERTS TAB ══ -->
+      <div class="tab-page" id="alertsTab">
+        <div class="single-col-layout">
+
+          <!-- Expiring soon -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">⚠ Expiring Soon</span>
+              <span class="badge-chip chip-amber" id="expiringCount">0</span>
+            </div>
+            <div class="alert-list" id="expiringList">
+              <div class="empty-hint">No expiring memberships.</div>
+            </div>
+          </div>
+
+          <!-- Expired -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">🔴 Expired</span>
+              <span class="badge-chip chip-rose" id="expiredCount">0</span>
+            </div>
+            <div class="alert-list" id="expiredList">
+              <div class="empty-hint">No expired memberships.</div>
+            </div>
+          </div>
+
+          <!-- Payment pending -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">💸 Payment Pending</span>
+              <span class="badge-chip chip-amber" id="pendingPayCount">0</span>
+            </div>
+            <div class="alert-list" id="pendingPayList">
+              <div class="empty-hint">No pending payments.</div>
+            </div>
+          </div>
+
+          <!-- Defaulters -->
+          <div class="panel-card glass-card">
+            <div class="card-head">
+              <span class="card-title">🚫 Defaulters</span>
+            </div>
+            <div class="alert-list" id="defaultersList">
+              <div class="empty-hint">No defaulters.</div>
+            </div>
+          </div>
+
+          <!-- Announcements -->
+          <div class="panel-card glass-card">
+            <div class="card-head"><span class="card-title">📣 Announcements</span></div>
+            <form id="announcementForm" class="compact-form">
+              <select id="announcementUserInput"></select>
+              <input type="text" id="announcementTitleInput" placeholder="Title" required>
+              <textarea id="announcementMessageInput" rows="3" placeholder="Message" required></textarea>
+              <select id="announcementToneInput">
+                <option value="blue">Info</option>
+                <option value="green">Success</option>
+                <option value="amber">Warning</option>
+                <option value="red">Alert</option>
+              </select>
+              <button type="submit" class="btn-primary btn-sm full-w">Publish</button>
+            </form>
+            <div class="alert-list mt8" id="announcementsList">
+              <div class="empty-hint">No announcements.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ SETTINGS TAB ══ -->
+      <div class="tab-page" id="settingsTab">
+        <div class="single-col-layout">
+
+          <!-- Slots -->
+          <div class="panel-card glass-card">
+            <div class="card-head"><span class="card-title">⏰ Time Slots</span></div>
+            <form id="slotForm" class="compact-form">
+              <input type="hidden" id="slotIdInput">
+              <input type="text" id="slotNameInput" placeholder="Slot name" required>
+              <div class="form-row">
+                <input type="time" id="slotStartInput" required>
+                <input type="time" id="slotEndInput" required>
+              </div>
+              <div class="btn-row">
+                <button type="submit" class="btn-primary btn-sm" id="slotSubmitBtn">Create Slot</button>
+                <button type="button" class="btn-ghost btn-sm" id="slotResetBtn">Clear</button>
+              </div>
+            </form>
+            <div class="table-scroll mt8">
+              <table class="report-table">
+                <thead><tr><th>Name</th><th>Time</th><th>Actions</th></tr></thead>
+                <tbody id="slotsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="panel-card glass-card developer-panel">
+            <div class="card-head"><span class="card-title">About / Developer</span></div>
+            <div class="developer-meta">
+              <p>Developed by <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a></p>
+              <p>Website: <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a></p>
+              <p>Version: <span>2026.04</span></p>
+            </div>
+          </div>
+
+          <!-- Member Account (self) -->
+          <div class="panel-card glass-card" id="myAccountSection" hidden>
+            <div class="card-head"><span class="card-title">👤 My Account</span></div>
+            <div id="memberSummaryGrid"></div>
+            <div id="memberProfileCard"></div>
+          </div>
+
+          <!-- My Records -->
+          <div class="panel-card glass-card" id="myRecordsSection" hidden>
+            <div class="card-head"><span class="card-title">📂 My Records</span></div>
+            <div class="card-sub-head">Attendance</div>
+            <div class="alert-list" id="memberHistoryList"></div>
+            <div class="card-sub-head mt8">Payments</div>
+            <div class="alert-list" id="memberPaymentsList"></div>
+            <div class="card-sub-head mt8">Notifications</div>
+            <div class="alert-list" id="memberNotificationsList"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Scan preview hidden canvas helper -->
+  <div id="scanPreview" hidden></div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <footer class="app-footer">
+    <span>© 2026 </span>
+    <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a>
+    <span>. All rights reserved. | </span>
+    <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="vendor/face-api.min.js"></script>
+  <script src="face-ai.js"></script>
+  <script src="script.js"></script>
+</body>
+
+</html>
