@@ -124,6 +124,16 @@ const S = {
   memberHistory: [], memberPayments: [], memberNotifications: [],
   scanImage: '', scanResult: null,
   isScanning: false, scanLoopTimer: null, scanInFlight: false,
+<<<<<<< HEAD
+=======
+  scanBusyUntil: 0,
+  scanRetryAt: 0,
+  scanFailureCooldownUntil: 0,
+  liveLoopHandle: 0,
+  liveLoopLastAt: 0,
+  liveLoopPending: false,
+  liveLoopScheduled: false,
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   cameraRequested: false, cameraRestarting: false,
   liveDetection: null, cameraZoom: 1,
   faceModelsReady: false, faceModelsLoading: false, faceModelsError: '',
@@ -138,7 +148,15 @@ const S = {
   sessionTimerLoop: null,
   doorCommand: 'LOCK',
   doorUpdatedAt: null,
+<<<<<<< HEAD
   doorStatusTimer: null,
+=======
+  doorRelocking: false,
+  doorRemainingSeconds: 0,
+  doorRelockDeadlineAt: 0,
+  doorStatusTimer: null,
+  doorUiTimer: null,
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   doorStatusSyncPromise: null,
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
@@ -147,6 +165,23 @@ const S = {
   audioUrl: '', audioContext: null, audioUnlocked: false,
   ttsMode: 'ready', ttsStatusText: 'Preparing the browser voice assistant.',
   scanMissStreak: 0,
+<<<<<<< HEAD
+=======
+  verification: {
+    candidateUserId: '',
+    candidateName: '',
+    streak: 0,
+    requiredFrames: LIVE_VERIFY_REQUIRED_FRAMES,
+    avgConfidence: 0,
+    avgDistance: 1,
+    faceScore: 0,
+    stableSince: 0,
+    stableMs: 0,
+    brightness: 0,
+    sharpness: 0,
+    lastReason: '',
+  },
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   userFilters: { search: '', sport: '', plan: '', status: '', role: '', expiryStatus: '', paymentMode: '' },
   userPage: 1,
   reportFilter: { search: '', status: '', date: '' },
@@ -427,9 +462,12 @@ function bindEvents() {
     btn.addEventListener('click', () => openTab(btn.dataset.tab))
   );
 
+<<<<<<< HEAD
   // Door controls (admin only)
   $('doorUnlockNavbarBtn')?.addEventListener('click', () => doorUnlockFor5s());
 
+=======
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   // Backend
   if ($('apiConfigForm')) $('apiConfigForm').addEventListener('submit', handleApiSave);
   if ($('refreshAllBtn')) $('refreshAllBtn').addEventListener('click', () => refreshAll({ toast: true }));
@@ -438,6 +476,10 @@ function bindEvents() {
   $('loginForm').addEventListener('submit', handleLogin);
   $('logoutBtn').addEventListener('click', logout);
   $('loadMeBtn').addEventListener('click', () => refreshAll({ toast: true }));
+<<<<<<< HEAD
+=======
+  if ($('doorUnlockBtn')) $('doorUnlockBtn').addEventListener('click', triggerDoorUnlock);
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 
   // Users
   $('userRoleInput').addEventListener('change', () => {
@@ -531,6 +573,10 @@ function bindEvents() {
   }
   if ($('sessionStartForm')) $('sessionStartForm').addEventListener('submit', handleSessionStart);
   if ($('sessionsTableBody')) $('sessionsTableBody').addEventListener('click', handleSessionsClick);
+<<<<<<< HEAD
+=======
+  if ($('activeSessionsPanel')) $('activeSessionsPanel').addEventListener('click', handleSessionsClick);
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 
   // Announcements
   $('announcementForm').addEventListener('submit', handleAnnouncementSubmit);
@@ -563,13 +609,40 @@ function bindEvents() {
     });
   }
 
+<<<<<<< HEAD
+=======
+  // Member Images Gallery
+  if ($('closeImagesModal')) {
+    $('closeImagesModal').addEventListener('click', () => {
+      const modal = $('imageGalleryModal');
+      if (modal) modal.hidden = true;
+    });
+  }
+  if ($('viewImagesBtn')) {
+    $('viewImagesBtn').addEventListener('click', () => {
+      const userId = S.memberProfile?.memberId || S.memberProfile?.id;
+      if (userId) showAllMemberImages(userId);
+    });
+  }
+  const imageGalleryModal = $('imageGalleryModal');
+  if (imageGalleryModal) {
+    imageGalleryModal.addEventListener('click', (e) => {
+      if (e.target === imageGalleryModal) imageGalleryModal.hidden = true;
+    });
+  }
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   // TTS
   $('ttsForm').addEventListener('submit', handleTts);
 }
 
 async function bootstrapFaceRecognition() {
   if (!S.currentUser || !isAdmin()) return;
+<<<<<<< HEAD
   if (!S.isScanning && S.activeTab !== 'faceEnrollmentTab') return;
+=======
+  if (S.activeTab !== 'faceEnrollmentTab') return;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   await ensureFaceModelsLoaded();
 }
 
@@ -584,12 +657,22 @@ async function ensureFaceModelsLoaded() {
   try {
     await ensureFaceAiLibraryLoaded();
     if (!window.FaceAi) throw new Error('Face recognition library failed to load.');
+<<<<<<< HEAD
     await window.FaceAi.loadModels('models');
+=======
+    const modelsBase = `${norm(S.apiBase)}/models`;
+    await window.FaceAi.loadModels(modelsBase);
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     S.faceModelsReady = true;
     return true;
   } catch (err) {
     S.faceModelsReady = false;
+<<<<<<< HEAD
     S.faceModelsError = err?.message || 'Unable to load local AI models.';
+=======
+    S.faceModelsError = err?.message || 'Unable to load face recognition models.';
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     return false;
   } finally {
     S.faceModelsLoading = false;
@@ -612,19 +695,37 @@ async function ensureRecognitionReady() {
   if (!ensureAdmin()) return false;
   const modelsReady = await ensureFaceModelsLoaded();
   if (!modelsReady) {
+<<<<<<< HEAD
     toast(S.faceModelsError || 'AI models are not ready.', 'error');
+=======
+    const detail = S.faceModelsError || 'Browser face recognition models are unavailable.';
+    setScanState('detected', 'AI Models Offline', detail, 'Models Offline');
+    toast(detail, 'error');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     return false;
   }
   if (!S.faceUsers.length) {
     try {
       await loadRecognitionEmbeddings();
     } catch (err) {
+<<<<<<< HEAD
       toast(err?.message || 'Unable to load enrolled face descriptors.', 'error');
+=======
+      const detail = err?.message || 'Unable to load enrolled face descriptors.';
+      setScanState('detected', 'Embeddings Unavailable', detail, 'Embeddings');
+      toast(detail, 'error');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
       return false;
     }
   }
   if (!S.faceUsers.length) {
+<<<<<<< HEAD
     toast('No enrolled face embeddings found.', 'error');
+=======
+    const detail = 'No enrolled face embeddings found.';
+    setScanState('detected', 'No Face Data', detail, 'Embeddings');
+    toast(detail, 'error');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     return false;
   }
   return true;
@@ -671,6 +772,10 @@ async function handleLogin(e) {
 function setAuth(user) {
   const ok = Boolean(user && S.token);
   const cameraAccess = ok && isAdmin();
+<<<<<<< HEAD
+=======
+  const doorUnlockBtn = $('doorUnlockBtn');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   $('authDot').className = `status-dot ${ok ? 'online' : 'alert'}`;
   $('authText').textContent = ok ? `${user.role?.toUpperCase()} â€¢ ${user.name}` : 'Signed out';
 
@@ -697,6 +802,10 @@ function setAuth(user) {
   $('enableCameraInput').disabled = !cameraAccess;
   $('captureScanBtn').disabled = !cameraAccess;
   $('captureEnrollmentBtn').disabled = !cameraAccess;
+<<<<<<< HEAD
+=======
+  if (doorUnlockBtn) doorUnlockBtn.disabled = !cameraAccess;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 
   if (cameraAccess) {
     startDoorStatusPoll();
@@ -736,7 +845,11 @@ function shouldLoadAdminDataset(key, activeTab = S.activeTab, opts = {}) {
     case 'users':
       return activeTab === 'allMembersTab' || activeTab === 'newUserTab' || activeTab === 'membershipTab' || activeTab === 'reportsTab' || activeTab === 'alertsTab' || activeTab === 'settingsTab';
     case 'slots':
+<<<<<<< HEAD
       return activeTab === 'settingsTab' || activeTab === 'membershipTab';
+=======
+      return activeTab === 'settingsTab' || activeTab === 'membershipTab' || activeTab === 'newUserTab';
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     case 'dashboard':
       return activeTab === 'liveOpsTab';
     case 'sessions':
@@ -843,17 +956,74 @@ async function pingHealth() {
 function applyDoorStateSnapshot(state) {
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
+<<<<<<< HEAD
+=======
+  S.doorRelocking = Boolean(state?.relocking) && S.doorCommand === 'UNLOCK';
+  S.doorRemainingSeconds = S.doorRelocking ? Math.max(0, Number(state?.remainingSeconds || 0)) : 0;
+  S.doorRelockDeadlineAt = S.doorRelocking
+    ? Date.now() + (S.doorRemainingSeconds * 1000)
+    : 0;
+  ensureDoorUiTimer();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   updateDoorUi();
 }
 
 function updateDoorUi() {
   const dot = $('doorDot');
   const text = $('doorText');
+<<<<<<< HEAD
   if (!dot || !text) return;
 
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
   text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
+=======
+  const countdown = $('doorCountdownText');
+  const button = $('doorUnlockBtn');
+  if (!dot || !text) return;
+
+  const remainingSeconds = S.doorRelocking && S.doorRelockDeadlineAt
+    ? Math.max(0, Math.ceil((S.doorRelockDeadlineAt - Date.now()) / 1000))
+    : 0;
+  S.doorRemainingSeconds = remainingSeconds;
+  if (S.doorRelocking && !remainingSeconds) {
+    S.doorCommand = 'LOCK';
+    S.doorRelocking = false;
+    S.doorRelockDeadlineAt = 0;
+  }
+  const unlocked = S.doorCommand === 'UNLOCK';
+  dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
+  text.textContent = unlocked ? '🔓 UNLOCKED' : '🔒 LOCKED';
+
+  if (countdown) {
+    countdown.textContent = S.doorRelocking && remainingSeconds > 0
+      ? `Relocking in ${remainingSeconds}s...`
+      : '';
+  }
+
+  if (button) {
+    button.disabled = !isAdmin() || S.doorRelocking;
+    button.textContent = S.doorRelocking ? `UNLOCKED ${remainingSeconds}s` : 'UNLOCK DOOR';
+    button.classList.toggle('is-busy', S.doorRelocking);
+  }
+}
+
+function ensureDoorUiTimer() {
+  if (S.doorRelocking) {
+    if (S.doorUiTimer) return;
+    S.doorUiTimer = setInterval(() => {
+      updateDoorUi();
+      if (!S.doorRelocking) {
+        clearInterval(S.doorUiTimer);
+        S.doorUiTimer = null;
+      }
+    }, 250);
+    return;
+  }
+
+  clearInterval(S.doorUiTimer);
+  S.doorUiTimer = null;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 async function syncDoorState(opts = {}) {
@@ -892,6 +1062,11 @@ function startDoorStatusPoll() {
 function clearDoorStatusPoll() {
   clearInterval(S.doorStatusTimer);
   S.doorStatusTimer = null;
+<<<<<<< HEAD
+=======
+  clearInterval(S.doorUiTimer);
+  S.doorUiTimer = null;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 function buildDoorDetectionPayload(result) {
@@ -924,6 +1099,41 @@ function queueDoorDetectionSync(result, opts = {}) {
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    RENDER ALL
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+<<<<<<< HEAD
+=======
+async function triggerDoorUnlock() {
+  if (!ensureAdmin()) return;
+
+  const button = $('doorUnlockBtn');
+  if (button) button.disabled = true;
+
+  try {
+    const state = await api('/door/manual-unlock', { method: 'POST' });
+    applyDoorStateSnapshot(state);
+    S.lastDoorDetectionSignal = '';
+
+    toast('Door unlocked. Auto relock started.', 'success');
+
+    // Server TTS announcement (works after admin button click / user gesture)
+    // Be defensive: backend payload uses doorOpen/command (do not rely on field name only).
+    const shouldAnnounce = state?.doorOpen === true || String(state?.command || '').toUpperCase() === 'UNLOCK';
+    if (shouldAnnounce) {
+      const name = S.currentUser?.name ? String(S.currentUser.name).trim() : '';
+      const msg = name ? 'Door unlocked. Please enter.' : 'Door unlocked. Please enter.';
+      speakServerAudio(msg, { cooldownMs: 30000, cooldownKey: 'door-unlock' })
+        .catch(err => {
+          console.error('Door unlock server TTS failed:', err);
+          toast('Door unlocked, but announcement failed.', 'warning');
+        });
+    }
+  } catch (error) {
+    handleErr(error, { toast: true });
+  } finally {
+    updateDoorUi();
+  }
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 function renderAll() {
   setAuth(S.currentUser);
   populateSelects();
@@ -1009,15 +1219,33 @@ function renderConsole() {
   const buttonCooldown = { remainingMs: 0 };
   const cooldownActive = false;
   const zoomLabel = S.cameraZoom > 1.05 ? ` | ${formatZoomLabel(S.cameraZoom)}` : '';
+<<<<<<< HEAD
 
   $('camStatusPrimary').textContent = live ? 'Live scan active' : (cameraReady ? 'Camera ready' : 'Scanner ready');
   $('camDetect').textContent = live ? `Scanning...${zoomLabel}` : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
   $('camLastAction').textContent = S.scanResult?.message || 'Waiting';
+=======
+  const verificationLabel = verificationPillLabel();
+
+  const liveLockText = verificationLabel
+    ? `${verificationLabel} | ${Math.round(Number(S.verification?.avgConfidence || 0) * 100)}%`
+    : `Scanning...${zoomLabel}`;
+  $('camStatusPrimary').textContent = live ? 'Live scan active' : (cameraReady ? 'Camera ready' : 'Scanner ready');
+  $('camDetect').textContent = live ? liveLockText : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
+  $('camLastAction').textContent = live ? (S.scanStatusText || 'Waiting') : (S.scanResult?.message || 'Waiting');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   $('camSource').textContent = cameraReady ? 'Live camera' : (S.scanImage ? 'Image upload' : 'Camera / Upload');
   $('camArea').textContent = $('scanAreaInput').value || 'Club Entry';
 
   const timerBadge = $('sessionTimerBadge');
+<<<<<<< HEAD
   if (activeSession && timerBadge) {
+=======
+  if (verificationLabel && timerBadge) {
+    timerBadge.textContent = verificationLabel;
+    timerBadge.hidden = false;
+  } else if (activeSession && timerBadge) {
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     const min = activeSession.remainingMinutes || 0;
     timerBadge.textContent = `â— ${Math.floor(min/60).toString().padStart(2,'0')}:${(min%60).toString().padStart(2,'0')}`;
     timerBadge.hidden = false;
@@ -1058,6 +1286,7 @@ function renderScannerStatus() {
 
   const shell = $('cameraShell');
   shell.classList.remove('is-scanning','is-granted','is-denied','is-detected');
+<<<<<<< HEAD
   if (S.scanState === 'loading')   { shell.classList.add('is-scanning'); $('faceDetectLabel').textContent = 'Scanningâ€¦'; }
   else if (S.scanState === 'granted') { shell.classList.add('is-granted'); $('faceDetectLabel').textContent = 'GRANTED'; }
   else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
@@ -1065,6 +1294,75 @@ function renderScannerStatus() {
   renderCameraAssistBadge();
 }
 
+=======
+  if (S.scanState === 'loading') shell.classList.add('is-scanning');
+  else if (S.scanState === 'granted') shell.classList.add('is-granted');
+  else if (S.scanState === 'denied') shell.classList.add('is-denied');
+  else if (S.scanState === 'detected') shell.classList.add('is-detected');
+  updateFaceDetectLabel();
+  renderCameraAssistBadge();
+}
+
+function updateFaceDetectLabel() {
+  const label = $('faceDetectLabel');
+  if (!label) return;
+
+  const title = String(S.scanStatusText || '').toLowerCase();
+  const detail = String(S.scanStatusDetail || '').toLowerCase();
+  const pill = String(S.scanPill || '').toLowerCase();
+
+  if (S.scanState === 'granted') return void (label.textContent = 'Recognized');
+  if (title.includes('blurry') || detail.includes('blurry')) return void (label.textContent = 'Too Blurry');
+  if (title.includes('dark') || detail.includes('lighting is too low')) return void (label.textContent = 'Too Dark');
+  if (title.includes('closer') || detail.includes('move closer')) return void (label.textContent = 'Move Closer');
+  if (title.includes('center') || detail.includes('center your face')) return void (label.textContent = 'Center Face');
+  if (title.includes('hold') || title.includes('verifying') || detail.includes('hold steady')) return void (label.textContent = 'Hold Still');
+  if (title.includes('detected') || pill.includes('confirmed') || pill.includes('face lock')) return void (label.textContent = 'Face Detected');
+  if (S.scanState === 'denied') return void (label.textContent = 'No Match');
+  if (S.scanState === 'loading') return void (label.textContent = 'Scanning...');
+  label.textContent = 'Ready';
+}
+
+function describeScanFailure(err) {
+  const message = String(err?.message || '').trim();
+  const lowered = message.toLowerCase();
+
+  if (!S.healthOk || lowered.includes('failed to fetch') || lowered.includes('backend is unreachable')) {
+    return {
+      mode: 'detected',
+      title: 'Backend Unreachable',
+      detail: message || 'Scanner cannot reach the backend API.',
+      pill: 'Backend Offline',
+    };
+  }
+
+  if (lowered.includes('face recognition') || lowered.includes('face models') || lowered.includes('ai models')) {
+    return {
+      mode: 'detected',
+      title: 'AI Models Offline',
+      detail: message || 'Browser face recognition models failed to load.',
+      pill: 'Models Offline',
+    };
+  }
+
+  if (lowered.includes('embeddings')) {
+    return {
+      mode: 'detected',
+      title: 'Embeddings Unavailable',
+      detail: message || 'Face embeddings could not be loaded.',
+      pill: 'Embeddings',
+    };
+  }
+
+  return {
+    mode: 'detected',
+    title: 'Scan Error',
+    detail: message || 'Scan failed.',
+    pill: 'Scanner Error',
+  };
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 function updateFaceBoxOverlay(faceBox) {
   const box = $('faceDetectBox');
   if (!box) return;
@@ -1160,10 +1458,23 @@ function renderCameraAssistBadge() {
     return;
   }
 
+<<<<<<< HEAD
   const prefix = S.liveDetection.distanceHint === 'long-range'
     ? 'Long range lock'
     : (S.liveDetection.distanceHint === 'mid-range' ? 'Mid range lock' : 'Face lock');
   badge.textContent = `${prefix} | ${formatZoomLabel(S.cameraZoom)}`;
+=======
+  const lockProgress = Number(S.verification?.streak || 0)
+    ? ` | ${Math.min(Number(S.verification.streak || 0), LIVE_VERIFY_REQUIRED_FRAMES)}/${LIVE_VERIFY_REQUIRED_FRAMES}`
+    : '';
+  const confidenceText = Number(S.verification?.avgConfidence || 0)
+    ? ` | ${Math.round(Number(S.verification.avgConfidence || 0) * 100)}%`
+    : '';
+  const prefix = S.liveDetection.distanceHint === 'long-range'
+    ? 'Long range lock'
+    : (S.liveDetection.distanceHint === 'mid-range' ? 'Mid range lock' : 'Face lock');
+  badge.textContent = `${prefix}${lockProgress}${confidenceText} | ${formatZoomLabel(S.cameraZoom)}`;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 function renderEnrollmentCameraBadge() {
@@ -1241,6 +1552,19 @@ async function ensureEnrollmentLivePreview() {
   await startCamera();
 }
 
+<<<<<<< HEAD
+=======
+function calculateAutoZoom(faceBox) {
+  if (!faceBox) return 1;
+  const width = clamp(Number(faceBox.width || 0.2), 0.08, 0.9);
+  const height = clamp(Number(faceBox.height || 0.2), 0.1, 0.9);
+  const targetFaceSize = 0.28;
+  const zoomByWidth = targetFaceSize / width;
+  const zoomByHeight = targetFaceSize / height;
+  return clamp(Math.max(1, Math.min(zoomByWidth, zoomByHeight)), 1, MAX_PREVIEW_ZOOM);
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 function setLiveDetection(detection, opts = {}) {
   if (!detection) {
     S.liveDetection = null;
@@ -1253,11 +1577,161 @@ function setLiveDetection(detection, opts = {}) {
     ...detection,
     recommendedZoom: clamp(Number(detection.recommendedZoom || 1), 1, MAX_PREVIEW_ZOOM),
   };
+<<<<<<< HEAD
   S.liveDetection = normalizedDetection;
   applyPreviewFocus(normalizedDetection.recommendedZoom, normalizedDetection.faceBox || null);
   renderCameraAssistBadge();
 }
 
+=======
+  const faceBox = normalizedDetection.faceBox || null;
+  const autoZoom = faceBox ? calculateAutoZoom(faceBox) : 1;
+  normalizedDetection.recommendedZoom = clamp(Math.max(normalizedDetection.recommendedZoom, autoZoom), 1, MAX_PREVIEW_ZOOM);
+
+  S.liveDetection = normalizedDetection;
+  applyPreviewFocus(normalizedDetection.recommendedZoom, faceBox);
+  renderCameraAssistBadge();
+}
+
+function resetLiveVerification(reason = '') {
+  S.verification = {
+    candidateUserId: '',
+    candidateName: '',
+    streak: 0,
+    requiredFrames: LIVE_VERIFY_REQUIRED_FRAMES,
+    avgConfidence: 0,
+    avgDistance: 1,
+    faceScore: 0,
+    stableSince: 0,
+    stableMs: 0,
+    brightness: 0,
+    sharpness: 0,
+    lastReason: reason,
+  };
+}
+
+function detectionCenterOffsets(faceBox) {
+  if (!faceBox) return { x: 1, y: 1 };
+  const centerX = Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2);
+  const centerY = Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2);
+  return {
+    x: Math.abs(centerX - 0.5),
+    y: Math.abs(centerY - 0.46),
+  };
+}
+
+function assessLiveDetectionQuality(detection) {
+  if (!detection) {
+    return { ok: false, code: 'no-face', message: 'Position one face inside the scanner.' };
+  }
+  if (detection.multipleFaces) {
+    return { ok: false, code: 'multiple-faces', message: 'Multiple faces detected. Only one face can be verified at a time.' };
+  }
+
+  const score = Number(detection.score || 0);
+  const faceRatio = Number(detection.faceRatio || 0);
+  const offsets = detectionCenterOffsets(detection.faceBox);
+  const isFocusLock = String(detection.captureMode || '') === 'focus-lock';
+  const minDetectionScore = isFocusLock ? 0.38 : LIVE_VERIFY_MIN_DETECTION_SCORE;
+  const minFaceRatio = isFocusLock ? 0.09 : LIVE_VERIFY_MIN_FACE_RATIO;
+
+  if (score < minDetectionScore) {
+    return { ok: false, code: 'low-detection-score', message: 'Confidence too low. Hold steady and look at the camera.' };
+  }
+  if (faceRatio < minFaceRatio) {
+    return { ok: false, code: 'small-face', message: 'Move closer to the camera for secure verification.' };
+  }
+  if (offsets.x > LIVE_VERIFY_MAX_CENTER_OFFSET_X || offsets.y > LIVE_VERIFY_MAX_CENTER_OFFSET_Y) {
+    return { ok: false, code: 'off-center', message: 'Center your face inside the frame and look straight ahead.' };
+  }
+  if (Number(detection.brightness || 0) < LIVE_VERIFY_MIN_BRIGHTNESS) {
+    return { ok: false, code: 'too-dark', message: 'Frame is too dark. Move into better light.' };
+  }
+  if (Number(detection.sharpness || 0) < LIVE_VERIFY_MIN_SHARPNESS) {
+    return { ok: false, code: 'too-blurry', message: 'Frame is too blurry. Hold still and try again.' };
+  }
+
+  return { ok: true, code: 'ok', message: '' };
+}
+
+function updateLiveVerification(match, detection) {
+  const nextUserId = String(match?.user?.id || '');
+  const nextName = String(match?.user?.name || 'Member');
+  const nextConfidence = Number(match?.confidence || 0);
+  const nextDistance = Number(match?.distance || 1);
+  const nextFaceScore = Number(detection?.score || 0);
+  const nextBrightness = Number(detection?.brightness || 0);
+  const nextSharpness = Number(detection?.sharpness || 0);
+  const previous = S.verification || {};
+  const sameUser = previous.candidateUserId === nextUserId;
+  const streak = sameUser ? Number(previous.streak || 0) + 1 : 1;
+  const now = Date.now();
+  const stableSince = sameUser ? Number(previous.stableSince || now) : now;
+  const stableMs = Math.max(0, now - stableSince);
+
+  S.verification = {
+    candidateUserId: nextUserId,
+    candidateName: nextName,
+    streak,
+    requiredFrames: LIVE_VERIFY_REQUIRED_FRAMES,
+    avgConfidence: sameUser
+      ? (((Number(previous.avgConfidence || 0) * Number(previous.streak || 0)) + nextConfidence) / streak)
+      : nextConfidence,
+    avgDistance: sameUser
+      ? (((Number(previous.avgDistance || 1) * Number(previous.streak || 0)) + nextDistance) / streak)
+      : nextDistance,
+    faceScore: sameUser
+      ? (((Number(previous.faceScore || 0) * Number(previous.streak || 0)) + nextFaceScore) / streak)
+      : nextFaceScore,
+    stableSince,
+    stableMs,
+    brightness: sameUser
+      ? (((Number(previous.brightness || 0) * Number(previous.streak || 0)) + nextBrightness) / streak)
+      : nextBrightness,
+    sharpness: sameUser
+      ? (((Number(previous.sharpness || 0) * Number(previous.streak || 0)) + nextSharpness) / streak)
+      : nextSharpness,
+    lastReason: '',
+  };
+
+  return S.verification;
+}
+
+function verificationPillLabel() {
+  const streak = Number(S.verification?.streak || 0);
+  if (!S.isScanning || !streak) return '';
+  return `Lock ${Math.min(streak, LIVE_VERIFY_REQUIRED_FRAMES)}/${LIVE_VERIFY_REQUIRED_FRAMES}`;
+}
+
+function buildVerificationProgressDetail(match, detection) {
+  const verification = S.verification || {};
+  const confidence = Math.round(Number(verification.avgConfidence || match?.confidence || 0) * 100);
+  const detectorScore = Math.round(Number(detection?.score || verification.faceScore || 0) * 100);
+  const distance = Number(verification.avgDistance || match?.distance || 0).toFixed(3);
+  const stableMs = Math.min(Number(verification.stableMs || 0), FACE_SCAN_STABLE_MS);
+  return `${verification.candidateName || match?.user?.name || 'Member'} locked | ${stableMs}ms/${FACE_SCAN_STABLE_MS}ms | match ${confidence}% | detector ${detectorScore}% | distance ${distance}`;
+}
+
+function buildLocalRetryMessage(match, quality) {
+  if (quality && !quality.ok) return quality.message;
+  const reason = String(match?.reason || '');
+  if (reason === 'ambiguous') return 'Ambiguous identity. Similar face found. Reposition and try again.';
+  if (reason === 'sample-support') return 'Identity consistency too weak. Hold steady for verification.';
+  if (reason === 'centroid' || reason === 'sample-mean') return 'Face not verified. Keep still and face the camera directly.';
+  return 'Unknown person or confidence too low. Reposition and try again.';
+}
+
+function getFaceBoxFocus(faceBox) {
+  if (!faceBox) {
+    return { focusX: DEFAULT_CAMERA_FOCUS_X, focusY: DEFAULT_CAMERA_FOCUS_Y };
+  }
+  return {
+    focusX: clamp(Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2), 0.12, 0.88),
+    focusY: clamp(Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2), 0.14, 0.84),
+  };
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 /* â”€â”€ CLOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function startClock() {
   if (clockTimer) return;
@@ -1300,15 +1774,30 @@ function startSubtitleLoop() {
 function renderSystemStatus() {
   const members = S.users.filter(u => u.role === 'user').length;
   const activeSessions = S.sessions.filter(s => s.status === 'active').length;
+<<<<<<< HEAD
+=======
+  const aiModelsReady = S.healthOk;
+  const aiModelsLoading = S.faceModelsLoading && !aiModelsReady;
+  const aiModelsSub = aiModelsReady
+    ? 'Railway backend recognition stack'
+    : (S.faceModelsError || 'Railway backend offline');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   const cards = [
     { label:'Members', value: members, sub:'Registered', tone:'blue', progress: Math.min(100, members*8) },
     { label:'Active', value: activeSessions, sub:'Sessions now', tone:'green', progress: Math.min(100, activeSessions*20) },
     {
       label:'AI Models',
+<<<<<<< HEAD
       value: S.faceModelsReady ? 'Ready' : (S.faceModelsLoading ? 'Loading' : 'Offline'),
       sub: S.faceModelsError || 'Browser recognition stack',
       tone: S.faceModelsReady ? 'green' : (S.faceModelsLoading ? 'amber' : 'red'),
       progress: S.faceModelsReady ? 100 : (S.faceModelsLoading ? 55 : 12),
+=======
+      value: aiModelsReady ? 'Ready' : (aiModelsLoading ? 'Loading' : 'Offline'),
+      sub: aiModelsSub,
+      tone: aiModelsReady ? 'green' : (aiModelsLoading ? 'amber' : 'red'),
+      progress: aiModelsReady ? 100 : (aiModelsLoading ? 55 : 12),
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     },
     {
       label:'Embeddings',
@@ -1923,6 +2412,18 @@ function getReportPayments() {
     }));
 }
 
+<<<<<<< HEAD
+=======
+function getReportSessions() {
+  return toArr(S.sessions);
+}
+
+function getTodayCheckinSessions() {
+  const today = localDateKey();
+  return getReportSessions().filter(session => localDateKey(session?.startedAt) === today);
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 function getPaidReportPayments() {
   return getReportPayments().filter(payment => String(payment?.paymentStatus || '').toLowerCase() === 'paid');
 }
@@ -1940,6 +2441,17 @@ function isAdmissionPayment(payment) {
   return source.includes('onboarding') || source.includes('admission');
 }
 
+<<<<<<< HEAD
+=======
+function isRenewalPayment(payment) {
+  return !isAdmissionPayment(payment);
+}
+
+function getPaymentUser(payment) {
+  return S.users.find(user => String(user?.id || '') === String(payment?.userId || '')) || null;
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 function sumPaymentAmounts(payments) {
   return toArr(payments).reduce((sum, payment) => sum + Number(payment?.amount || 0), 0);
 }
@@ -1947,7 +2459,11 @@ function sumPaymentAmounts(payments) {
 function renderReportsAll() {
   renderSummaryCards();
   renderQuickFilterCards();
+<<<<<<< HEAD
   renderAdmissionTable();
+=======
+  renderAdmissionTableV2();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   renderPaymentSummary();
   renderRenewalList();
   renderAttendanceAnalytics();
@@ -1955,17 +2471,28 @@ function renderReportsAll() {
 }
 
 function renderQuickFilterCards() {
+<<<<<<< HEAD
   const today = localDateKey();
   const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === today);
   const todayPayments = getTodayPaidReportPayments();
   const todayAdmissions = todayPayments.filter(isAdmissionPayment);
   const todayRenewals = todayPayments.filter(p => !isAdmissionPayment(p));
+=======
+  const todaySessions = getTodayCheckinSessions();
+  const todayPayments = getTodayPaidReportPayments();
+  const todayAdmissions = todayPayments.filter(isAdmissionPayment);
+  const todayRenewals = todayPayments.filter(isRenewalPayment);
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   const cashToday = todayPayments.filter(p => p.paymentMode === 'Cash');
   const upiToday = todayPayments.filter(p => p.paymentMode === 'UPI');
   const cardToday = todayPayments.filter(p => p.paymentMode === 'Card');
   const totalRevenue = sumPaymentAmounts(getPaidReportPayments());
 
+<<<<<<< HEAD
   if ($('qcardAll')) $('qcardAll').textContent = String(S.sessions.length);
+=======
+  if ($('qcardAll')) $('qcardAll').textContent = String(getReportPayments().length);
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   if ($('qcardTodayAdmissions')) $('qcardTodayAdmissions').textContent = String(todayAdmissions.length);
   if ($('qcardTodayRenewals')) $('qcardTodayRenewals').textContent = String(todayRenewals.length);
   if ($('qcardTodayCheckins')) $('qcardTodayCheckins').textContent = String(todaySessions.length);
@@ -1984,7 +2511,11 @@ function renderSummaryCards() {
     const days = (new Date(u.membershipExpiry) - now) / 86400000;
     return days >= 0 && days <= 7;
   });
+<<<<<<< HEAD
   const todaySessions = S.sessions.filter(s => localDateKey(s.startedAt) === localDateKey());
+=======
+  const todaySessions = getTodayCheckinSessions();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   const todayRevenue = sumPaymentAmounts(getTodayPaidReportPayments());
 
   $('rptTotalMembersVal').textContent = users.length;
@@ -1992,6 +2523,7 @@ function renderSummaryCards() {
   $('rptExpiringSoonVal').textContent = expiring.length;
   $('rptTodayRevenueVal').textContent = fmtMoney(todayRevenue);
   $('rptTodayCheckinsVal').textContent = todaySessions.length;
+<<<<<<< HEAD
   $('rptAdmissionCount').textContent = getFilteredAdmissions().length;
 }
 
@@ -2027,6 +2559,67 @@ function getFilteredAdmissions() {
     if (RPT.quickFilter === 'card' && !userTodayPayments.some(payment => payment.paymentMode === 'Card')) return false;
     return true;
   });
+=======
+  $('rptAdmissionCount').textContent = getFilteredReportEntries().length;
+}
+
+function getFilteredAdmissionPayments() {
+  return getReportPayments().filter(payment => {
+    const user = getPaymentUser(payment);
+    const memberName = String(payment?.userName || user?.name || '').toLowerCase();
+    const memberId = String(payment?.memberId || user?.memberId || '').toLowerCase();
+    const paymentDateKey = localDateKey(payment?.createdAt || payment?.membershipStart);
+
+    if (RPT.search) {
+      const q = RPT.search.toLowerCase();
+      if (!memberName.includes(q) && !memberId.includes(q)) return false;
+    }
+    if (RPT.plan && String(payment?.plan || user?.membershipPlan || '') !== RPT.plan) return false;
+    if (RPT.payment && String(payment?.paymentStatus || user?.paymentStatus || '') !== RPT.payment) return false;
+    if (RPT.mode && String(payment?.paymentMode || user?.paymentMode || '') !== RPT.mode) return false;
+    if (RPT.enrollment === 'enrolled' && user && getFaceCount(user) === 0) return false;
+    if (RPT.enrollment === 'not-enrolled' && user && getFaceCount(user) > 0) return false;
+    if (RPT.date && paymentDateKey !== RPT.date) return false;
+    if (RPT.quickFilter === 'today-admissions' && !isAdmissionPayment(payment)) return false;
+    if (RPT.quickFilter === 'today-renewals' && !isRenewalPayment(payment)) return false;
+    if (RPT.quickFilter === 'cash' && String(payment?.paymentMode || '') !== 'Cash') return false;
+    if (RPT.quickFilter === 'upi' && String(payment?.paymentMode || '') !== 'UPI') return false;
+    if (RPT.quickFilter === 'card' && String(payment?.paymentMode || '') !== 'Card') return false;
+    if (RPT.quickFilter === 'today-checkins') return false;
+    return true;
+  });
+}
+
+function getFilteredCheckinSessions() {
+  return getReportSessions().filter(session => {
+    const user = S.users.find(u => String(u?.id || '') === String(session?.userId || ''));
+    if (!user) return false;
+    const sessionDateKey = localDateKey(session?.startedAt);
+
+    if (RPT.search) {
+      const q = RPT.search.toLowerCase();
+      if (!(user.name || '').toLowerCase().includes(q) && !(user.memberId || '').toLowerCase().includes(q)) return false;
+    }
+    if (RPT.plan && String(user?.membershipPlan || '') !== RPT.plan) return false;
+    if (RPT.payment && String(user?.paymentStatus || '') !== RPT.payment) return false;
+    if (RPT.mode && String(user?.paymentMode || '') !== RPT.mode) return false;
+    if (RPT.enrollment === 'enrolled' && getFaceCount(user) === 0) return false;
+    if (RPT.enrollment === 'not-enrolled' && getFaceCount(user) > 0) return false;
+    if (RPT.date && sessionDateKey !== RPT.date) return false;
+    if (RPT.quickFilter === 'today-checkins' && sessionDateKey !== localDateKey()) return false;
+    return true;
+  });
+}
+
+function getFilteredReportEntries() {
+  return RPT.quickFilter === 'today-checkins'
+    ? getFilteredCheckinSessions()
+    : getFilteredAdmissionPayments();
+}
+
+function getFilteredAdmissions() {
+  return getFilteredReportEntries();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 function hasActualCheckout(session) {
@@ -2070,6 +2663,75 @@ function renderAdmissionTable() {
     : `<tr><td colspan="8"><div class="empty-hint">No records match the filters.</div></td></tr>`;
 }
 
+<<<<<<< HEAD
+=======
+function renderAdmissionTableV2() {
+  const records = getFilteredReportEntries();
+  const showingCheckins = RPT.quickFilter === 'today-checkins';
+  const tableWrap = document.querySelector('.rpt-table-wrap');
+  const titleEl = $('rptTableTitle');
+  const tableHeadRow = document.querySelector('#admissionTable thead tr');
+  if (tableWrap) {
+    const isFiltered = Boolean(RPT.search || RPT.plan || RPT.payment || RPT.date || RPT.mode || RPT.enrollment || RPT.quickFilter !== 'all');
+    tableWrap.classList.toggle('is-filtered', isFiltered);
+  }
+  if (titleEl) titleEl.textContent = showingCheckins ? 'Daily Check-in Report' : 'Daily Admissions & Renewals';
+  if (tableHeadRow) {
+    tableHeadRow.innerHTML = showingCheckins
+      ? '<th>Member</th><th>Check-in</th><th>Check-out</th><th>Plan</th><th>Status</th><th>Area</th><th>Duration</th><th>Session</th>'
+      : '<th>Member</th><th>Entry Date</th><th>Type</th><th>Plan</th><th>Mode</th><th>Status</th><th>Amount</th><th>Membership</th>';
+  }
+  $('rptAdmissionCount').textContent = records.length;
+  $('admissionTableBody').innerHTML = records.length
+    ? records.map(record => {
+        const user = showingCheckins
+          ? (S.users.find(u => String(u?.id || '') === String(record?.userId || '')) || {})
+          : (getPaymentUser(record) || {});
+        const now = new Date();
+        const exp = user.membershipExpiry ? new Date(user.membershipExpiry) : null;
+        const daysLeft = exp ? Math.ceil((exp - now) / 86400000) : null;
+        const renewalStatus = !exp ? 'Unknown'
+          : daysLeft < 0 ? 'Expired'
+          : daysLeft <= 7 ? 'Expiring'
+          : 'Active';
+        const renewTone = renewalStatus === 'Expired' ? 'tone-red'
+          : renewalStatus === 'Expiring' ? 'tone-amber' : 'tone-green';
+
+        if (showingCheckins) {
+          return `<tr class="rpt-row" data-session-id="${esc(record.id)}" data-user-id="${esc(record.userId)}">
+            <td>
+              <div class="t-primary">${esc(user.name||record.name||'Unknown')}</div>
+              <div class="t-secondary">${esc(user.memberId||record.memberId||'-')}</div>
+            </td>
+            <td class="t-secondary">${esc(fmtDT(record.startedAt))}</td>
+            <td class="t-secondary">${hasActualCheckout(record) ? esc(fmtDT(record.endedAt)) : (String(record.status || '').toLowerCase() === 'active' ? '<span class="status-chip tone-green">Active</span>' : '–')}</td>
+            <td>${chip(user.membershipPlan||record.membershipPlan||'slate', user.membershipPlan||record.membershipPlan||'-')}</td>
+            <td>${chip(record.status||'slate', record.status||'-')}</td>
+            <td class="t-secondary">${esc(record.area||'-')}</td>
+            <td class="t-secondary">${esc(fmtDur(record.durationMinutes))}</td>
+            <td><span class="status-chip ${renewTone}">${renewalStatus}</span></td>
+          </tr>`;
+        }
+
+        const membershipWindow = `${record.membershipStart || user.membershipStart || '-'} to ${record.membershipExpiry || user.membershipExpiry || '-'}`;
+        return `<tr class="rpt-row" data-payment-id="${esc(record.id)}" data-user-id="${esc(record.userId)}">
+          <td>
+            <div class="t-primary">${esc(record.userName||user.name||'Unknown')}</div>
+            <div class="t-secondary">${esc(record.memberId||user.memberId||'-')}</div>
+          </td>
+          <td class="t-secondary">${esc(fmtDT(record.createdAt || record.membershipStart))}</td>
+          <td>${chip(isAdmissionPayment(record) ? 'tone-green' : 'tone-blue', isAdmissionPayment(record) ? 'New Admission' : 'Renewal')}</td>
+          <td>${chip(record.plan||user.membershipPlan||'slate', record.plan||user.membershipPlan||'-')}</td>
+          <td class="t-secondary">${esc(record.paymentMode||user.paymentMode||'-')}</td>
+          <td>${chip(record.paymentStatus||user.paymentStatus||'slate', record.paymentStatus||user.paymentStatus||'-')}</td>
+          <td class="t-secondary">${fmtMoney(record.amount||0)}</td>
+          <td><span class="status-chip ${renewTone}">${esc(membershipWindow)}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="8"><div class="empty-hint">No records match the filters.</div></td></tr>`;
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 function handleAdmissionRowClick(e) {
   const row = e.target.closest('tr[data-user-id]');
   if (!row) return;
@@ -2289,6 +2951,7 @@ function renderSlotEngagement() {
 }
 
 function exportReportCSV() {
+<<<<<<< HEAD
   const records = getFilteredAdmissions();
   if (!records.length) { toast('No data to export.', 'warning'); return; }
   const headers = ['Name','Member ID','Check-in','Check-out','Plan','Payment','Amount'];
@@ -2299,6 +2962,40 @@ function exportReportCSV() {
       hasActualCheckout(s) ? fmtDT(s.endedAt) : '',
       u.membershipPlan||'', u.paymentStatus||'', u.paymentAmount||0
     ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+=======
+  const records = getFilteredReportEntries();
+  const showingCheckins = RPT.quickFilter === 'today-checkins';
+  if (!records.length) { toast('No data to export.', 'warning'); return; }
+  const headers = showingCheckins
+    ? ['Name','Member ID','Check-in','Check-out','Plan','Status','Area','Duration']
+    : ['Name','Member ID','Entry Date','Type','Plan','Mode','Payment Status','Amount'];
+  const rows = records.map(record => {
+    const user = showingCheckins
+      ? (S.users.find(x => String(x?.id || '') === String(record?.userId || '')) || {})
+      : (getPaymentUser(record) || {});
+    const values = showingCheckins
+      ? [
+          user.name || record.name || '',
+          user.memberId || record.memberId || '',
+          fmtDT(record.startedAt),
+          hasActualCheckout(record) ? fmtDT(record.endedAt) : '',
+          user.membershipPlan || record.membershipPlan || '',
+          record.status || '',
+          record.area || '',
+          fmtDur(record.durationMinutes),
+        ]
+      : [
+          record.userName || user.name || '',
+          record.memberId || user.memberId || '',
+          fmtDT(record.createdAt || record.membershipStart),
+          isAdmissionPayment(record) ? 'New Admission' : 'Renewal',
+          record.plan || user.membershipPlan || '',
+          record.paymentMode || user.paymentMode || '',
+          record.paymentStatus || user.paymentStatus || '',
+          record.amount || 0,
+        ];
+    return values.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   });
   const csv = [headers.join(','), ...rows].join('\n');
   const a = document.createElement('a');
@@ -2488,6 +3185,12 @@ function renderMember() {
       <div class="alert-top"><span class="alert-name">${esc(n.title||'Notification')}</span>${chip(n.tone||'blue', n.tone||'note')}</div>
       <p class="alert-msg">${esc(n.message||'')}</p>
     </div>`, 'No notifications.');
+<<<<<<< HEAD
+=======
+
+  const userId = S.memberProfile?.memberId || S.memberProfile?.id;
+  if (userId) loadAndRenderMemberImages(userId);
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 /* â”€â”€ TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -2534,12 +3237,22 @@ async function handleUserSubmit(e) {
 
   const payload = {
     name: name,
+<<<<<<< HEAD
     memberId: isEditMode ? $('userMemberIdInput').value.trim() || null : null,
     sport: $('userSportInput')?.value || 'General',
     membershipLevel: $('userLevelInput')?.value || '',
     email: email,
     password: password,
     mobileNumber: $('userMobileInput')?.value?.trim() || '',
+=======
+    // Backend requires memberId always for UpdateUserInput; frontend was sending null in edit mode.
+    memberId: $('userMemberIdInput').value.trim(),
+    sport: $('userSportInput')?.value || 'General',
+    membershipLevel: $('userLevelInput')?.value || '',
+    email: email,
+    password: password || null,
+    mobileNumber: $('userMobileInput')?.value?.trim() || null,
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     role: $('userRoleInput').value,
     slotId: $('userSlotInput').value || null,
     membershipPlan: $('userPlanInput').value,
@@ -2766,6 +3479,57 @@ function beginUserEdit(id) {
   syncUserPlanDates();
 }
 
+<<<<<<< HEAD
+=======
+async function loadAndRenderMemberImages(userId) {
+  const imagesSection = $('memberImagesSection');
+  if (!imagesSection || !userId) return;
+  
+  try {
+    const response = await api(`/admin/user/${userId}/images`, { method: 'GET' });
+    const images = Array.isArray(response) ? response : [];
+    
+    if (images.length > 0) {
+      imagesSection.hidden = false;
+      const gallery = $('memberImagesGallery');
+      gallery.innerHTML = images.slice(0, 4).map((img, i) => `
+        <div class="thumb-item">
+          <img src="${img.url}" alt="Image ${i+1}" loading="lazy" style="cursor:pointer;" onclick="showAllMemberImages('${userId}')">
+          <span class="thumb-num">${i+1}</span>
+        </div>`).join('');
+    } else {
+      imagesSection.hidden = true;
+    }
+  } catch (err) {
+    imagesSection.hidden = true;
+  }
+}
+
+async function showAllMemberImages(userId) {
+  const modal = $('imageGalleryModal');
+  const gallery = $('imageGalleryGrid');
+  if (!modal || !gallery) return;
+  
+  try {
+    const response = await api(`/admin/user/${userId}/images`, { method: 'GET' });
+    const images = Array.isArray(response) ? response : [];
+    
+    if (images.length > 0) {
+      gallery.innerHTML = images.map((img, i) => `
+        <div class="gallery-item">
+          <img src="${img.url}" alt="Image ${i+1}" loading="lazy">
+          <span class="image-time">${fmtDT(img.modified)}</span>
+        </div>`).join('');
+      modal.hidden = false;
+    } else {
+      toast('No images available for this user.', 'info');
+    }
+  } catch (err) {
+    toast('Error loading images.', 'error');
+  }
+}
+
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 async function deleteUser(id) {
   if (!ensureAdmin()) return;
   const u = S.users.find(x => x.id === id);
@@ -2969,6 +3733,7 @@ async function handleSessionStart(e) {
   } catch (err) { handleErr(err, { toast: true }); }
 }
 function handleSessionsClick(e) {
+<<<<<<< HEAD
   if (e.target.dataset.sessionEnd) endSession(e.target.dataset.sessionEnd);
 }
 async function endSession(id) {
@@ -2981,6 +3746,40 @@ async function endSession(id) {
     await refreshAll();
   }
   catch (err) { handleErr(err, { toast: true }); }
+=======
+  const button = e.target.closest('[data-session-end]');
+  if (button?.dataset.sessionEnd) endSession(button.dataset.sessionEnd);
+}
+async function endSession(id) {
+  if (!ensureAdmin()) return;
+  const session = toArr(S.sessions).find(item => String(item?.id || '') === String(id || ''));
+  if (!session) {
+    toast('Session not found.', 'error');
+    return;
+  }
+  if (String(session.status || '').toLowerCase() !== 'active') {
+    toast('This session is already closed.', 'warning');
+    return;
+  }
+  if (!confirm(`End active session for ${session.name || 'this member'}?`)) return;
+
+  try {
+    const endedSession = await api('/session/end', {
+      method: 'POST',
+      body: { sessionId: id },
+    });
+    if (endedSession) {
+      upsertSessionLocal(endedSession);
+      syncActiveSessionsFromBackend();
+    }
+    renderSessions();
+    renderSystemStatus();
+    renderReports();
+    toast(`Session ended for ${session.name || 'member'}.`, 'success');
+  } catch (err) {
+    handleErr(err, { toast: true });
+  }
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 /* â”€â”€ ANNOUNCEMENTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -2988,9 +3787,20 @@ async function handleAnnouncementSubmit(e) {
   e.preventDefault();
   if (!ensureAdmin()) return;
   try {
+<<<<<<< HEAD
     await api('/admin/announcements', { method:'POST', body: {
       title: $('announcementTitleInput').value.trim(),
       message: $('announcementMessageInput').value.trim(),
+=======
+    // Auto-include door state in announcements per request.
+    const doorText = S.doorCommand === 'UNLOCK' ? 'Door lock: UNLOCKED' : 'Door lock: LOCKED';
+    const baseMessage = $('announcementMessageInput').value.trim();
+    const finalMessage = baseMessage ? `${baseMessage} | ${doorText}` : doorText;
+
+    await api('/admin/announcements', { method:'POST', body: {
+      title: $('announcementTitleInput').value.trim(),
+      message: finalMessage,
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
       tone: $('announcementToneInput').value,
       userId: $('announcementUserInput').value || null,
     }});
@@ -3011,15 +3821,25 @@ async function startLiveScan(opts = {}) {
   if (S.isScanning) return true;
   S.cameraRequested = true;
   S.scanMissStreak = 0;
+<<<<<<< HEAD
+=======
+  resetLiveVerification();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
   setLiveDetection(null, { keepSearchZoom: true });
   document.querySelector('.scanner-panel')?.classList.add('is-live');
+<<<<<<< HEAD
   clearInterval(S.scanLoopTimer);
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
   setScanState('loading','Scanning...','Matching in browser and validating membership.');
+=======
+  startLiveLoop();
+  renderConsole();
+  setScanState('loading','Scanning...','Optimized live scan is active.');
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -3027,10 +3847,22 @@ async function startLiveScan(opts = {}) {
 
 function stopLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null;
+<<<<<<< HEAD
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
+=======
+  stopLiveLoop();
+  S.cameraRequested = false;
+  S.cameraRestarting = false;
+  S.isScanning = false; S.scanInFlight = false;
+  S.scanBusyUntil = 0;
+  S.scanRetryAt = 0;
+  S.scanFailureCooldownUntil = 0;
+  S.scanMissStreak = 0;
+  resetLiveVerification();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
@@ -3151,23 +3983,136 @@ function getCameraErrorMessage(err) {
 }
 
 async function runLiveCycle() {
+<<<<<<< HEAD
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
   await runScan({ source: 'camera', showToast: false });
+=======
+  if (!S.isScanning || S.scanInFlight || S.liveLoopPending) return;
+  if (Date.now() < Math.max(Number(S.scanRetryAt || 0), Number(S.scanFailureCooldownUntil || 0))) return;
+  S.liveLoopPending = true;
+  S.liveLoopLastAt = Date.now();
+  if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
+  try {
+    const { detection, message } = await detectRecognitionProbe({ source: 'camera' });
+    if (!S.isScanning || S.scanInFlight) return;
+    await processLiveRecognitionProbe(detection, message);
+  } finally {
+    S.liveLoopPending = false;
+  }
+}
+
+async function processLiveRecognitionProbe(detection, message = '') {
+  if (!detection) {
+    resetLiveVerification('no-face');
+    setLiveDetection(null, { keepSearchZoom: true });
+    setScanState('loading', 'Searching for face', message || 'Center one face in frame to begin secure verification.', 'Search');
+    renderConsole();
+    return;
+  }
+
+  if (detection.multipleFaces) {
+    resetLiveVerification('multiple-faces');
+    setLiveDetection(null, { keepSearchZoom: true });
+    setScanState('denied', 'Multiple faces detected', 'Only one face can be verified at a time.', 'Multi Face');
+    renderConsole();
+    return;
+  }
+
+  setLiveDetection(detection, { keepSearchZoom: true });
+
+  const quality = assessLiveDetectionQuality(detection);
+  if (!quality.ok) {
+    resetLiveVerification(quality.code);
+    setScanState('detected', 'Face not verified', quality.message, 'Quality');
+    renderConsole();
+    return;
+  }
+
+  const match = window.FaceAi.bestMatch(
+    detection.descriptor,
+    S.faceUsers,
+    Math.min(S.recognitionThreshold || LIVE_VERIFY_STRICT_THRESHOLD, LIVE_VERIFY_STRICT_THRESHOLD),
+  );
+
+  if (!match?.matched || !match?.user?.id) {
+    resetLiveVerification(String(match?.reason || 'unknown'));
+    setScanState('denied', 'Unknown person', buildLocalRetryMessage(match, quality), 'Unknown');
+    renderConsole();
+    return;
+  }
+
+  const verification = updateLiveVerification(match, detection);
+  const lockReady = verification.streak >= LIVE_VERIFY_REQUIRED_FRAMES
+    && verification.avgConfidence >= LIVE_VERIFY_READY_CONFIDENCE
+    && Number(verification.stableMs || 0) >= FACE_SCAN_STABLE_MS;
+
+  if (!lockReady) {
+    setScanState('loading', 'Hold Still', buildVerificationProgressDetail(match, detection), 'Face Lock');
+    renderConsole();
+    return;
+  }
+
+  if (!canScan(match.user.id, false)) {
+    setScanState('loading', 'Face Detected', 'Face lock is active. Waiting for the scan cooldown window.', 'Confirmed');
+    renderConsole();
+    return;
+  }
+  canScan(match.user.id, true);
+
+  const focus = getFaceBoxFocus(detection.faceBox);
+  const captureImage = await grabFrameBlob({
+    zoom: Math.max(1, Number(detection.recommendedZoom || 1)),
+    focusX: focus.focusX,
+    focusY: focus.focusY,
+  });
+
+  if (!captureImage) {
+    setScanState('loading', 'Hold Still', 'Camera preview is refreshing. Hold position.', 'Confirmed');
+    renderConsole();
+    return;
+  }
+
+  setScanState('loading', 'Recognizing', 'Secure attendance verification in progress.', 'Confirmed');
+  renderConsole();
+  await runScan({
+    source: 'camera',
+    image: captureImage,
+    showToast: false,
+    userId: match.user.id,
+    capturedFrames: verification.streak,
+  });
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 function grabFrame(opts = {}) {
   const v = $('cameraPreview');
   if (!v.videoWidth || !v.videoHeight) return '';
+<<<<<<< HEAD
   const c = document.createElement('canvas');
   c.width = v.videoWidth; c.height = v.videoHeight;
   const ctx = c.getContext('2d');
   if (!ctx) return '';
+=======
+  const c = createCaptureCanvas(v, opts);
+  if (!c) return '';
+  return c.toDataURL('image/jpeg', FACE_SCAN_JPEG_QUALITY);
+}
+
+function createCaptureCanvas(video, opts = {}) {
+  if (!video?.videoWidth || !video?.videoHeight) return null;
+  const c = document.createElement('canvas');
+  c.width = FACE_SCAN_CAPTURE_WIDTH;
+  c.height = FACE_SCAN_CAPTURE_HEIGHT;
+  const ctx = c.getContext('2d', { alpha: false, willReadFrequently: true });
+  if (!ctx) return null;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 
   const zoom = clamp(Number(opts.zoom || 1), 1, MAX_PREVIEW_ZOOM);
   if (zoom > 1.001) {
     const focusX = clamp(Number(opts.focusX ?? DEFAULT_CAMERA_FOCUS_X), 0.1, 0.9);
     const focusY = clamp(Number(opts.focusY ?? DEFAULT_CAMERA_FOCUS_Y), 0.1, 0.9);
+<<<<<<< HEAD
     const cropWidth = v.videoWidth / zoom;
     const cropHeight = v.videoHeight / zoom;
     const sourceX = clamp((focusX * v.videoWidth) - (cropWidth / 2), 0, v.videoWidth - cropWidth);
@@ -3177,6 +4122,89 @@ function grabFrame(opts = {}) {
     ctx.drawImage(v, 0, 0);
   }
   return c.toDataURL('image/jpeg', 0.92);
+=======
+    const cropWidth = video.videoWidth / zoom;
+    const cropHeight = video.videoHeight / zoom;
+    const sourceX = clamp((focusX * video.videoWidth) - (cropWidth / 2), 0, video.videoWidth - cropWidth);
+    const sourceY = clamp((focusY * video.videoHeight) - (cropHeight / 2), 0, video.videoHeight - cropHeight);
+    ctx.drawImage(video, sourceX, sourceY, cropWidth, cropHeight, 0, 0, c.width, c.height);
+  } else {
+    ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, c.width, c.height);
+  }
+  return c;
+}
+
+function canvasToBlob(canvas, type = 'image/jpeg', quality = FACE_SCAN_JPEG_QUALITY) {
+  return new Promise(resolve => {
+    canvas.toBlob(blob => resolve(blob || null), type, quality);
+  });
+}
+
+async function grabFrameBlob(opts = {}) {
+  const canvas = createCaptureCanvas($('cameraPreview'), opts);
+  if (!canvas) return null;
+  return canvasToBlob(canvas);
+}
+
+async function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Cannot read image blob.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function measureFrameQuality(video, faceBox) {
+  const canvas = createCaptureCanvas(video);
+  if (!canvas || !faceBox) return { brightness: 0, sharpness: 0 };
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return { brightness: 0, sharpness: 0 };
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const left = Math.max(0, Math.floor(Number(faceBox.left || 0) * width));
+  const top = Math.max(0, Math.floor(Number(faceBox.top || 0) * height));
+  const cropWidth = Math.min(Math.max(1, Math.floor(Number(faceBox.width || 0) * width)), width - left);
+  const cropHeight = Math.min(Math.max(1, Math.floor(Number(faceBox.height || 0) * height)), height - top);
+  if (cropWidth <= 1 || cropHeight <= 1) return { brightness: 0, sharpness: 0 };
+
+  const data = ctx.getImageData(left, top, cropWidth, cropHeight).data;
+  const gray = new Float32Array(cropWidth * cropHeight);
+  let total = 0;
+  for (let index = 0, pixel = 0; index < data.length; index += 4, pixel += 1) {
+    const value = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
+    gray[pixel] = value;
+    total += value;
+  }
+
+  const brightness = total / gray.length;
+  let laplacianSum = 0;
+  let laplacianSumSq = 0;
+  let count = 0;
+  for (let y = 1; y < cropHeight - 1; y += 1) {
+    for (let x = 1; x < cropWidth - 1; x += 1) {
+      const position = (y * cropWidth) + x;
+      const laplacian = (
+        (-4 * gray[position])
+        + gray[position - cropWidth]
+        + gray[position + cropWidth]
+        + gray[position - 1]
+        + gray[position + 1]
+      );
+      laplacianSum += laplacian;
+      laplacianSumSq += laplacian * laplacian;
+      count += 1;
+    }
+  }
+
+  const mean = count ? (laplacianSum / count) : 0;
+  const sharpness = count ? Math.max(0, (laplacianSumSq / count) - (mean * mean)) : 0;
+  return {
+    brightness: Number(brightness.toFixed(2)),
+    sharpness: Number(sharpness.toFixed(2)),
+  };
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 async function ensureCameraReadyForCapture() {
@@ -3194,9 +4222,15 @@ async function ensureCameraReadyForCapture() {
 
 async function captureScanFrame() {
   if (!await ensureCameraReadyForCapture()) return;
+<<<<<<< HEAD
   const f = grabFrame();
   if (!f) { toast('Camera preview is not ready yet.','error'); return; }
   S.scanImage = f; renderConsole();
+=======
+  const blob = await grabFrameBlob();
+  if (!blob) { toast('Camera preview is not ready yet.','error'); return; }
+  S.scanImage = await blobToDataUrl(blob); renderConsole();
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   toast('Frame captured.','success');
 }
 
@@ -3218,6 +4252,7 @@ async function handleManualScan() {
 
 async function runScan(opts = {}) {
   if (S.scanInFlight) return null;
+<<<<<<< HEAD
   const source = opts.source || (opts.image ? 'upload' : 'camera');
   const image = source === 'upload' ? (opts.image || S.scanImage || '') : '';
   if (source === 'upload' && !image) return null;
@@ -3332,6 +4367,85 @@ async function runScan(opts = {}) {
       syncCooldownFromResult(result, action);
     } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
       recordAttendanceAction(match.user.id, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
+=======
+  const now = Date.now();
+  const blockedUntil = Math.max(Number(S.scanRetryAt || 0), Number(S.scanFailureCooldownUntil || 0), Number(S.scanBusyUntil || 0));
+  if (blockedUntil > now) return null;
+  const source = opts.source || (opts.image ? 'upload' : 'camera');
+  const image = source === 'upload'
+    ? (opts.image || S.scanImage || '')
+    : (opts.image || await grabFrameBlob({ zoom: 1 }));
+  if (source === 'upload' && !image) return null;
+  if (source === 'camera' && !image) {
+    toast('Camera preview is not ready yet.', 'warning');
+    return null;
+  }
+  S.scanInFlight = true;
+  S.scanBusyUntil = Date.now() + FACE_SCAN_RETRY_DELAY_MS;
+  if (typeof image === 'string' && image) S.scanImage = image;
+  renderConsole();
+  setScanState('loading', 'Scanning...', 'Uploading optimized frame for recognition.');
+  try {
+    let backendResult;
+    if (image instanceof Blob) {
+      const formData = new FormData();
+      formData.append('userId', opts.userId || '');
+      formData.append('area', $('scanAreaInput').value.trim() || 'Capper Sports Club Entry');
+      formData.append('capturedFrames', String(Number(opts.capturedFrames || (source === 'camera' ? 1 : 3))));
+      formData.append('image', image, 'scan.jpg');
+      backendResult = await api('/access/scan', {
+        method:'POST',
+        body: formData,
+      });
+    } else {
+      backendResult = await api('/access/scan', {
+        method:'POST',
+        body:{
+          userId: opts.userId || null,
+          area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
+          image,
+          capturedFrames: Number(opts.capturedFrames || (source === 'camera' ? 1 : 3)),
+        },
+      });
+    }
+    const result = buildClientScanResult({
+      ...backendResult,
+      status: backendResult?.status || 'retry',
+      message: backendResult?.message || 'Scan complete.',
+      name: backendResult?.name || null,
+      confidence: Number(backendResult?.confidence ?? 0),
+      attendanceAction: backendResult?.attendanceAction || null,
+      scannedAt: backendResult?.scannedAt,
+      cooldownRemainingSeconds: Number(backendResult?.cooldownRemainingSeconds || 0),
+      faceBox: backendResult?.faceBox || null,
+      source,
+      userId: backendResult?.userId || backendResult?.session?.userId || null,
+      ttsMessage: backendResult?.ttsMessage || '',
+    });
+
+    if (source === 'camera') {
+      if (result.faceBox) {
+        const retainedZoom = Math.max(
+          1.25,
+          Number(S.liveDetection?.recommendedZoom || 1),
+        );
+        setLiveDetection({ faceBox: result.faceBox, recommendedZoom: retainedZoom }, { keepSearchZoom: true });
+        setScanState('loading', 'Face locked', buildDetectionAssistDetail({
+          faceBox: result.faceBox,
+          captureMode: 'backend-scan',
+          distanceHint: '',
+        }), 'Face Lock');
+      } else {
+        setLiveDetection(null, { keepSearchZoom: true });
+      }
+    }
+
+    if (result.status === 'granted' && result.attendanceAction && result.userId) {
+      recordAttendanceAction(result.userId, result.attendanceAction, result.scannedAt, result.name);
+      updateLocalUserAttendance(result.userId, result.attendanceAction, result.scannedAt);
+    } else if (result.status === 'cooldown') {
+      syncCooldownFromResult(result, result.attendanceAction || inferAttendanceAction(result.userId));
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     }
     S.scanResult = result;
     renderScanResult();
@@ -3345,6 +4459,7 @@ async function runScan(opts = {}) {
     if (opts.showToast || result.status === 'granted') {
       toast(result.message||'Scan complete.', result.status==='granted'?'success':'warning');
     }
+<<<<<<< HEAD
     return result;
   } catch (err) {
     setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
@@ -3352,6 +4467,24 @@ async function runScan(opts = {}) {
     return null;
   } finally {
     S.scanInFlight = false;
+=======
+    if (['retry', 'unknown', 'cooldown', 'duplicate', 'denied'].includes(String(result.status || ''))) {
+      S.scanRetryAt = Date.now() + FACE_SCAN_RETRY_DELAY_MS;
+    } else {
+      S.scanRetryAt = 0;
+    }
+    return result;
+  } catch (err) {
+    const failure = describeScanFailure(err);
+    setScanState(failure.mode, failure.title, failure.detail, failure.pill);
+    if (opts.showToast) handleErr(err, { toast: true });
+    S.scanFailureCooldownUntil = Date.now() + FACE_SCAN_FAIL_COOLDOWN_MS;
+    return null;
+  } finally {
+    resetLiveVerification();
+    S.scanInFlight = false;
+    S.scanBusyUntil = 0;
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     if (S.cameraRequested && !streamHasActiveVideo(S.stream)) {
       startCamera().catch(console.error);
     }
@@ -3377,6 +4510,14 @@ async function detectRecognitionProbe(opts = {}) {
     allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
     recoveryMode: S.scanMissStreak >= 2,
   });
+<<<<<<< HEAD
+=======
+  if (detection?.faceBox) {
+    const metrics = measureFrameQuality(video, detection.faceBox);
+    detection.brightness = metrics.brightness;
+    detection.sharpness = metrics.sharpness;
+  }
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
   return { source, detection };
 }
@@ -3811,8 +4952,64 @@ async function doSpeak(item) {
   return false;
 }
 
+<<<<<<< HEAD
 async function speakServerAudio(text) {
   return false;
+=======
+async function speakServerAudio(text, opts = {}) {
+  if (!ensureAdmin()) return false;
+  const t = String(text || '').trim();
+  if (!t) return false;
+
+  // Debounce rapid re-triggers
+  const cooldownMs = Number.isFinite(Number(opts.cooldownMs)) ? Number(opts.cooldownMs) : 2000;
+  const key = String(opts.cooldownKey || t);
+  const now = Date.now();
+  const last = Number(S.audioCooldownAt?.[key] || 0);
+  if (cooldownMs > 0 && (now - last) < cooldownMs) return false;
+  if (!S.audioCooldownAt) S.audioCooldownAt = {};
+  S.audioCooldownAt[key] = now;
+
+  try {
+    const audioBlob = await api('/tts', { method: 'POST', body: { text: t }, responseType: 'blob' });
+    if (!audioBlob) return false;
+
+    const url = URL.createObjectURL(audioBlob);
+    const audio = $('ttsAudio');
+    if (!audio) return false;
+
+    // Stop any currently playing server audio
+    try { audio.pause(); } catch {}
+
+    audio.hidden = false;
+    audio.src = url;
+
+    // Ensure playback after user gesture (button click qualifies)
+    await new Promise((resolve, reject) => {
+      const cleanup = () => {
+        audio.removeEventListener('ended', onEnded);
+        audio.removeEventListener('error', onError);
+      };
+      const onEnded = () => { cleanup(); resolve(true); };
+      const onError = () => { cleanup(); reject(new Error('Server TTS audio playback error')); };
+      audio.addEventListener('ended', onEnded, { once: true });
+      audio.addEventListener('error', onError, { once: true });
+
+      const p = audio.play();
+      if (p && typeof p.then === 'function') p.then(()=>{}).catch(err => reject(err));
+    });
+
+    // Release URL after playback
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch {}
+    }, 2500);
+
+    return true;
+  } catch (err) {
+    if (!opts.silent) console.error('Server TTS failed:', err);
+    return false;
+  }
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 }
 
 async function handleTts(e) {
@@ -4006,10 +5203,28 @@ function fillSelect(sel, items, opts = {}) {
 
 /* â”€â”€ API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 async function api(path, opts = {}) {
+<<<<<<< HEAD
   const headers = { ...(opts.headers||{}) };
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
   if (S.token) headers.Authorization = `Bearer ${S.token}`;
   if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+=======
+  return apiRequest(path, opts, false);
+}
+
+async function apiRequest(path, opts = {}, hasRetried = false) {
+  const headers = { ...(opts.headers||{}) };
+  const init = { method: opts.method||'GET', headers, cache:'no-store' };
+  if (S.token) headers.Authorization = `Bearer ${S.token}`;
+  if (opts.body !== undefined) {
+    if (opts.body instanceof FormData) {
+      init.body = opts.body;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(opts.body);
+    }
+  }
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   let res;
   try {
     res = await fetch(`${S.apiBase}${path}`, init);
@@ -4018,6 +5233,13 @@ async function api(path, opts = {}) {
       S.healthOk = false;
       updateHealthUi();
     }
+<<<<<<< HEAD
+=======
+    if (!hasRetried && await ensureBackendConnection({ silent: true })) {
+      return apiRequest(path, opts, true);
+    }
+    error.message = 'Failed to fetch. Backend is unreachable. Start the backend or update the API base URL.';
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     throw error;
   }
   if (!S.healthOk) {
@@ -4047,6 +5269,38 @@ function ensureAdmin() {
 function streamHasActiveVideo(stream) {
   return Boolean(stream && stream.getVideoTracks().some(track => track.readyState === 'live'));
 }
+<<<<<<< HEAD
+=======
+
+function startLiveLoop() {
+  if (S.liveLoopScheduled) return;
+  S.liveLoopScheduled = true;
+
+  const tick = timestamp => {
+    if (!S.liveLoopScheduled) return;
+    if (document.hidden) {
+      S.liveLoopHandle = requestAnimationFrame(tick);
+      return;
+    }
+    if (!S.liveLoopLastAt || (timestamp - S.liveLoopLastAt) >= LIVE_DETECTION_FRAME_MS) {
+      runLiveCycle().catch(console.error);
+    }
+    S.liveLoopHandle = requestAnimationFrame(tick);
+  };
+
+  S.liveLoopHandle = requestAnimationFrame(tick);
+}
+
+function stopLiveLoop() {
+  S.liveLoopScheduled = false;
+  S.liveLoopPending = false;
+  S.liveLoopLastAt = 0;
+  if (S.liveLoopHandle) {
+    cancelAnimationFrame(S.liveLoopHandle);
+    S.liveLoopHandle = 0;
+  }
+}
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 // inferDefaultApiBase() - now using fixed production URL
 function inferDefaultApiBase() {
   return 'https://caper-club-backend-production.up.railway.app';
@@ -4118,7 +5372,11 @@ async function probeHealth(base) {
     clearTimeout(timer);
   }
 }
+<<<<<<< HEAD
 async function ensureBackendConnection() {
+=======
+async function ensureBackendConnection(opts = {}) {
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   for (const base of getApiBaseCandidates()) {
     if (!await probeHealth(base)) continue;
     setApiBase(base);
@@ -4129,6 +5387,12 @@ async function ensureBackendConnection() {
 
   S.healthOk = false;
   updateHealthUi();
+<<<<<<< HEAD
+=======
+  if (!opts.silent) {
+    console.warn('[Backend] No reachable backend found in candidates:', getApiBaseCandidates());
+  }
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   return false;
 }
 
@@ -4257,6 +5521,7 @@ function toast(msg, type = '') {
   clearTimeout(S.toastTimer); S.toastTimer = setTimeout(() => t.className='toast', 2800);
 }
 
+<<<<<<< HEAD
 // Door control (admin navbar) — unlock auto-lock after 5s
 let doorUnlockAutoTimerId = null;
 let doorControlInFlight = false;
@@ -4320,6 +5585,8 @@ async function doorUnlockFor5s() {
   }
 }
 
+=======
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 /* Auth helpers */
 function clearSess() {
   sessionStorage.removeItem(STORAGE_KEYS.token);
@@ -4333,7 +5600,11 @@ function clearSess() {
     enrollmentZoom:1,
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
+<<<<<<< HEAD
     doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
+=======
+    doorCommand:'LOCK', doorUpdatedAt:null, doorRelocking:false, doorRemainingSeconds:0, doorRelockDeadlineAt:0, doorUiTimer:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
@@ -4552,13 +5823,21 @@ function getAttendanceRecord(userId) {
   };
 }
 
+<<<<<<< HEAD
 function canScan(userId) {
+=======
+function canScan(userId, commit = true) {
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   const id = String(userId || '').trim();
   if (!id) return false;
   const now = Date.now();
   const last = scannedUsers.get(id);
   if (last && (now - last) < FACE_SCAN_DEBOUNCE_MS) return false;
+<<<<<<< HEAD
   scannedUsers.set(id, now);
+=======
+  if (commit) scannedUsers.set(id, now);
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
   scannedUsers.forEach((value, key) => {
     if ((now - value) >= FACE_SCAN_DEBOUNCE_MS) scannedUsers.delete(key);
   });
@@ -5227,15 +6506,24 @@ function renderActiveSessionsPanel(force = false) {
     const remainStr = formatSessionRemainingLabel(remaining);
     const isEnding = remaining <= 5 * 60 * 1000 && remaining > 0;
     const isExpired = remaining <= 0;
+<<<<<<< HEAD
     const endAction = sess.sessionId
       ? `endSession(${JSON.stringify(sess.sessionId)})`
       : `stopSessionTimer(${JSON.stringify(userId)})`;
     const endLabel = sess.sessionId ? 'End' : 'Clear';
 
+=======
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
     const cardClass = isExpired ? 'sess-card expired' : isEnding ? 'sess-card ending' : 'sess-card';
     const statusLabel = isExpired ? 'Expired' : isEnding ? 'Ending Soon' : 'Active';
     const statusTone = isExpired ? 'tone-red' : isEnding ? 'tone-amber' : 'tone-green';
     const barColor = isExpired ? '#e11d48' : isEnding ? '#d97706' : '#059669';
+<<<<<<< HEAD
+=======
+    const endButton = sess.sessionId && !isExpired
+      ? `<button class="mini-btn sess-end-btn" data-session-end="${esc(sess.sessionId)}">End</button>`
+      : '';
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
 
     return `<div class="${cardClass}" data-uid="${esc(userId)}">
       <div class="sess-card-top">
@@ -5244,8 +6532,15 @@ function renderActiveSessionsPanel(force = false) {
           <div class="sess-name">${esc(sess.name)}</div>
           <div class="sess-id">Window: ${esc(windowStr)} | Elapsed: ${esc(elapsedStr)}</div>
         </div>
+<<<<<<< HEAD
         <span class="status-chip ${statusTone}">${statusLabel}</span>
         <button class="mini-btn del" onclick='${endAction}'>${endLabel}</button>
+=======
+        <div class="sess-card-actions">
+          <span class="status-chip ${statusTone}">${statusLabel}</span>
+          ${endButton}
+        </div>
+>>>>>>> 12f11f3a725b11851d999d606863ef006019f894
       </div>
       <div class="sess-times">
         <div class="sess-time-block full">
