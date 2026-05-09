@@ -12,9 +12,17 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 400;
+const LIVE_SCAN_INTERVAL = 240;
 const DOOR_STATUS_POLL_MS = 2000;
 const FACE_SCAN_DEBOUNCE_MS = 1500;
+const FACE_SCAN_STABLE_MS = 800;
+const FACE_SCAN_FAIL_COOLDOWN_MS = 900;
+const FACE_SCAN_RETRY_DELAY_MS = 650;
+const FACE_SCAN_CAPTURE_WIDTH = 640;
+const FACE_SCAN_CAPTURE_HEIGHT = 480;
+const FACE_SCAN_JPEG_QUALITY = 0.7;
+const LIVE_DETECTION_TARGET_FPS = 10;
+const LIVE_DETECTION_FRAME_MS = Math.round(1000 / LIVE_DETECTION_TARGET_FPS);
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;
@@ -34,6 +42,8 @@ const LIVE_VERIFY_MAX_CENTER_OFFSET_X = 0.22;
 const LIVE_VERIFY_MAX_CENTER_OFFSET_Y = 0.24;
 // Require stronger recognition confidence before allowing attendance.
 const LIVE_VERIFY_READY_CONFIDENCE = 0.60;
+const LIVE_VERIFY_MIN_BRIGHTNESS = 58;
+const LIVE_VERIFY_MIN_SHARPNESS = 20;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -133,6 +143,13 @@ const S = {
   memberHistory: [], memberPayments: [], memberNotifications: [],
   scanImage: '', scanResult: null,
   isScanning: false, scanLoopTimer: null, scanInFlight: false,
+  scanBusyUntil: 0,
+  scanRetryAt: 0,
+  scanFailureCooldownUntil: 0,
+  liveLoopHandle: 0,
+  liveLoopLastAt: 0,
+  liveLoopPending: false,
+  liveLoopScheduled: false,
   cameraRequested: false, cameraRestarting: false,
   liveDetection: null, cameraZoom: 1,
   faceModelsReady: false, faceModelsLoading: false, faceModelsError: '',
@@ -168,6 +185,10 @@ const S = {
     avgConfidence: 0,
     avgDistance: 1,
     faceScore: 0,
+    stableSince: 0,
+    stableMs: 0,
+    brightness: 0,
+    sharpness: 0,
     lastReason: '',
   },
   userFilters: { search: '', sport: '', plan: '', status: '', role: '', expiryStatus: '', paymentMode: '' },
@@ -1197,11 +1218,32 @@ function renderScannerStatus() {
 
   const shell = $('cameraShell');
   shell.classList.remove('is-scanning','is-granted','is-denied','is-detected');
-  if (S.scanState === 'loading')   { shell.classList.add('is-scanning'); $('faceDetectLabel').textContent = 'Scanningâ€¦'; }
-  else if (S.scanState === 'granted') { shell.classList.add('is-granted'); $('faceDetectLabel').textContent = 'GRANTED'; }
-  else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
-  else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'FACE FOUND'; }
+  if (S.scanState === 'loading') shell.classList.add('is-scanning');
+  else if (S.scanState === 'granted') shell.classList.add('is-granted');
+  else if (S.scanState === 'denied') shell.classList.add('is-denied');
+  else if (S.scanState === 'detected') shell.classList.add('is-detected');
+  updateFaceDetectLabel();
   renderCameraAssistBadge();
+}
+
+function updateFaceDetectLabel() {
+  const label = $('faceDetectLabel');
+  if (!label) return;
+
+  const title = String(S.scanStatusText || '').toLowerCase();
+  const detail = String(S.scanStatusDetail || '').toLowerCase();
+  const pill = String(S.scanPill || '').toLowerCase();
+
+  if (S.scanState === 'granted') return void (label.textContent = 'Recognized');
+  if (title.includes('blurry') || detail.includes('blurry')) return void (label.textContent = 'Too Blurry');
+  if (title.includes('dark') || detail.includes('lighting is too low')) return void (label.textContent = 'Too Dark');
+  if (title.includes('closer') || detail.includes('move closer')) return void (label.textContent = 'Move Closer');
+  if (title.includes('center') || detail.includes('center your face')) return void (label.textContent = 'Center Face');
+  if (title.includes('hold') || title.includes('verifying') || detail.includes('hold steady')) return void (label.textContent = 'Hold Still');
+  if (title.includes('detected') || pill.includes('confirmed') || pill.includes('face lock')) return void (label.textContent = 'Face Detected');
+  if (S.scanState === 'denied') return void (label.textContent = 'No Match');
+  if (S.scanState === 'loading') return void (label.textContent = 'Scanning...');
+  label.textContent = 'Ready';
 }
 
 function describeScanFailure(err) {
@@ -1465,6 +1507,10 @@ function resetLiveVerification(reason = '') {
     avgConfidence: 0,
     avgDistance: 1,
     faceScore: 0,
+    stableSince: 0,
+    stableMs: 0,
+    brightness: 0,
+    sharpness: 0,
     lastReason: reason,
   };
 }
@@ -1503,6 +1549,12 @@ function assessLiveDetectionQuality(detection) {
   if (offsets.x > LIVE_VERIFY_MAX_CENTER_OFFSET_X || offsets.y > LIVE_VERIFY_MAX_CENTER_OFFSET_Y) {
     return { ok: false, code: 'off-center', message: 'Center your face inside the frame and look straight ahead.' };
   }
+  if (Number(detection.brightness || 0) < LIVE_VERIFY_MIN_BRIGHTNESS) {
+    return { ok: false, code: 'too-dark', message: 'Frame is too dark. Move into better light.' };
+  }
+  if (Number(detection.sharpness || 0) < LIVE_VERIFY_MIN_SHARPNESS) {
+    return { ok: false, code: 'too-blurry', message: 'Frame is too blurry. Hold still and try again.' };
+  }
 
   return { ok: true, code: 'ok', message: '' };
 }
@@ -1513,9 +1565,14 @@ function updateLiveVerification(match, detection) {
   const nextConfidence = Number(match?.confidence || 0);
   const nextDistance = Number(match?.distance || 1);
   const nextFaceScore = Number(detection?.score || 0);
+  const nextBrightness = Number(detection?.brightness || 0);
+  const nextSharpness = Number(detection?.sharpness || 0);
   const previous = S.verification || {};
   const sameUser = previous.candidateUserId === nextUserId;
   const streak = sameUser ? Number(previous.streak || 0) + 1 : 1;
+  const now = Date.now();
+  const stableSince = sameUser ? Number(previous.stableSince || now) : now;
+  const stableMs = Math.max(0, now - stableSince);
 
   S.verification = {
     candidateUserId: nextUserId,
@@ -1531,6 +1588,14 @@ function updateLiveVerification(match, detection) {
     faceScore: sameUser
       ? (((Number(previous.faceScore || 0) * Number(previous.streak || 0)) + nextFaceScore) / streak)
       : nextFaceScore,
+    stableSince,
+    stableMs,
+    brightness: sameUser
+      ? (((Number(previous.brightness || 0) * Number(previous.streak || 0)) + nextBrightness) / streak)
+      : nextBrightness,
+    sharpness: sameUser
+      ? (((Number(previous.sharpness || 0) * Number(previous.streak || 0)) + nextSharpness) / streak)
+      : nextSharpness,
     lastReason: '',
   };
 
@@ -1548,7 +1613,8 @@ function buildVerificationProgressDetail(match, detection) {
   const confidence = Math.round(Number(verification.avgConfidence || match?.confidence || 0) * 100);
   const detectorScore = Math.round(Number(detection?.score || verification.faceScore || 0) * 100);
   const distance = Number(verification.avgDistance || match?.distance || 0).toFixed(3);
-  return `${verification.candidateName || match?.user?.name || 'Member'} locked | frame ${Math.min(Number(verification.streak || 0), LIVE_VERIFY_REQUIRED_FRAMES)}/${LIVE_VERIFY_REQUIRED_FRAMES} | match ${confidence}% | detector ${detectorScore}% | distance ${distance}`;
+  const stableMs = Math.min(Number(verification.stableMs || 0), FACE_SCAN_STABLE_MS);
+  return `${verification.candidateName || match?.user?.name || 'Member'} locked | ${stableMs}ms/${FACE_SCAN_STABLE_MS}ms | match ${confidence}% | detector ${detectorScore}% | distance ${distance}`;
 }
 
 function buildLocalRetryMessage(match, quality) {
@@ -3539,10 +3605,9 @@ async function startLiveScan(opts = {}) {
   S.isScanning = true;
   setLiveDetection(null, { keepSearchZoom: true });
   document.querySelector('.scanner-panel')?.classList.add('is-live');
-  clearInterval(S.scanLoopTimer);
-  S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
+  startLiveLoop();
   renderConsole();
-  setScanState('loading','Scanning...','Sending frame to backend recognition.');
+  setScanState('loading','Scanning...','Optimized live scan is active.');
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -3550,9 +3615,13 @@ async function startLiveScan(opts = {}) {
 
 function stopLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null;
+  stopLiveLoop();
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
+  S.scanBusyUntil = 0;
+  S.scanRetryAt = 0;
+  S.scanFailureCooldownUntil = 0;
   S.scanMissStreak = 0;
   resetLiveVerification();
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
@@ -3675,11 +3744,18 @@ function getCameraErrorMessage(err) {
 }
 
 async function runLiveCycle() {
-  if (!S.isScanning || S.scanInFlight) return;
+  if (!S.isScanning || S.scanInFlight || S.liveLoopPending) return;
+  if (Date.now() < Math.max(Number(S.scanRetryAt || 0), Number(S.scanFailureCooldownUntil || 0))) return;
+  S.liveLoopPending = true;
+  S.liveLoopLastAt = Date.now();
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
-  const { detection, message } = await detectRecognitionProbe({ source: 'camera' });
-  if (!S.isScanning || S.scanInFlight) return;
-  await processLiveRecognitionProbe(detection, message);
+  try {
+    const { detection, message } = await detectRecognitionProbe({ source: 'camera' });
+    if (!S.isScanning || S.scanInFlight) return;
+    await processLiveRecognitionProbe(detection, message);
+  } finally {
+    S.liveLoopPending = false;
+  }
 }
 
 async function processLiveRecognitionProbe(detection, message = '') {
@@ -3724,34 +3800,36 @@ async function processLiveRecognitionProbe(detection, message = '') {
 
   const verification = updateLiveVerification(match, detection);
   const lockReady = verification.streak >= LIVE_VERIFY_REQUIRED_FRAMES
-    && verification.avgConfidence >= LIVE_VERIFY_READY_CONFIDENCE;
+    && verification.avgConfidence >= LIVE_VERIFY_READY_CONFIDENCE
+    && Number(verification.stableMs || 0) >= FACE_SCAN_STABLE_MS;
 
   if (!lockReady) {
-    setScanState('loading', 'Verifying Identity', buildVerificationProgressDetail(match, detection), 'Face Lock');
+    setScanState('loading', 'Hold Still', buildVerificationProgressDetail(match, detection), 'Face Lock');
     renderConsole();
     return;
   }
 
-  if (!canScan(match.user.id)) {
-    setScanState('loading', 'Identity Confirmed', 'Face lock is active. Waiting for secure attendance cooldown.', 'Confirmed');
+  if (!canScan(match.user.id, false)) {
+    setScanState('loading', 'Face Detected', 'Face lock is active. Waiting for the scan cooldown window.', 'Confirmed');
     renderConsole();
     return;
   }
+  canScan(match.user.id, true);
 
   const focus = getFaceBoxFocus(detection.faceBox);
-  const captureImage = grabFrame({
+  const captureImage = await grabFrameBlob({
     zoom: Math.max(1, Number(detection.recommendedZoom || 1)),
     focusX: focus.focusX,
     focusY: focus.focusY,
   });
 
   if (!captureImage) {
-    setScanState('loading', 'Identity Confirmed', 'Camera preview is refreshing. Hold position.', 'Confirmed');
+    setScanState('loading', 'Hold Still', 'Camera preview is refreshing. Hold position.', 'Confirmed');
     renderConsole();
     return;
   }
 
-  setScanState('loading', 'Identity Confirmed', 'Secure attendance verification in progress.', 'Confirmed');
+  setScanState('loading', 'Recognizing', 'Secure attendance verification in progress.', 'Confirmed');
   renderConsole();
   await runScan({
     source: 'camera',
@@ -3765,24 +3843,104 @@ async function processLiveRecognitionProbe(detection, message = '') {
 function grabFrame(opts = {}) {
   const v = $('cameraPreview');
   if (!v.videoWidth || !v.videoHeight) return '';
+  const c = createCaptureCanvas(v, opts);
+  if (!c) return '';
+  return c.toDataURL('image/jpeg', FACE_SCAN_JPEG_QUALITY);
+}
+
+function createCaptureCanvas(video, opts = {}) {
+  if (!video?.videoWidth || !video?.videoHeight) return null;
   const c = document.createElement('canvas');
-  c.width = v.videoWidth; c.height = v.videoHeight;
-  const ctx = c.getContext('2d');
-  if (!ctx) return '';
+  c.width = FACE_SCAN_CAPTURE_WIDTH;
+  c.height = FACE_SCAN_CAPTURE_HEIGHT;
+  const ctx = c.getContext('2d', { alpha: false, willReadFrequently: true });
+  if (!ctx) return null;
 
   const zoom = clamp(Number(opts.zoom || 1), 1, MAX_PREVIEW_ZOOM);
   if (zoom > 1.001) {
     const focusX = clamp(Number(opts.focusX ?? DEFAULT_CAMERA_FOCUS_X), 0.1, 0.9);
     const focusY = clamp(Number(opts.focusY ?? DEFAULT_CAMERA_FOCUS_Y), 0.1, 0.9);
-    const cropWidth = v.videoWidth / zoom;
-    const cropHeight = v.videoHeight / zoom;
-    const sourceX = clamp((focusX * v.videoWidth) - (cropWidth / 2), 0, v.videoWidth - cropWidth);
-    const sourceY = clamp((focusY * v.videoHeight) - (cropHeight / 2), 0, v.videoHeight - cropHeight);
-    ctx.drawImage(v, sourceX, sourceY, cropWidth, cropHeight, 0, 0, c.width, c.height);
+    const cropWidth = video.videoWidth / zoom;
+    const cropHeight = video.videoHeight / zoom;
+    const sourceX = clamp((focusX * video.videoWidth) - (cropWidth / 2), 0, video.videoWidth - cropWidth);
+    const sourceY = clamp((focusY * video.videoHeight) - (cropHeight / 2), 0, video.videoHeight - cropHeight);
+    ctx.drawImage(video, sourceX, sourceY, cropWidth, cropHeight, 0, 0, c.width, c.height);
   } else {
-    ctx.drawImage(v, 0, 0);
+    ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, c.width, c.height);
   }
-  return c.toDataURL('image/jpeg', 0.92);
+  return c;
+}
+
+function canvasToBlob(canvas, type = 'image/jpeg', quality = FACE_SCAN_JPEG_QUALITY) {
+  return new Promise(resolve => {
+    canvas.toBlob(blob => resolve(blob || null), type, quality);
+  });
+}
+
+async function grabFrameBlob(opts = {}) {
+  const canvas = createCaptureCanvas($('cameraPreview'), opts);
+  if (!canvas) return null;
+  return canvasToBlob(canvas);
+}
+
+async function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Cannot read image blob.'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function measureFrameQuality(video, faceBox) {
+  const canvas = createCaptureCanvas(video);
+  if (!canvas || !faceBox) return { brightness: 0, sharpness: 0 };
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return { brightness: 0, sharpness: 0 };
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const left = Math.max(0, Math.floor(Number(faceBox.left || 0) * width));
+  const top = Math.max(0, Math.floor(Number(faceBox.top || 0) * height));
+  const cropWidth = Math.min(Math.max(1, Math.floor(Number(faceBox.width || 0) * width)), width - left);
+  const cropHeight = Math.min(Math.max(1, Math.floor(Number(faceBox.height || 0) * height)), height - top);
+  if (cropWidth <= 1 || cropHeight <= 1) return { brightness: 0, sharpness: 0 };
+
+  const data = ctx.getImageData(left, top, cropWidth, cropHeight).data;
+  const gray = new Float32Array(cropWidth * cropHeight);
+  let total = 0;
+  for (let index = 0, pixel = 0; index < data.length; index += 4, pixel += 1) {
+    const value = (data[index] * 0.299) + (data[index + 1] * 0.587) + (data[index + 2] * 0.114);
+    gray[pixel] = value;
+    total += value;
+  }
+
+  const brightness = total / gray.length;
+  let laplacianSum = 0;
+  let laplacianSumSq = 0;
+  let count = 0;
+  for (let y = 1; y < cropHeight - 1; y += 1) {
+    for (let x = 1; x < cropWidth - 1; x += 1) {
+      const position = (y * cropWidth) + x;
+      const laplacian = (
+        (-4 * gray[position])
+        + gray[position - cropWidth]
+        + gray[position + cropWidth]
+        + gray[position - 1]
+        + gray[position + 1]
+      );
+      laplacianSum += laplacian;
+      laplacianSumSq += laplacian * laplacian;
+      count += 1;
+    }
+  }
+
+  const mean = count ? (laplacianSum / count) : 0;
+  const sharpness = count ? Math.max(0, (laplacianSumSq / count) - (mean * mean)) : 0;
+  return {
+    brightness: Number(brightness.toFixed(2)),
+    sharpness: Number(sharpness.toFixed(2)),
+  };
 }
 
 async function ensureCameraReadyForCapture() {
@@ -3800,9 +3958,9 @@ async function ensureCameraReadyForCapture() {
 
 async function captureScanFrame() {
   if (!await ensureCameraReadyForCapture()) return;
-  const f = grabFrame();
-  if (!f) { toast('Camera preview is not ready yet.','error'); return; }
-  S.scanImage = f; renderConsole();
+  const blob = await grabFrameBlob();
+  if (!blob) { toast('Camera preview is not ready yet.','error'); return; }
+  S.scanImage = await blobToDataUrl(blob); renderConsole();
   toast('Frame captured.','success');
 }
 
@@ -3824,29 +3982,46 @@ async function handleManualScan() {
 
 async function runScan(opts = {}) {
   if (S.scanInFlight) return null;
+  const now = Date.now();
+  const blockedUntil = Math.max(Number(S.scanRetryAt || 0), Number(S.scanFailureCooldownUntil || 0), Number(S.scanBusyUntil || 0));
+  if (blockedUntil > now) return null;
   const source = opts.source || (opts.image ? 'upload' : 'camera');
   const image = source === 'upload'
     ? (opts.image || S.scanImage || '')
-    : (opts.image || grabFrame({ zoom: 1 }));
+    : (opts.image || await grabFrameBlob({ zoom: 1 }));
   if (source === 'upload' && !image) return null;
   if (source === 'camera' && !image) {
     toast('Camera preview is not ready yet.', 'warning');
     return null;
   }
   S.scanInFlight = true;
-  if (image) S.scanImage = image;
+  S.scanBusyUntil = Date.now() + FACE_SCAN_RETRY_DELAY_MS;
+  if (typeof image === 'string' && image) S.scanImage = image;
   renderConsole();
-  setScanState('loading', 'Scanning...', 'Sending frame to backend recognition.');
+  setScanState('loading', 'Scanning...', 'Uploading optimized frame for recognition.');
   try {
-    const backendResult = await api('/access/scan', {
-      method:'POST',
-      body:{
-        userId: opts.userId || null,
-        area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
-        image,
-        capturedFrames: Number(opts.capturedFrames || (source === 'camera' ? 1 : 3)),
-      },
-    });
+    let backendResult;
+    if (image instanceof Blob) {
+      const formData = new FormData();
+      formData.append('userId', opts.userId || '');
+      formData.append('area', $('scanAreaInput').value.trim() || 'Capper Sports Club Entry');
+      formData.append('capturedFrames', String(Number(opts.capturedFrames || (source === 'camera' ? 1 : 3))));
+      formData.append('image', image, 'scan.jpg');
+      backendResult = await api('/access/scan', {
+        method:'POST',
+        body: formData,
+      });
+    } else {
+      backendResult = await api('/access/scan', {
+        method:'POST',
+        body:{
+          userId: opts.userId || null,
+          area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
+          image,
+          capturedFrames: Number(opts.capturedFrames || (source === 'camera' ? 1 : 3)),
+        },
+      });
+    }
     const result = buildClientScanResult({
       ...backendResult,
       status: backendResult?.status || 'retry',
@@ -3879,10 +4054,6 @@ async function runScan(opts = {}) {
       }
     }
 
-    if (result.userId && !canScan(result.userId) && result.status === 'granted') {
-      return null;
-    }
-
     if (result.status === 'granted' && result.attendanceAction && result.userId) {
       recordAttendanceAction(result.userId, result.attendanceAction, result.scannedAt, result.name);
       updateLocalUserAttendance(result.userId, result.attendanceAction, result.scannedAt);
@@ -3901,15 +4072,22 @@ async function runScan(opts = {}) {
     if (opts.showToast || result.status === 'granted') {
       toast(result.message||'Scan complete.', result.status==='granted'?'success':'warning');
     }
+    if (['retry', 'unknown', 'cooldown', 'duplicate', 'denied'].includes(String(result.status || ''))) {
+      S.scanRetryAt = Date.now() + FACE_SCAN_RETRY_DELAY_MS;
+    } else {
+      S.scanRetryAt = 0;
+    }
     return result;
   } catch (err) {
     const failure = describeScanFailure(err);
     setScanState(failure.mode, failure.title, failure.detail, failure.pill);
     if (opts.showToast) handleErr(err, { toast: true });
+    S.scanFailureCooldownUntil = Date.now() + FACE_SCAN_FAIL_COOLDOWN_MS;
     return null;
   } finally {
     resetLiveVerification();
     S.scanInFlight = false;
+    S.scanBusyUntil = 0;
     if (S.cameraRequested && !streamHasActiveVideo(S.stream)) {
       startCamera().catch(console.error);
     }
@@ -3935,6 +4113,11 @@ async function detectRecognitionProbe(opts = {}) {
     allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
     recoveryMode: S.scanMissStreak >= 2,
   });
+  if (detection?.faceBox) {
+    const metrics = measureFrameQuality(video, detection.faceBox);
+    detection.brightness = metrics.brightness;
+    detection.sharpness = metrics.sharpness;
+  }
   S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
   return { source, detection };
 }
@@ -4622,7 +4805,14 @@ async function apiRequest(path, opts = {}, hasRetried = false) {
   const headers = { ...(opts.headers||{}) };
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
   if (S.token) headers.Authorization = `Bearer ${S.token}`;
-  if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+  if (opts.body !== undefined) {
+    if (opts.body instanceof FormData) {
+      init.body = opts.body;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(opts.body);
+    }
+  }
   let res;
   try {
     res = await fetch(`${S.apiBase}${path}`, init);
@@ -4663,6 +4853,35 @@ function ensureAdmin() {
 }
 function streamHasActiveVideo(stream) {
   return Boolean(stream && stream.getVideoTracks().some(track => track.readyState === 'live'));
+}
+
+function startLiveLoop() {
+  if (S.liveLoopScheduled) return;
+  S.liveLoopScheduled = true;
+
+  const tick = timestamp => {
+    if (!S.liveLoopScheduled) return;
+    if (document.hidden) {
+      S.liveLoopHandle = requestAnimationFrame(tick);
+      return;
+    }
+    if (!S.liveLoopLastAt || (timestamp - S.liveLoopLastAt) >= LIVE_DETECTION_FRAME_MS) {
+      runLiveCycle().catch(console.error);
+    }
+    S.liveLoopHandle = requestAnimationFrame(tick);
+  };
+
+  S.liveLoopHandle = requestAnimationFrame(tick);
+}
+
+function stopLiveLoop() {
+  S.liveLoopScheduled = false;
+  S.liveLoopPending = false;
+  S.liveLoopLastAt = 0;
+  if (S.liveLoopHandle) {
+    cancelAnimationFrame(S.liveLoopHandle);
+    S.liveLoopHandle = 0;
+  }
 }
 // inferDefaultApiBase() - now using fixed production URL
 function inferDefaultApiBase() {
@@ -5109,13 +5328,13 @@ function getAttendanceRecord(userId) {
   };
 }
 
-function canScan(userId) {
+function canScan(userId, commit = true) {
   const id = String(userId || '').trim();
   if (!id) return false;
   const now = Date.now();
   const last = scannedUsers.get(id);
   if (last && (now - last) < FACE_SCAN_DEBOUNCE_MS) return false;
-  scannedUsers.set(id, now);
+  if (commit) scannedUsers.set(id, now);
   scannedUsers.forEach((value, key) => {
     if ((now - value) >= FACE_SCAN_DEBOUNCE_MS) scannedUsers.delete(key);
   });
