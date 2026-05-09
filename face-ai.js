@@ -8,30 +8,32 @@
   const MIN_MATCH_MARGIN = 0.08;
   const SUPPORT_DISTANCE_BUFFER = 0.02;
   const FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.4, label: 'balanced' }),
+    Object.freeze({ inputSize: 416, scoreThreshold: 0.28, label: 'full-frame' }),
+    Object.freeze({ inputSize: 320, scoreThreshold: 0.35, label: 'balanced' }),
   ]);
   const VIDEO_FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 224, scoreThreshold: 0.44, label: 'video-fast' }),
+    Object.freeze({ inputSize: 160, scoreThreshold: 0.22, label: 'video-super-fast' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.28, label: 'video-fast' }),
   ]);
   const VIDEO_RECOVERY_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.36, label: 'video-balanced' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.25, label: 'video-quick' }),
+    Object.freeze({ inputSize: 320, scoreThreshold: 0.30, label: 'video-balanced' }),
   ]);
   const CENTER_CROP_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 416, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
-    Object.freeze({ inputSize: 512, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
+    Object.freeze({ inputSize: 320, scoreThreshold: 0.26, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
+    Object.freeze({ inputSize: 416, scoreThreshold: 0.24, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
   ]);
   const VIDEO_CENTER_CROP_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.3, zoom: 1.45, offsetX: 0, offsetY: -0.04, label: 'video-center-1.45x' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.24, zoom: 1.45, offsetX: 0, offsetY: -0.04, label: 'video-center-1.45x' }),
   ]);
   const FOCUS_PASS = Object.freeze({
-    inputSize: 512,
-    scoreThreshold: 0.24,
+    inputSize: 416,
+    scoreThreshold: 0.20,
     label: 'focus-zoom',
   });
   const VIDEO_FOCUS_PASS = Object.freeze({
-    inputSize: 320,
-    scoreThreshold: 0.28,
+    inputSize: 224,
+    scoreThreshold: 0.22,
     label: 'video-focus',
   });
   const SMALL_FACE_RATIO = 0.18;
