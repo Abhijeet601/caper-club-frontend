@@ -25,6 +25,13 @@ const DEFAULT_CAMERA_FOCUS_X = 0.5;
 const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
 const STARTUP_IDLE_TIMEOUT_MS = 1200;
+const STABLE_MATCH_WINDOW_MS = 2500;
+const REQUIRED_STABLE_MATCHES = 3;
+const REQUIRED_STABLE_MATCHES_LONG_RANGE = 4;
+const STRICT_MATCH_DISTANCE = 0.43;
+const STRICT_MATCH_MARGIN = 0.05;
+const MIN_DETECTION_SCORE = 0.62;
+const MIN_FACE_RATIO = 0.11;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -133,6 +140,7 @@ const S = {
   scanStatusDetail: 'Enable Live Scan to start face recognition.',
   cooldowns: loadCooldownStore(),
   cooldownVoiceAt: {},
+  pendingRecognition: null,
   activeSessions: {},        // { userId: { sessionId, startTime, deadlineTime, duration, name, announced5, announcedEnd } }
   activeSessionsRenderKey: '',
   sessionTimerLoop: null,
@@ -1382,17 +1390,6 @@ function renderUsers() {
       return true;
     });
 
-    // Implement pagination for very large lists (>500 users)
-    const PAGE_SIZE = 100;
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-    const currentPage = S.userPage || 1;
-    const startIndex = (currentPage - 1) * PAGE_SIZE;
-    const endIndex = startIndex + PAGE_SIZE;
-
-    if (filtered.length > PAGE_SIZE) {
-      filtered = filtered.slice(startIndex, endIndex);
-    }
-
     if ($('allMembersCount')) {
       const totalFiltered = S.users.filter(u => {
         const statusValue = getUserStatusValue(u);
@@ -1470,16 +1467,6 @@ function renderUsers() {
         </tr>`);
       }
 
-      // Add pagination controls if needed
-      if (totalPages > 1) {
-        htmlParts.push(`<tr><td colspan="5" style="text-align: center; padding: 16px;">
-          <div class="pagination-controls">
-            <button class="btn-ghost btn-sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="changeUserPage(${currentPage - 1})">Previous</button>
-            <span>Page ${currentPage} of ${totalPages}</span>
-            <button class="btn-ghost btn-sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="changeUserPage(${currentPage + 1})">Next</button>
-          </div>
-        </td></tr>`);
-      }
     } else {
       htmlParts.push(`<tr><td colspan="5"><div class="empty-hint">No members found.</div></td></tr>`);
     }
@@ -3011,6 +2998,7 @@ async function startLiveScan(opts = {}) {
   if (S.isScanning) return true;
   S.cameraRequested = true;
   S.scanMissStreak = 0;
+  clearPendingRecognition();
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
@@ -3031,6 +3019,7 @@ function stopLiveScan(opts = {}) {
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
+  clearPendingRecognition();
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
@@ -3216,6 +3205,99 @@ async function handleManualScan() {
   await runScan({ source, image, showToast: true });
 }
 
+function clearPendingRecognition() {
+  S.pendingRecognition = null;
+}
+
+function requiredStableMatchesForDetection(detection) {
+  return String(detection?.captureMode || '') === 'center-zoom'
+    ? REQUIRED_STABLE_MATCHES_LONG_RANGE
+    : REQUIRED_STABLE_MATCHES;
+}
+
+function validateRecognitionAttempt(match, detection) {
+  if (!match?.matched) {
+    if (match?.reason === 'ambiguous') {
+      return 'Similar face found. Hold still and try again.';
+    }
+    return null;
+  }
+
+  if (Number(match.distance || 1) > STRICT_MATCH_DISTANCE) {
+    return 'Face match is weak. Move closer and try again.';
+  }
+
+  if (match.margin != null && Number(match.margin) < STRICT_MATCH_MARGIN) {
+    return 'Face match is too close to another member. Hold still and try again.';
+  }
+
+  if (Number(detection?.score || 0) < MIN_DETECTION_SCORE) {
+    return 'Camera view is noisy. Look at the camera and try again.';
+  }
+
+  if (Number(detection?.faceRatio || 0) < MIN_FACE_RATIO) {
+    return 'Face is too far from the camera. Please step closer.';
+  }
+
+  return '';
+}
+
+function registerRecognitionAttempt(match, detection) {
+  const now = Date.now();
+  const userId = String(match?.user?.id || '').trim();
+  if (!userId) {
+    clearPendingRecognition();
+    return { confirmed: false, count: 0, required: REQUIRED_STABLE_MATCHES };
+  }
+
+  const required = requiredStableMatchesForDetection(detection);
+  const current = S.pendingRecognition;
+  const sameWindow = current
+    && current.userId === userId
+    && (now - current.lastSeenAt) <= STABLE_MATCH_WINDOW_MS;
+
+  const next = sameWindow
+    ? {
+      userId,
+      count: current.count + 1,
+      firstSeenAt: current.firstSeenAt,
+      lastSeenAt: now,
+      bestDistance: Math.min(Number(current.bestDistance || 1), Number(match.distance || 1)),
+      lastDistance: Number(match.distance || 1),
+      minMargin: Math.min(
+        Number.isFinite(current.minMargin) ? Number(current.minMargin) : Number.POSITIVE_INFINITY,
+        Number.isFinite(match.margin) ? Number(match.margin) : Number.POSITIVE_INFINITY,
+      ),
+      minScore: Math.min(Number(current.minScore || 1), Number(detection?.score || 0)),
+      minFaceRatio: Math.min(Number(current.minFaceRatio || 1), Number(detection?.faceRatio || 0)),
+      captureMode: String(detection?.captureMode || current.captureMode || ''),
+      sampleSupport: Math.max(Number(current.sampleSupport || 0), Number(match.sampleSupport || 0)),
+      sampleCount: Math.max(Number(current.sampleCount || 0), Number(match.sampleCount || 0)),
+    }
+    : {
+      userId,
+      count: 1,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      bestDistance: Number(match.distance || 1),
+      lastDistance: Number(match.distance || 1),
+      minMargin: Number.isFinite(match.margin) ? Number(match.margin) : Number.POSITIVE_INFINITY,
+      minScore: Number(detection?.score || 0),
+      minFaceRatio: Number(detection?.faceRatio || 0),
+      captureMode: String(detection?.captureMode || ''),
+      sampleSupport: Number(match.sampleSupport || 0),
+      sampleCount: Number(match.sampleCount || 0),
+    };
+
+  S.pendingRecognition = next;
+  return {
+    confirmed: next.count >= required,
+    count: next.count,
+    required,
+    state: next,
+  };
+}
+
 async function runScan(opts = {}) {
   if (S.scanInFlight) return null;
   const source = opts.source || (opts.image ? 'upload' : 'camera');
@@ -3234,6 +3316,7 @@ async function runScan(opts = {}) {
       }
     }
     if (!probe?.detection) {
+      clearPendingRecognition();
       const result = buildClientScanResult({
         status: 'retry',
         message: probe?.message || 'No face detected. Align your face and try again.',
@@ -3253,15 +3336,58 @@ async function runScan(opts = {}) {
     );
 
     if (!match?.matched || !match.user?.id) {
+      clearPendingRecognition();
       const result = buildClientScanResult({
-        status: 'unknown',
-        message: 'Unknown face. No enrolled member matched this scan.',
+        status: match?.reason === 'ambiguous' ? 'retry' : 'unknown',
+        message: match?.reason === 'ambiguous'
+          ? 'Face is too close to another member. Hold still and try again.'
+          : 'Unknown face. No enrolled member matched this scan.',
         confidence: match?.confidence || probe.detection.score || 0,
         faceBox: probe.detection.faceBox,
         distanceHint: probe.detection.distanceHint,
         captureMode: probe.detection.captureMode,
         zoomFactor: probe.detection.recommendedZoom,
         source,
+      });
+      S.scanResult = result;
+      renderScanResult();
+      applyScanResult(result);
+      return result;
+    }
+
+    const attemptError = validateRecognitionAttempt(match, probe.detection);
+    if (attemptError) {
+      clearPendingRecognition();
+      const result = buildClientScanResult({
+        status: 'retry',
+        message: attemptError,
+        confidence: match?.confidence || probe.detection.score || 0,
+        faceBox: probe.detection.faceBox,
+        distanceHint: probe.detection.distanceHint,
+        captureMode: probe.detection.captureMode,
+        zoomFactor: probe.detection.recommendedZoom,
+        source,
+        userId: match.user.id,
+      });
+      S.scanResult = result;
+      renderScanResult();
+      applyScanResult(result);
+      return result;
+    }
+
+    const stability = registerRecognitionAttempt(match, probe.detection);
+    if (!stability.confirmed) {
+      const result = buildClientScanResult({
+        status: 'retry',
+        message: `Hold still for confirmation (${stability.count}/${stability.required}).`,
+        name: match.user.name || null,
+        confidence: match?.confidence || probe.detection.score || 0,
+        faceBox: probe.detection.faceBox,
+        distanceHint: probe.detection.distanceHint,
+        captureMode: probe.detection.captureMode,
+        zoomFactor: probe.detection.recommendedZoom,
+        source,
+        userId: match.user.id,
       });
       S.scanResult = result;
       renderScanResult();
@@ -3307,6 +3433,15 @@ async function runScan(opts = {}) {
         action,
         area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
         confidence: match.confidence,
+        matchDistance: Number(match.distance || 0),
+        secondDistance: match.secondDistance == null ? null : Number(match.secondDistance),
+        matchMargin: match.margin == null ? null : Number(match.margin),
+        sampleSupport: Number(match.sampleSupport || 0),
+        sampleCount: Number(match.sampleCount || 0),
+        detectorScore: Number(probe.detection.score || 0),
+        faceRatio: Number(probe.detection.faceRatio || 0),
+        stableFrames: Number(stability.count || 0),
+        captureMode: String(probe.detection.captureMode || ''),
       },
     });
     const result = buildClientScanResult({
@@ -3326,12 +3461,17 @@ async function runScan(opts = {}) {
       userId: match.user.id || match.user?.userId || null,
     });
     if (result.status === 'granted' && result.attendanceAction) {
+      clearPendingRecognition();
       recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
       updateLocalUserAttendance(match.user.id, result.attendanceAction, result.scannedAt);
     } else if (result.status === 'cooldown') {
+      clearPendingRecognition();
       syncCooldownFromResult(result, action);
     } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
+      clearPendingRecognition();
       recordAttendanceAction(match.user.id, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
+    } else if (result.status !== 'retry') {
+      clearPendingRecognition();
     }
     S.scanResult = result;
     renderScanResult();
