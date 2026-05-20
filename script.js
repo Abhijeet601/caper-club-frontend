@@ -1458,6 +1458,7 @@ function renderUsers() {
           <td>${faceStatus}</td>
           <td>
             <div class="action-buttons">
+              ${u.faceImageUrl ? `<button class="btn btn-xs secondary" data-user-face-image="${u.id}" title="View enrolled face image">👁️ Photo</button>` : ''}
               ${fc > 0 ? `<button class="btn btn-xs warn" data-user-delete-face="${u.id}" title="Clear enrolled face data">🗑️ Face</button>` : ''}
               <button class="btn btn-xs" data-user-report="${u.id}" title="View detailed report">📊 Report</button>
               <button class="btn btn-xs primary" data-user-edit="${u.id}" title="Edit member details">✏️ Edit</button>
@@ -2571,10 +2572,18 @@ function showFormSuccess(id) {
 }
 
 async function handleUsersClick(e) {
+  if (e.target.dataset.userFaceImage) await openFaceImagePreview(e.target.dataset.userFaceImage);
   if (e.target.dataset.userReport) await openAllMemberReport(e.target.dataset.userReport);
   if (e.target.dataset.userEdit)   beginUserEdit(e.target.dataset.userEdit);
   if (e.target.dataset.userDeleteFace) await deleteFaceForUser(e.target.dataset.userDeleteFace);
   if (e.target.dataset.userDelete) deleteUser(e.target.dataset.userDelete);
+}
+
+async function openFaceImagePreview(id) {
+  const user = S.users.find(x => x.id === id);
+  if (!user) { toast('Member not found.', 'error'); return; }
+  if (!user.faceImageUrl) { toast('No enrolled face image available.', 'warning'); return; }
+  await openAllMemberReport(id);
 }
 
 async function openAllMemberReport(id) {
@@ -2637,6 +2646,10 @@ function renderAllMemberReport(report, fallbackUser = {}) {
   ].filter(Boolean).join(' | ') || 'Full member report';
 
   reportBody.innerHTML = `
+    ${profile.faceImageUrl ? `<div class="all-member-report-face-image">
+      <img src="${esc(profile.faceImageUrl)}" alt="Enrolled face image" />
+      <div class="face-image-caption">Enrolled face image</div>
+    </div>` : ''}
     <div class="meta-grid">
       ${meta('Member ID', profile.memberId)}
       ${meta('Role', profile.role)}
