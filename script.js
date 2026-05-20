@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 500;
 const DOOR_STATUS_POLL_MS = 3000;
+const DOOR_OPEN_WARNING_INTERVAL_MS = 8000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -148,6 +149,7 @@ const S = {
   doorUpdatedAt: null,
   doorStatusTimer: null,
   doorStatusSyncPromise: null,
+  doorOpenWarningTimer: null,
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
   enrollmentZoom: 1,
@@ -848,10 +850,56 @@ async function pingHealth() {
   return S.healthOk;
 }
 
-function applyDoorStateSnapshot(state) {
+function applyDoorStateSnapshot(state, opts = {}) {
+  const previousCommand = S.doorCommand;
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
   updateDoorUi();
+
+  if (opts.silent) {
+    if (S.doorCommand !== 'UNLOCK') stopDoorOpenWarningTimer();
+    return;
+  }
+
+  if (S.doorCommand === 'UNLOCK') {
+    if (previousCommand !== 'UNLOCK') {
+      speakText('दरवाज़ा खुला हुआ है।', 'MEDIUM', {
+        cooldownKey: 'door:open',
+        cooldownMs: 0,
+      });
+    }
+    startDoorOpenWarningTimer();
+    return;
+  }
+
+  if (previousCommand === 'UNLOCK') {
+    speakText('दरवाज़ा बंद हो गया है।', 'MEDIUM', {
+      cooldownKey: 'door:closed',
+      cooldownMs: 0,
+    });
+  }
+  stopDoorOpenWarningTimer();
+}
+
+function startDoorOpenWarningTimer() {
+  if (S.doorOpenWarningTimer) return;
+  if (S.doorCommand !== 'UNLOCK') return;
+  S.doorOpenWarningTimer = setInterval(() => {
+    if (S.doorCommand !== 'UNLOCK') {
+      stopDoorOpenWarningTimer();
+      return;
+    }
+    speakText('दरवाज़ा खुला हुआ है।', 'MEDIUM', {
+      cooldownKey: 'door:open-warning',
+      cooldownMs: 0,
+    });
+  }, DOOR_OPEN_WARNING_INTERVAL_MS);
+}
+
+function stopDoorOpenWarningTimer() {
+  if (!S.doorOpenWarningTimer) return;
+  clearInterval(S.doorOpenWarningTimer);
+  S.doorOpenWarningTimer = null;
 }
 
 function updateDoorUi() {
@@ -3601,7 +3649,9 @@ function applyScanResultLegacy(r) {
     setScanState('granted','Access Granted âœ“', detail);
     const isExit = String(r.attendanceAction || '').toUpperCase() === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail);
-    speakText(`${isExit ? 'Exit' : 'Entry'} marked successfully for ${r.name || 'the member'}`, 'HIGH');
+    const nameText = r.name ? ` ${r.name} के लिए` : '';
+    speakText(`उपस्थिति सफलतापूर्वक दर्ज हुई।${nameText}`, 'HIGH');
+    toast('Attendance marked successfully.', 'success');
     return;
   }
   if (r.status === 'cooldown') {
@@ -3623,7 +3673,9 @@ function applyScanResultBrowser(r) {
     setScanState('granted','Access Granted âœ“', detail);
     const isExit = String(r.attendanceAction || '').toUpperCase() === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail);
-    speakText(`${isExit ? 'Exit' : 'Entry'} marked successfully for ${r.name || 'the member'}`, 'HIGH');
+    const nameText = r.name ? ` ${r.name} के लिए` : '';
+    speakText(`उपस्थिति सफलतापूर्वक दर्ज हुई।${nameText}`, 'HIGH');
+    toast('Attendance marked successfully.', 'success');
     return;
   }
   if (r.status === 'duplicate' || r.status === 'retry' || r.status === 'cooldown') {
