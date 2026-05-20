@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 650;
+const LIVE_SCAN_INTERVAL = 500;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -26,8 +26,8 @@ const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
 const STARTUP_IDLE_TIMEOUT_MS = 1200;
 const STABLE_MATCH_WINDOW_MS = 2500;
-const REQUIRED_STABLE_MATCHES = 3;
-const REQUIRED_STABLE_MATCHES_LONG_RANGE = 4;
+const REQUIRED_STABLE_MATCHES = 2;
+const REQUIRED_STABLE_MATCHES_LONG_RANGE = 3;
 const STRICT_MATCH_DISTANCE = 0.43;
 const STRICT_MATCH_MARGIN = 0.05;
 const MIN_DETECTION_SCORE = 0.62;
@@ -3223,9 +3223,11 @@ function clearPendingRecognition() {
 }
 
 function requiredStableMatchesForDetection(detection) {
-  return String(detection?.captureMode || '') === 'center-zoom'
-    ? REQUIRED_STABLE_MATCHES_LONG_RANGE
-    : REQUIRED_STABLE_MATCHES;
+  const captureMode = String(detection?.captureMode || '').toLowerCase();
+  if (captureMode === 'center-zoom') {
+    return REQUIRED_STABLE_MATCHES_LONG_RANGE;
+  }
+  return REQUIRED_STABLE_MATCHES;
 }
 
 function validateRecognitionAttempt(match, detection) {
@@ -3527,8 +3529,8 @@ async function detectRecognitionProbe(opts = {}) {
 
   const detection = await window.FaceAi.detectFromVideo(video, {
     hintBox: S.liveDetection?.faceBox || null,
-    allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
-    recoveryMode: S.scanMissStreak >= 2,
+    allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 1,
+    recoveryMode: S.scanMissStreak >= 1,
   });
   S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
   return { source, detection };
