@@ -42,6 +42,28 @@ const CAMERA_CONSTRAINT_SETS = Object.freeze([
       aspectRatio: { ideal: 4 / 3 },
     },
   },
+  {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'user' },
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 15, max: 20 },
+      aspectRatio: { ideal: 4 / 3 },
+    },
+  },
+  {
+    audio: false,
+    video: {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 15, max: 20 },
+    },
+  },
+  {
+    audio: false,
+    video: true,
+  },
 ]);
 
 const TONE_MAP = {
@@ -3124,6 +3146,8 @@ async function startCamera() {
     S.stream.getVideoTracks().forEach(track => {
       track.addEventListener('ended', handleCameraTrackEnded, { once: true });
     });
+    preview.muted = true;
+    preview.playsInline = true;
     await preview.play().catch(()=>{});
     const ready = await waitVideoReady(preview);
     if (!ready) throw new Error('Camera preview did not become ready.');
@@ -3160,9 +3184,18 @@ function waitVideoReady(video, ms = 3000) {
   if (video.videoWidth && video.videoHeight) return Promise.resolve(true);
   return new Promise(res => {
     const t = setTimeout(() => { cleanup(); res(false); }, ms);
-    function cleanup() { clearTimeout(t); video.removeEventListener('loadeddata', h); video.removeEventListener('playing', h); }
+    function cleanup() {
+      clearTimeout(t);
+      video.removeEventListener('loadedmetadata', h);
+      video.removeEventListener('loadeddata', h);
+      video.removeEventListener('canplay', h);
+      video.removeEventListener('playing', h);
+    }
     function h() { if (video.videoWidth && video.videoHeight) { cleanup(); res(true); } }
-    video.addEventListener('loadeddata', h); video.addEventListener('playing', h);
+    video.addEventListener('loadedmetadata', h);
+    video.addEventListener('loadeddata', h);
+    video.addEventListener('canplay', h);
+    video.addEventListener('playing', h);
   });
 }
 
