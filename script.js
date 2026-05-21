@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
 const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
+const DOOR_OPEN_REPEAT_MS = 8000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -140,6 +141,7 @@ const S = {
   doorUpdatedAt: null,
   doorStatusTimer: null,
   doorStatusSyncPromise: null,
+  doorOpenRepeatTimer: null,
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
   enrollmentZoom: 1,
@@ -841,9 +843,11 @@ async function pingHealth() {
 }
 
 function applyDoorStateSnapshot(state) {
+  const previousCommand = S.doorCommand;
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
   updateDoorUi();
+  handleDoorStateTransition(previousCommand, S.doorCommand);
 }
 
 function updateDoorUi() {
@@ -894,13 +898,57 @@ function clearDoorStatusPoll() {
   S.doorStatusTimer = null;
 }
 
+function startDoorOpenVoiceLoop() {
+  clearDoorOpenVoiceLoop();
+  S.doorOpenRepeatTimer = setInterval(() => {
+    if (S.doorCommand !== 'UNLOCK') {
+      clearDoorOpenVoiceLoop();
+      return;
+    }
+    speakText('Door is open.', 'MEDIUM', {
+      cooldownKey: `door-open-repeat:${Math.floor(Date.now() / DOOR_OPEN_REPEAT_MS)}`,
+      cooldownMs: Math.max(1000, DOOR_OPEN_REPEAT_MS - 400),
+      tone: 'warning',
+      gapAfterMs: 320,
+    });
+  }, DOOR_OPEN_REPEAT_MS);
+}
+
+function clearDoorOpenVoiceLoop() {
+  clearInterval(S.doorOpenRepeatTimer);
+  S.doorOpenRepeatTimer = null;
+}
+
+function handleDoorStateTransition(previousCommand, nextCommand) {
+  if (previousCommand === nextCommand) return;
+  if (nextCommand === 'UNLOCK') {
+    speakText('Door is open.', 'MEDIUM', {
+      cooldownKey: 'door-open-transition',
+      cooldownMs: 1200,
+      tone: 'warning',
+      gapAfterMs: 320,
+    });
+    startDoorOpenVoiceLoop();
+    return;
+  }
+
+  clearDoorOpenVoiceLoop();
+  speakText('Door closed.', 'MEDIUM', {
+    cooldownKey: 'door-close-transition',
+    cooldownMs: 1200,
+    tone: 'info',
+    gapAfterMs: 220,
+  });
+}
+
 function buildDoorDetectionPayload(result) {
   const status = String(result?.status || '').toLowerCase();
-  const knownFace = result?.knownFace === true || ['granted', 'duplicate', 'cooldown'].includes(status);
+  const shouldOpenDoor = status === 'granted'
+    && Boolean(result?.userId || result?.name || result?.session?.userId);
   return {
     status,
-    knownFace,
-    forceLock: result?.forceLock === true || !knownFace,
+    knownFace: shouldOpenDoor,
+    forceLock: result?.forceLock === true || !shouldOpenDoor,
     name: typeof result?.name === 'string' ? result.name : null,
   };
 }
@@ -3343,7 +3391,12 @@ async function runScan(opts = {}) {
       renderSystemStatus();
     }
     if (opts.showToast || result.status === 'granted') {
-      toast(result.message||'Scan complete.', result.status==='granted'?'success':'warning');
+      toast(
+        result.status === 'granted'
+          ? buildAttendanceSuccessToast(result)
+          : (result.message || 'Scan complete.'),
+        result.status === 'granted' ? 'success' : 'warning',
+      );
     }
     return result;
   } catch (err) {
@@ -3650,6 +3703,13 @@ const TTS_PROFILE = Object.freeze({
   pitch: 1,
   volume: 1,
   lowRepeatMs: 5000,
+  gapAfterMs: 240,
+});
+const TTS_TONE = Object.freeze({
+  default: { rate: 0.92, pitch: 1, volume: 1 },
+  success: { rate: 0.94, pitch: 1.08, volume: 1 },
+  warning: { rate: 0.9, pitch: 0.92, volume: 1 },
+  info: { rate: 0.92, pitch: 1, volume: 1 },
 });
 const TTS_COOLDOWN_MS = Object.freeze({
   HIGH: 1200,
@@ -3777,6 +3837,8 @@ function speakText(text, priority = 'LOW', opts = {}) {
     priority: level,
     createdAt: Date.now(),
     cooldownKey,
+    tone: String(opts.tone || 'default').toLowerCase(),
+    gapAfterMs: Number.isFinite(Number(opts.gapAfterMs)) ? Number(opts.gapAfterMs) : TTS_PROFILE.gapAfterMs,
   });
   ttsQueue.sort((left, right) => {
     const priorityDelta = ttsPriority(right.priority) - ttsPriority(left.priority);
@@ -3793,6 +3855,7 @@ async function processTtsQueue() {
   while (ttsQueue.length) {
     const item = ttsQueue.shift();
     await doSpeak(item);
+    await sleep(item?.gapAfterMs);
   }
   ttsBusy = false;
   if (!activeSpeechResolver) setTtsMode('ready', buildTtsReadyText());
@@ -3919,6 +3982,11 @@ async function unlockAudioPlayback() {
 
 function ttsPriority(priority) {
   return ({ LOW: 1, MEDIUM: 2, HIGH: 3 }[String(priority || 'LOW').toUpperCase()] || 1);
+}
+
+function sleep(ms) {
+  const delay = Math.max(0, Number(ms || 0));
+  return delay ? new Promise(resolve => setTimeout(resolve, delay)) : Promise.resolve();
 }
 
 function populateSelects() {
@@ -4325,6 +4393,7 @@ function clearSess() {
   sessionStorage.removeItem(STORAGE_KEYS.token);
   scannedUsers.clear();
   clearDoorStatusPoll();
+  clearDoorOpenVoiceLoop();
   Object.assign(S, {
     token:'', activeTab:'liveOpsTab', currentUser:null, dashboard:null, users:[], slots:[],
     sessions:[], announcements:[], reports:null, memberDashboard:null, memberProfile:null,
@@ -4333,7 +4402,7 @@ function clearSess() {
     enrollmentZoom:1,
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
-    doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
+    doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, doorOpenRepeatTimer:null, lastDoorDetectionSignal:'',
     activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
@@ -4704,6 +4773,35 @@ function formatSpeechDuration(seconds) {
   return `${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}`;
 }
 
+function buildAttendanceSuccessToast(result) {
+  const name = String(result?.name || '').trim();
+  return name ? `Attendance marked successfully for ${name}.` : 'Attendance marked successfully.';
+}
+
+function queueAttendanceSuccessSpeech(result) {
+  const userId = String(result?.userId || result?.session?.userId || 'unknown').trim();
+  const scannedDay = localDateKey(result?.scannedAt || new Date().toISOString());
+  const name = speechName(result?.name || result?.session?.name || '');
+  const keyBase = `attendance-success:${userId}:${scannedDay}:${normalizeAttendanceAction(result?.attendanceAction) || 'none'}`;
+
+  speakText('Attendance marked successfully.', 'HIGH', {
+    cooldownKey: `${keyBase}:base`,
+    cooldownMs: 1500,
+    userId,
+    tone: 'success',
+    gapAfterMs: 340,
+  });
+
+  if (!name) return;
+  speakText(`Attendance marked for ${name}.`, 'MEDIUM', {
+    cooldownKey: `${keyBase}:name`,
+    cooldownMs: 1500,
+    userId,
+    tone: 'success',
+    gapAfterMs: 260,
+  });
+}
+
 function buildScanSpeechText(result) {
   const name = speechName(result?.name);
   const action = normalizeAttendanceAction(result?.attendanceAction);
@@ -4711,14 +4809,9 @@ function buildScanSpeechText(result) {
   const rawMessage = String(result?.message || '').trim();
 
   if (status === 'granted') {
-    if (action === 'OUT') {
-      return name
-        ? `${name}, your exit has been marked successfully. Have a good day.`
-        : 'Your exit has been marked successfully. Have a good day.';
-    }
-    return name
-      ? `Welcome, ${name}. Your attendance has been marked successfully.`
-      : 'Welcome. Your attendance has been marked successfully.';
+    return action === 'OUT'
+      ? 'Attendance marked successfully. Door closing sequence complete.'
+      : 'Attendance marked successfully.';
   }
 
   if (status === 'cooldown') {
@@ -4924,11 +5017,7 @@ function applyScanResult(r) {
   if (r.status === 'granted') {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
-    speakText(buildScanSpeechText(r), 'HIGH', {
-      cooldownKey: `granted:${r.userId || 'unknown'}:${r.attendanceAction || 'none'}:${localDateKey(r.scannedAt)}`,
-      cooldownMs: 1500,
-      userId: r.userId,
-    });
+    queueAttendanceSuccessSpeech(r);
 
     const resolvedUserId = String(
       r.userId || r.session?.userId || ''
@@ -5313,11 +5402,12 @@ function speakBrowser(text, item = null) {
     try {
       const utterance = new SpeechSynthesisUtterance(text);
       const voice = pickSpeechVoice(refreshSpeechVoices());
+      const tone = TTS_TONE[String(item?.tone || 'default').toLowerCase()] || TTS_TONE.default;
       utterance.voice = voice || null;
       utterance.lang = voice?.lang || TTS_PROFILE.lang;
-      utterance.rate = TTS_PROFILE.rate;
-      utterance.pitch = TTS_PROFILE.pitch;
-      utterance.volume = TTS_PROFILE.volume;
+      utterance.rate = tone.rate;
+      utterance.pitch = tone.pitch;
+      utterance.volume = tone.volume;
 
       const finish = ok => {
         if (activeSpeechResolver !== finish) return;
