@@ -12,14 +12,12 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 450;
-const REQUIRED_STABLE_DETECTIONS = 2;
+const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;
-const DOOR_OPEN_REPEAT_MS = 12000;
 const CAMERA_SEARCH_PREVIEW_ZOOM = 1.08;
 const MAX_PREVIEW_ZOOM = 2.6;
 const ENROLLMENT_ZOOM_STEP = 0.2;
@@ -37,11 +35,33 @@ const CAMERA_CONSTRAINT_SETS = Object.freeze([
     audio: false,
     video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      frameRate: { ideal: 15, max: 20 },
-      aspectRatio: { ideal: 4 / 3 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      aspectRatio: { ideal: 16 / 9 },
+      frameRate: { ideal: 24, max: 30 },
     },
+  },
+  {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'user' },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      aspectRatio: { ideal: 16 / 9 },
+      frameRate: { ideal: 24, max: 30 },
+    },
+  },
+  {
+    audio: false,
+    video: {
+      width: { ideal: 960 },
+      height: { ideal: 540 },
+      frameRate: { ideal: 24, max: 30 },
+    },
+  },
+  {
+    audio: false,
+    video: true,
   },
 ]);
 
@@ -120,8 +140,6 @@ const S = {
   doorUpdatedAt: null,
   doorStatusTimer: null,
   doorStatusSyncPromise: null,
-  doorOpenVoiceTimer: null,
-  lastDoorAnnouncement: '',
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
   enrollmentZoom: 1,
@@ -136,29 +154,6 @@ const S = {
 };
 
 const scannedUsers = new Map();
-const scanDebounceUsers = new Map();
-const stableDetectionCounter = {};
-let lastDetectionAt = 0;
-let frameCounter = 0;
-
-function resetStableDetectionCounters(exceptUserId = '') {
-  const keepId = String(exceptUserId || '').trim();
-  Object.keys(stableDetectionCounter).forEach((userId) => {
-    if (!keepId || userId !== keepId) {
-      delete stableDetectionCounter[userId];
-    }
-  });
-}
-
-setInterval(() => {
-  const now = Date.now();
-  scannedUsers.forEach((time, userId) => {
-    if ((now - Number(time || 0)) > 600000) {
-      scannedUsers.delete(userId);
-      delete stableDetectionCounter[userId];
-    }
-  });
-}, 60000);
 const lazyScriptPromises = Object.create(null);
 const selectRenderCache = {
   usersRef: null,
@@ -846,11 +841,9 @@ async function pingHealth() {
 }
 
 function applyDoorStateSnapshot(state) {
-  const previousCommand = S.doorCommand;
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
   updateDoorUi();
-  handleDoorVoiceStateChange(previousCommand, S.doorCommand);
 }
 
 function updateDoorUi() {
@@ -861,46 +854,6 @@ function updateDoorUi() {
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
   text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
-}
-
-function clearDoorOpenVoiceTimer() {
-  clearInterval(S.doorOpenVoiceTimer);
-  S.doorOpenVoiceTimer = null;
-}
-
-function speakDoorState(message, priority = 'MEDIUM', cooldownMs = 2500) {
-  speakText(message, priority, {
-    cooldownKey: `door:${message.toLowerCase()}`,
-    cooldownMs,
-  });
-}
-
-function startDoorOpenVoiceReminder() {
-  clearDoorOpenVoiceTimer();
-  S.doorOpenVoiceTimer = setInterval(() => {
-    if (S.doorCommand !== 'UNLOCK') {
-      clearDoorOpenVoiceTimer();
-      return;
-    }
-    speakDoorState('Door is open.', 'LOW', DOOR_OPEN_REPEAT_MS - 1000);
-  }, DOOR_OPEN_REPEAT_MS);
-}
-
-function handleDoorVoiceStateChange(previousCommand, nextCommand) {
-  if (nextCommand === previousCommand) return;
-
-  if (nextCommand === 'UNLOCK') {
-    S.lastDoorAnnouncement = 'open';
-    speakDoorState('Door is open.', 'MEDIUM', 2000);
-    startDoorOpenVoiceReminder();
-    return;
-  }
-
-  clearDoorOpenVoiceTimer();
-  if (previousCommand === 'UNLOCK') {
-    S.lastDoorAnnouncement = 'closed';
-    speakDoorState('Door closed.', 'LOW', 2000);
-  }
 }
 
 async function syncDoorState(opts = {}) {
@@ -939,7 +892,6 @@ function startDoorStatusPoll() {
 function clearDoorStatusPoll() {
   clearInterval(S.doorStatusTimer);
   S.doorStatusTimer = null;
-  clearDoorOpenVoiceTimer();
 }
 
 function buildDoorDetectionPayload(result) {
@@ -3059,43 +3011,13 @@ async function startLiveScan(opts = {}) {
   if (S.isScanning) return true;
   S.cameraRequested = true;
   S.scanMissStreak = 0;
-  clearPendingRecognition();
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
   setLiveDetection(null, { keepSearchZoom: true });
   document.querySelector('.scanner-panel')?.classList.add('is-live');
   clearInterval(S.scanLoopTimer);
-  frameCounter = 0;
-  S.scanLoopTimer = setInterval(async () => {
-    frameCounter += 1;
-
-    if ((frameCounter % 2) !== 0) {
-      return;
-    }
-
-    if (S.scanInFlight) {
-      return;
-    }
-
-    const now = Date.now();
-    if ((now - lastDetectionAt) < 700) {
-      return;
-    }
-
-    lastDetectionAt = now;
-    S.scanInFlight = true;
-
-    try {
-      const scanStart = performance.now();
-      await processLiveRecognition({ prelocked: true });
-      console.log('Scan time:', performance.now() - scanStart);
-    } catch (err) {
-      console.error('Live scan error:', err);
-    } finally {
-      S.scanInFlight = false;
-    }
-  }, LIVE_SCAN_INTERVAL);
+  S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
   setScanState('loading','Scanning...','Matching in browser and validating membership.');
   if (opts.toast) toast('Live scan started.','success');
@@ -3105,12 +3027,10 @@ async function startLiveScan(opts = {}) {
 
 function stopLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null;
-  frameCounter = 0;
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
-  clearPendingRecognition();
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
@@ -3168,8 +3088,6 @@ async function startCamera() {
     S.stream.getVideoTracks().forEach(track => {
       track.addEventListener('ended', handleCameraTrackEnded, { once: true });
     });
-    preview.muted = true;
-    preview.playsInline = true;
     await preview.play().catch(()=>{});
     const ready = await waitVideoReady(preview);
     if (!ready) throw new Error('Camera preview did not become ready.');
@@ -3206,18 +3124,9 @@ function waitVideoReady(video, ms = 3000) {
   if (video.videoWidth && video.videoHeight) return Promise.resolve(true);
   return new Promise(res => {
     const t = setTimeout(() => { cleanup(); res(false); }, ms);
-    function cleanup() {
-      clearTimeout(t);
-      video.removeEventListener('loadedmetadata', h);
-      video.removeEventListener('loadeddata', h);
-      video.removeEventListener('canplay', h);
-      video.removeEventListener('playing', h);
-    }
+    function cleanup() { clearTimeout(t); video.removeEventListener('loadeddata', h); video.removeEventListener('playing', h); }
     function h() { if (video.videoWidth && video.videoHeight) { cleanup(); res(true); } }
-    video.addEventListener('loadedmetadata', h);
-    video.addEventListener('loadeddata', h);
-    video.addEventListener('canplay', h);
-    video.addEventListener('playing', h);
+    video.addEventListener('loadeddata', h); video.addEventListener('playing', h);
   });
 }
 
@@ -3241,15 +3150,10 @@ function getCameraErrorMessage(err) {
   return err?.message || 'Cannot start camera.';
 }
 
-async function processLiveRecognition(opts = {}) {
-  if (!S.isScanning) return;
-  if (!opts.prelocked && S.scanInFlight) return;
-  if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
-  await runScan({ source: 'camera', showToast: false, prelocked: Boolean(opts.prelocked) });
-}
-
 async function runLiveCycle() {
-  await processLiveRecognition();
+  if (!S.isScanning || S.scanInFlight) return;
+  if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
+  await runScan({ source: 'camera', showToast: false });
 }
 
 function grabFrame(opts = {}) {
@@ -3313,13 +3217,11 @@ async function handleManualScan() {
 }
 
 async function runScan(opts = {}) {
-  if (S.scanInFlight && !opts.prelocked) return null;
+  if (S.scanInFlight) return null;
   const source = opts.source || (opts.image ? 'upload' : 'camera');
   const image = source === 'upload' ? (opts.image || S.scanImage || '') : '';
   if (source === 'upload' && !image) return null;
-  if (!opts.prelocked) {
-    S.scanInFlight = true;
-  }
+  S.scanInFlight = true;
   if (image) S.scanImage = image;
   renderConsole();
   setScanState('loading', 'Scanning...', 'Matching face in browser and validating access.');
@@ -3332,7 +3234,6 @@ async function runScan(opts = {}) {
       }
     }
     if (!probe?.detection) {
-      resetStableDetectionCounters();
       const result = buildClientScanResult({
         status: 'retry',
         message: probe?.message || 'No face detected. Align your face and try again.',
@@ -3351,8 +3252,7 @@ async function runScan(opts = {}) {
       S.recognitionThreshold
     );
 
-    if (!match?.matched || !match.user?.id || Number(match.distance || 1) > 0.38) {
-      resetStableDetectionCounters();
+    if (!match?.matched || !match.user?.id) {
       const result = buildClientScanResult({
         status: 'unknown',
         message: 'Unknown face. No enrolled member matched this scan.',
@@ -3369,16 +3269,15 @@ async function runScan(opts = {}) {
       return result;
     }
 
-    const userId = String(match.user.id || '').trim();
-    const userRecord = getUserRecord(userId) || match.user;
-    if (!canScan(userId)) {
+    const userRecord = getUserRecord(match.user.id) || match.user;
+    if (!canScan(match.user.id)) {
       return null;
     }
 
-    const attendanceRecord = getAttendanceRecord(userId);
-    const action = inferAttendanceAction(userId);
+    const attendanceRecord = getAttendanceRecord(match.user.id);
+    const action = inferAttendanceAction(match.user.id);
 
-    const localCooldown = getCooldownInfo(userId, action);
+    const localCooldown = getCooldownInfo(match.user.id, action);
     if (localCooldown.remainingMs > 0) {
       const result = buildClientScanResult({
         status: 'cooldown',
@@ -3392,7 +3291,7 @@ async function runScan(opts = {}) {
         captureMode: probe.detection.captureMode,
         zoomFactor: probe.detection.recommendedZoom,
         source,
-        userId,
+        userId: match.user.id,
       });
       S.scanResult = result;
       renderScanResult();
@@ -3401,28 +3300,10 @@ async function runScan(opts = {}) {
       return result;
     }
 
-    stableDetectionCounter[userId] = (stableDetectionCounter[userId] || 0) + 1;
-    resetStableDetectionCounters(userId);
-    if (stableDetectionCounter[userId] < REQUIRED_STABLE_DETECTIONS) {
-      setScanState('loading', 'Confirming face...', `Stable detection ${stableDetectionCounter[userId]}/${REQUIRED_STABLE_DETECTIONS}`, 'Confirm');
-      return null;
-    }
-
-    const now = Date.now();
-    if (scannedUsers.has(userId)) {
-      const lastScan = Number(scannedUsers.get(userId) || 0);
-      if ((now - lastScan) < 45000) {
-        setScanState('detected', 'Cooldown Active', 'This member was already marked recently.', 'Cooldown');
-        stableDetectionCounter[userId] = 0;
-        return null;
-      }
-    }
-    scannedUsers.set(userId, now);
-
     const backendResult = await api('/attendance', {
       method:'POST',
       body:{
-        userId,
+        userId: match.user.id,
         action,
         area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
         confidence: match.confidence,
@@ -3442,18 +3323,15 @@ async function runScan(opts = {}) {
       captureMode: probe.detection.captureMode,
       zoomFactor: probe.detection.recommendedZoom,
       source,
-      userId: userId || match.user?.userId || null,
+      userId: match.user.id || match.user?.userId || null,
     });
     if (result.status === 'granted' && result.attendanceAction) {
-      stableDetectionCounter[userId] = 0;
-      recordAttendanceAction(userId, result.attendanceAction, result.scannedAt, result.name);
-      updateLocalUserAttendance(userId, result.attendanceAction, result.scannedAt);
+      recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
+      updateLocalUserAttendance(match.user.id, result.attendanceAction, result.scannedAt);
     } else if (result.status === 'cooldown') {
-      stableDetectionCounter[userId] = 0;
       syncCooldownFromResult(result, action);
     } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
-      stableDetectionCounter[userId] = 0;
-      recordAttendanceAction(userId, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
+      recordAttendanceAction(match.user.id, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
     }
     S.scanResult = result;
     renderScanResult();
@@ -3469,14 +3347,11 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    resetStableDetectionCounters();
     setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
-    if (!opts.prelocked) {
-      S.scanInFlight = false;
-    }
+    S.scanInFlight = false;
     if (S.cameraRequested && !streamHasActiveVideo(S.stream)) {
       startCamera().catch(console.error);
     }
@@ -3902,7 +3777,6 @@ function speakText(text, priority = 'LOW', opts = {}) {
     priority: level,
     createdAt: Date.now(),
     cooldownKey,
-    gapAfterMs: Math.max(0, Number(opts.gapAfterMs || 250)),
   });
   ttsQueue.sort((left, right) => {
     const priorityDelta = ttsPriority(right.priority) - ttsPriority(left.priority);
@@ -3919,9 +3793,6 @@ async function processTtsQueue() {
   while (ttsQueue.length) {
     const item = ttsQueue.shift();
     await doSpeak(item);
-    if (item?.gapAfterMs) {
-      await new Promise(resolve => setTimeout(resolve, Number(item.gapAfterMs || 0)));
-    }
   }
   ttsBusy = false;
   if (!activeSpeechResolver) setTtsMode('ready', buildTtsReadyText());
@@ -4453,8 +4324,6 @@ async function doorUnlockFor5s() {
 function clearSess() {
   sessionStorage.removeItem(STORAGE_KEYS.token);
   scannedUsers.clear();
-  scanDebounceUsers.clear();
-  Object.keys(stableDetectionCounter).forEach(key => delete stableDetectionCounter[key]);
   clearDoorStatusPoll();
   Object.assign(S, {
     token:'', activeTab:'liveOpsTab', currentUser:null, dashboard:null, users:[], slots:[],
@@ -4465,7 +4334,6 @@ function clearSess() {
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
     doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
-    doorOpenVoiceTimer:null, lastDoorAnnouncement:'',
     activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
@@ -4688,11 +4556,11 @@ function canScan(userId) {
   const id = String(userId || '').trim();
   if (!id) return false;
   const now = Date.now();
-  const last = scanDebounceUsers.get(id);
+  const last = scannedUsers.get(id);
   if (last && (now - last) < FACE_SCAN_DEBOUNCE_MS) return false;
-  scanDebounceUsers.set(id, now);
-  scanDebounceUsers.forEach((value, key) => {
-    if ((now - value) >= FACE_SCAN_DEBOUNCE_MS) scanDebounceUsers.delete(key);
+  scannedUsers.set(id, now);
+  scannedUsers.forEach((value, key) => {
+    if ((now - value) >= FACE_SCAN_DEBOUNCE_MS) scannedUsers.delete(key);
   });
   return true;
 }
@@ -5050,26 +4918,15 @@ function maybeSpeakDuplicate(result) {
   });
 }
 
-function buildAttendanceSuccessSpeech(result) {
-  const action = normalizeAttendanceAction(result?.attendanceAction);
-  const name = speechName(result?.name);
-  if (action === 'OUT') {
-    return name ? `Exit marked for ${name}.` : 'Exit marked successfully.';
-  }
-  return name ? `Attendance marked for ${name}.` : 'Attendance marked successfully.';
-}
-
 function applyScanResult(r) {
   queueDoorDetectionSync(r);
   const detail = r.name ? `${r.name} - ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
   if (r.status === 'granted') {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
-    toast(isExit ? 'Exit marked successfully.' : 'Attendance marked successfully.', 'success');
-    speakText(buildAttendanceSuccessSpeech(r), 'HIGH', {
+    speakText(buildScanSpeechText(r), 'HIGH', {
       cooldownKey: `granted:${r.userId || 'unknown'}:${r.attendanceAction || 'none'}:${localDateKey(r.scannedAt)}`,
       cooldownMs: 1500,
-      gapAfterMs: 300,
       userId: r.userId,
     });
 
