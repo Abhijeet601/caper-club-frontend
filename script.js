@@ -18,6 +18,7 @@ const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;
+const DOOR_OPEN_REPEAT_MS = 12000;
 const CAMERA_SEARCH_PREVIEW_ZOOM = 1.08;
 const MAX_PREVIEW_ZOOM = 2.6;
 const ENROLLMENT_ZOOM_STEP = 0.2;
@@ -140,6 +141,8 @@ const S = {
   doorUpdatedAt: null,
   doorStatusTimer: null,
   doorStatusSyncPromise: null,
+  doorOpenVoiceTimer: null,
+  lastDoorAnnouncement: '',
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
   enrollmentZoom: 1,
@@ -841,9 +844,11 @@ async function pingHealth() {
 }
 
 function applyDoorStateSnapshot(state) {
+  const previousCommand = S.doorCommand;
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
   updateDoorUi();
+  handleDoorVoiceStateChange(previousCommand, S.doorCommand);
 }
 
 function updateDoorUi() {
@@ -854,6 +859,46 @@ function updateDoorUi() {
   const unlocked = S.doorCommand === 'UNLOCK';
   dot.className = `status-dot ${unlocked ? 'online' : 'alert'}`;
   text.textContent = unlocked ? 'Door: OPEN' : 'Door: LOCKED';
+}
+
+function clearDoorOpenVoiceTimer() {
+  clearInterval(S.doorOpenVoiceTimer);
+  S.doorOpenVoiceTimer = null;
+}
+
+function speakDoorState(message, priority = 'MEDIUM', cooldownMs = 2500) {
+  speakText(message, priority, {
+    cooldownKey: `door:${message.toLowerCase()}`,
+    cooldownMs,
+  });
+}
+
+function startDoorOpenVoiceReminder() {
+  clearDoorOpenVoiceTimer();
+  S.doorOpenVoiceTimer = setInterval(() => {
+    if (S.doorCommand !== 'UNLOCK') {
+      clearDoorOpenVoiceTimer();
+      return;
+    }
+    speakDoorState('Door is open.', 'LOW', DOOR_OPEN_REPEAT_MS - 1000);
+  }, DOOR_OPEN_REPEAT_MS);
+}
+
+function handleDoorVoiceStateChange(previousCommand, nextCommand) {
+  if (nextCommand === previousCommand) return;
+
+  if (nextCommand === 'UNLOCK') {
+    S.lastDoorAnnouncement = 'open';
+    speakDoorState('Door is open.', 'MEDIUM', 2000);
+    startDoorOpenVoiceReminder();
+    return;
+  }
+
+  clearDoorOpenVoiceTimer();
+  if (previousCommand === 'UNLOCK') {
+    S.lastDoorAnnouncement = 'closed';
+    speakDoorState('Door closed.', 'LOW', 2000);
+  }
 }
 
 async function syncDoorState(opts = {}) {
@@ -892,6 +937,7 @@ function startDoorStatusPoll() {
 function clearDoorStatusPoll() {
   clearInterval(S.doorStatusTimer);
   S.doorStatusTimer = null;
+  clearDoorOpenVoiceTimer();
 }
 
 function buildDoorDetectionPayload(result) {
@@ -3777,6 +3823,7 @@ function speakText(text, priority = 'LOW', opts = {}) {
     priority: level,
     createdAt: Date.now(),
     cooldownKey,
+    gapAfterMs: Math.max(0, Number(opts.gapAfterMs || 250)),
   });
   ttsQueue.sort((left, right) => {
     const priorityDelta = ttsPriority(right.priority) - ttsPriority(left.priority);
@@ -3793,6 +3840,9 @@ async function processTtsQueue() {
   while (ttsQueue.length) {
     const item = ttsQueue.shift();
     await doSpeak(item);
+    if (item?.gapAfterMs) {
+      await new Promise(resolve => setTimeout(resolve, Number(item.gapAfterMs || 0)));
+    }
   }
   ttsBusy = false;
   if (!activeSpeechResolver) setTtsMode('ready', buildTtsReadyText());
@@ -4334,6 +4384,7 @@ function clearSess() {
     cameraRequested:false, cameraRestarting:false, scanState:'idle', scanPill:'Idle',
     liveDetection:null, cameraZoom:1,
     doorCommand:'LOCK', doorUpdatedAt:null, doorStatusSyncPromise:null, lastDoorDetectionSignal:'',
+    doorOpenVoiceTimer:null, lastDoorAnnouncement:'',
     activeSessionsRenderKey:'', scanMissStreak:0,
     scanStatusText:'Live scanner is offline', scanStatusDetail:'Enable Live Scan to start.',
     cooldowns: loadCooldownStore(), cooldownVoiceAt: {},
@@ -4918,15 +4969,26 @@ function maybeSpeakDuplicate(result) {
   });
 }
 
+function buildAttendanceSuccessSpeech(result) {
+  const action = normalizeAttendanceAction(result?.attendanceAction);
+  const name = speechName(result?.name);
+  if (action === 'OUT') {
+    return name ? `Exit marked for ${name}.` : 'Exit marked successfully.';
+  }
+  return name ? `Attendance marked for ${name}.` : 'Attendance marked successfully.';
+}
+
 function applyScanResult(r) {
   queueDoorDetectionSync(r);
   const detail = r.name ? `${r.name} - ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
   if (r.status === 'granted') {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
-    speakText(buildScanSpeechText(r), 'HIGH', {
+    toast(isExit ? 'Exit marked successfully.' : 'Attendance marked successfully.', 'success');
+    speakText(buildAttendanceSuccessSpeech(r), 'HIGH', {
       cooldownKey: `granted:${r.userId || 'unknown'}:${r.attendanceAction || 'none'}:${localDateKey(r.scannedAt)}`,
       cooldownMs: 1500,
+      gapAfterMs: 300,
       userId: r.userId,
     });
 
