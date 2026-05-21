@@ -37,6 +37,9 @@ const FAST_TRACK_MATCH_DISTANCE = 0.34;
 const FAST_TRACK_MIN_MARGIN = 0.08;
 const FAST_TRACK_MIN_DETECTION_SCORE = 0.78;
 const FAST_TRACK_MIN_FACE_RATIO = 0.18;
+const BORDERLINE_MATCH_DISTANCE = 0.365;
+const BORDERLINE_MATCH_MARGIN = 0.075;
+const ATTENDANCE_API_TIMEOUT_MS = 2500;
 const SCAN_PROCESS_EVERY_N_TICKS = 3;
 const MIN_SCAN_PROCESS_GAP_MS = 260;
 const ATTENDANCE_SUBMIT_DEDUPE_MS = 4000;
@@ -3467,6 +3470,14 @@ function requiredStableMatchesForDetection(match, detection) {
   if (shouldFastTrackRecognition(match, detection)) {
     return 1;
   }
+  if (
+    Number(match?.distance || 1) >= BORDERLINE_MATCH_DISTANCE
+    || Number(match?.sampleMeanDistance || 1) >= Number((match?.adaptiveThreshold || STRICT_MATCH_DISTANCE) + 0.01)
+    || Number(match?.margin || 0) < BORDERLINE_MATCH_MARGIN
+    || detection?.livenessPassed === false
+  ) {
+    return 2;
+  }
   const captureMode = String(detection?.captureMode || '').toLowerCase();
   if (captureMode === 'center-zoom') {
     return REQUIRED_STABLE_MATCHES_LONG_RANGE;
@@ -3486,8 +3497,23 @@ function validateRecognitionAttempt(match, detection) {
     return 'Face match is weak. Move closer and try again.';
   }
 
+  if (
+    Number(match.sampleMeanDistance || 1) > Number((match.adaptiveThreshold || STRICT_MATCH_DISTANCE) + 0.02)
+    && Number(match.sampleCount || 0) >= 3
+  ) {
+    return 'Face match is inconsistent. Please look straight at the camera and try again.';
+  }
+
   if (match.margin != null && Number(match.margin) < STRICT_MATCH_MARGIN) {
     return 'Face match is too close to another member. Hold still and try again.';
+  }
+
+  if (
+    detection?.livenessPassed === false
+    && Number(match.distance || 1) >= BORDERLINE_MATCH_DISTANCE
+    && Number(match.margin || 0) < 0.1
+  ) {
+    return 'Please blink once and look directly at the camera.';
   }
 
   if (Number(detection?.score || 0) < MIN_DETECTION_SCORE) {
@@ -3753,6 +3779,7 @@ async function runScan(opts = {}) {
     markAttendanceSubmit(match.user.id, action);
     const backendResult = await api('/attendance', {
       method:'POST',
+      timeoutMs: ATTENDANCE_API_TIMEOUT_MS,
       body:{
         userId: match.user.id,
         action,
@@ -3822,7 +3849,8 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
+    const timedOut = err?.name === 'AbortError' || /timeout/i.test(String(err?.message || ''));
+    setScanState('denied', timedOut ? 'Backend Slow' : 'Access Denied', timedOut ? 'Attendance request took too long. Please try again.' : (err?.message || 'Scan failed.'));
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
@@ -4495,8 +4523,20 @@ function fillSelect(sel, items, opts = {}) {
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers||{}) };
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
+  let timeoutId = null;
+  let timeoutController = null;
   if (S.token) headers.Authorization = `Bearer ${S.token}`;
   if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+  if (opts.signal) init.signal = opts.signal;
+  if (Number(opts.timeoutMs || 0) > 0) {
+    timeoutController = new AbortController();
+    timeoutId = setTimeout(() => timeoutController.abort(new Error('Request timeout')), Number(opts.timeoutMs));
+    if (init.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function') {
+      init.signal = AbortSignal.any([init.signal, timeoutController.signal]);
+    } else {
+      init.signal = timeoutController.signal;
+    }
+  }
   let res;
   try {
     res = await fetch(`${S.apiBase}${path}`, init);
@@ -4506,6 +4546,8 @@ async function api(path, opts = {}) {
       updateHealthUi();
     }
     throw error;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
   if (!S.healthOk) {
     S.healthOk = true;
