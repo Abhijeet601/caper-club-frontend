@@ -1,10 +1,9 @@
 (function initFaceAi(global) {
   'use strict';
 
-  const DEFAULT_THRESHOLD = 0.42;
-  const STRONG_MATCH_THRESHOLD = 0.38;
-  const MIN_ATTENDANCE_CONFIDENCE = 0.55;
-  const MIN_MATCH_MARGIN = 0.04;
+  const DEFAULT_THRESHOLD = 0.47;
+  const STRONG_MATCH_THRESHOLD = 0.42;
+  const MIN_MATCH_MARGIN = 0.045;
   const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
     Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
@@ -37,18 +36,8 @@
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
   const MAX_RECOMMENDED_ZOOM = 2.6;
-  const FAST_VIDEO_ACCEPT_SCORE = 0.82;
-  const FAST_VIDEO_ACCEPT_FACE_RATIO = 0.19;
-  const VIDEO_PROCESSING_LONG_EDGE = 640;
-  const VIDEO_HINT_PROCESSING_LONG_EDGE = 560;
-  const LOW_LIGHT_BRIGHTNESS = 72;
-  const HIGH_LIGHT_BRIGHTNESS = 212;
-  const MIN_BLUR_SCORE = 10;
-  const BLINK_EAR_THRESHOLD = 0.19;
   const DETECTOR_OPTIONS_CACHE = new Map();
   const USER_DESCRIPTOR_CACHE = new WeakMap();
-  let SHARED_VIDEO_CANVAS = null;
-  let SHARED_ANALYSIS_CANVAS = null;
 
   function ensureFaceApi() {
     if (!global.faceapi) {
@@ -143,19 +132,6 @@
     return canvas;
   }
 
-  function getSharedCanvas(kind, width, height) {
-    const nextWidth = Math.max(1, Math.round(width));
-    const nextHeight = Math.max(1, Math.round(height));
-    const current = kind === 'analysis' ? SHARED_ANALYSIS_CANVAS : SHARED_VIDEO_CANVAS;
-    if (!current || current.width !== nextWidth || current.height !== nextHeight) {
-      const canvas = createCanvas(nextWidth, nextHeight);
-      if (kind === 'analysis') SHARED_ANALYSIS_CANVAS = canvas;
-      else SHARED_VIDEO_CANVAS = canvas;
-      return canvas;
-    }
-    return current;
-  }
-
   function buildCenterCrop(width, height, pass) {
     const cropWidth = width / Number(pass.zoom || 1);
     const cropHeight = height / Number(pass.zoom || 1);
@@ -202,96 +178,6 @@
     return canvas;
   }
 
-  function drawScaledSurface(input, sourceWidth, sourceHeight, targetLongEdge) {
-    const longestEdge = Math.max(sourceWidth, sourceHeight);
-    const desiredEdge = Number(targetLongEdge || longestEdge);
-    const scale = clamp(desiredEdge / longestEdge, 0.35, 1);
-    const canvas = getSharedCanvas('video', sourceWidth * scale, sourceHeight * scale);
-    const context = canvas.getContext('2d', { alpha: false, willReadFrequently: false });
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = 'medium';
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(input, 0, 0, canvas.width, canvas.height);
-    return canvas;
-  }
-
-  function computeEyeAspectRatio(points) {
-    if (!Array.isArray(points) || points.length < 6) return 0;
-    const dist = (a, b) => Math.hypot(Number(a.x || 0) - Number(b.x || 0), Number(a.y || 0) - Number(b.y || 0));
-    const vertical = dist(points[1], points[5]) + dist(points[2], points[4]);
-    const horizontal = dist(points[0], points[3]) || 1;
-    return vertical / (2 * horizontal);
-  }
-
-  function analyzeFaceSurface(input, faceBox, landmarks) {
-    if (!input || !faceBox) {
-      return {
-        brightness: 0,
-        blurScore: 0,
-        eyeAspectRatio: 0,
-        blinkDetected: false,
-        lowLight: false,
-      };
-    }
-
-    const sourceWidth = Number(input.width || input.videoWidth || 0);
-    const sourceHeight = Number(input.height || input.videoHeight || 0);
-    if (!sourceWidth || !sourceHeight) {
-      return {
-        brightness: 0,
-        blurScore: 0,
-        eyeAspectRatio: 0,
-        blinkDetected: false,
-        lowLight: false,
-      };
-    }
-
-    const cropWidth = clamp(Math.round(Number(faceBox.width || 0) * sourceWidth * 1.25), 24, sourceWidth);
-    const cropHeight = clamp(Math.round(Number(faceBox.height || 0) * sourceHeight * 1.25), 24, sourceHeight);
-    const centerX = Math.round((Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2)) * sourceWidth);
-    const centerY = Math.round((Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2)) * sourceHeight);
-    const sx = clamp(centerX - Math.round(cropWidth / 2), 0, sourceWidth - cropWidth);
-    const sy = clamp(centerY - Math.round(cropHeight / 2), 0, sourceHeight - cropHeight);
-
-    const canvas = getSharedCanvas('analysis', 40, 40);
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(input, sx, sy, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-
-    let brightnessTotal = 0;
-    let edgeTotal = 0;
-    let lastGray = 0;
-    for (let index = 0; index < imageData.length; index += 4) {
-      const red = imageData[index];
-      const green = imageData[index + 1];
-      const blue = imageData[index + 2];
-      const gray = (0.299 * red) + (0.587 * green) + (0.114 * blue);
-      brightnessTotal += gray;
-      if (index > 0) {
-        edgeTotal += Math.abs(gray - lastGray);
-      }
-      lastGray = gray;
-    }
-
-    const brightness = Number((brightnessTotal / (canvas.width * canvas.height)).toFixed(1));
-    const blurScore = Number((edgeTotal / ((canvas.width * canvas.height) - 1)).toFixed(1));
-    const leftEye = typeof landmarks?.getLeftEye === 'function' ? landmarks.getLeftEye() : null;
-    const rightEye = typeof landmarks?.getRightEye === 'function' ? landmarks.getRightEye() : null;
-    const leftEar = computeEyeAspectRatio(leftEye);
-    const rightEar = computeEyeAspectRatio(rightEye);
-    const eyeAspectRatio = Number((((leftEar + rightEar) / 2) || 0).toFixed(3));
-
-    return {
-      brightness,
-      blurScore,
-      eyeAspectRatio,
-      blinkDetected: eyeAspectRatio > 0 && eyeAspectRatio <= BLINK_EAR_THRESHOLD,
-      lowLight: brightness < LOW_LIGHT_BRIGHTNESS,
-      overLit: brightness > HIGH_LIGHT_BRIGHTNESS,
-    };
-  }
-
   function detectionRank(detection, width, height) {
     const box = detection?.detection?.box;
     if (!box || !width || !height) return -1;
@@ -326,13 +212,6 @@
 
   function shouldPrefer(next, current) {
     return qualityScore(next) > (qualityScore(current) + 0.015);
-  }
-
-  function isFastVideoAcceptance(detection) {
-    if (!detection) return false;
-    if (String(detection.captureMode || '') !== 'video-frame') return false;
-    return Number(detection.score || 0) >= FAST_VIDEO_ACCEPT_SCORE
-      && Number(detection.faceRatio || 0) >= FAST_VIDEO_ACCEPT_FACE_RATIO;
   }
 
   async function loadModels(modelPath) {
@@ -393,18 +272,15 @@
 
     const surfaceWidth = Number(meta?.surfaceWidth || sourceWidth || 1);
     const surfaceHeight = Number(meta?.surfaceHeight || sourceHeight || 1);
-    const faceBox = meta?.region
-      ? mapBoxToSource(
-        bestDetection.detection.box,
-        sourceWidth,
-        sourceHeight,
-        meta.region,
-        surfaceWidth,
-        surfaceHeight,
-      )
-      : normalizeBox(bestDetection.detection.box, surfaceWidth, surfaceHeight);
+    const faceBox = mapBoxToSource(
+      bestDetection.detection.box,
+      sourceWidth,
+      sourceHeight,
+      meta?.region || null,
+      surfaceWidth,
+      surfaceHeight,
+    );
     const faceRatio = faceRatioFromBox(faceBox);
-    const surfaceQuality = analyzeFaceSurface(meta?.analysisInput || meta?.surfaceInput || null, faceBox, bestDetection?.landmarks);
 
     return {
       descriptor,
@@ -415,12 +291,6 @@
       recommendedZoom: recommendZoom(faceRatio),
       captureMode: String(meta?.captureMode || meta?.label || 'full-frame'),
       detectorPass: String(meta?.label || 'full-frame'),
-      brightness: surfaceQuality.brightness,
-      blurScore: surfaceQuality.blurScore,
-      eyeAspectRatio: surfaceQuality.eyeAspectRatio,
-      blinkDetected: surfaceQuality.blinkDetected,
-      lowLight: surfaceQuality.lowLight,
-      overLit: surfaceQuality.overLit,
     };
   }
 
@@ -437,8 +307,6 @@
         ...meta,
         surfaceWidth: surfaceDimensions.width,
         surfaceHeight: surfaceDimensions.height,
-        surfaceInput: input,
-        analysisInput: input,
         label: pass.label,
       });
       if (!payload) continue;
@@ -501,15 +369,11 @@
     if (!dimensions.width || !dimensions.height) return null;
 
     if (opts.videoMode) {
-      const processingLongEdge = opts.hintBox ? VIDEO_HINT_PROCESSING_LONG_EDGE : VIDEO_PROCESSING_LONG_EDGE;
-      const videoSurface = drawScaledSurface(input, dimensions.width, dimensions.height, processingLongEdge);
-      const workingWidth = Number(videoSurface.width || dimensions.width);
-      const workingHeight = Number(videoSurface.height || dimensions.height);
       let detection = null;
       const recoveryMode = Boolean(opts.recoveryMode);
 
       if (opts.hintBox) {
-        detection = await refineSmallFace(videoSurface, workingWidth, workingHeight, { faceBox: opts.hintBox }, {
+        detection = await refineSmallFace(input, dimensions.width, dimensions.height, { faceBox: opts.hintBox }, {
           pass: VIDEO_FOCUS_PASS,
           targetLongEdge: 512,
           captureMode: 'focus-lock',
@@ -518,18 +382,14 @@
       }
 
       if (!detection) {
-        detection = await detectOnSurface(videoSurface, workingWidth, workingHeight, recoveryMode ? VIDEO_RECOVERY_PASSES : VIDEO_FULL_FRAME_PASSES, {
+        detection = await detectOnSurface(input, dimensions.width, dimensions.height, recoveryMode ? VIDEO_RECOVERY_PASSES : VIDEO_FULL_FRAME_PASSES, {
           captureMode: 'video-frame',
           single: true,
         });
       }
 
-      if (isFastVideoAcceptance(detection)) {
-        return detection;
-      }
-
       if (!detection && opts.allowLongRange !== false) {
-        detection = await detectLongRangeCandidate(videoSurface, workingWidth, workingHeight, {
+        detection = await detectLongRangeCandidate(input, dimensions.width, dimensions.height, {
           passes: VIDEO_CENTER_CROP_PASSES,
           targetLongEdge: 640,
           captureMode: 'center-zoom',
@@ -538,7 +398,7 @@
       }
 
       if (detection && detection.captureMode !== 'focus-lock' && detection.faceRatio < SMALL_FACE_RATIO) {
-        const refined = await refineSmallFace(videoSurface, workingWidth, workingHeight, detection, {
+        const refined = await refineSmallFace(input, dimensions.width, dimensions.height, detection, {
           pass: VIDEO_FOCUS_PASS,
           targetLongEdge: 512,
           captureMode: 'focus-lock',
@@ -697,23 +557,17 @@
     const runnerUp = ranked.find(candidate => String(candidate.user?.id || '') !== String(best.user?.id || '')) || null;
     const secondDistance = runnerUp?.distance ?? Number.POSITIVE_INFINITY;
     const margin = secondDistance - best.distance;
-    const supportBoost = Math.min(0.02, Math.max(0, best.supportCount - 1) * 0.006);
-    const sampleMeanBoost = best.sampleMeanDistance <= (threshold + 0.015) ? 0.008 : 0;
-    const adaptiveThreshold = Math.min(0.47, threshold + supportBoost + sampleMeanBoost);
-    const adaptiveStrongThreshold = Math.min(0.43, STRONG_MATCH_THRESHOLD + (supportBoost * 0.7));
-    const confidence = distanceToConfidence(best.distance);
-    const strongMatch = best.distance <= adaptiveStrongThreshold;
-    const separated = !Number.isFinite(secondDistance) || margin >= Math.max(0.04, MIN_MATCH_MARGIN - (supportBoost * 0.5));
-    const sampleSupported = !best.hasSampleSet || best.supportCount >= 1 || strongMatch;
-    const confidenceQualified = confidence >= MIN_ATTENDANCE_CONFIDENCE;
-    const matched = best.distance <= adaptiveThreshold && sampleSupported && (strongMatch || separated || confidenceQualified);
+    const strongMatch = best.distance <= STRONG_MATCH_THRESHOLD;
+    const separated = !Number.isFinite(secondDistance) || margin >= MIN_MATCH_MARGIN;
+    const sampleSupported = !best.hasSampleSet || best.supportCount >= 2 || strongMatch;
+    const matched = best.distance <= threshold && sampleSupported && (strongMatch || separated);
     let reason = '';
 
-    if (best.distance > adaptiveThreshold) {
+    if (best.distance > threshold) {
       reason = 'distance';
     } else if (!sampleSupported) {
       reason = 'sample-support';
-    } else if (!strongMatch && !separated && !confidenceQualified) {
+    } else if (!strongMatch && !separated) {
       reason = 'ambiguous';
     }
 
@@ -725,8 +579,7 @@
       sampleMeanDistance: Number(best.sampleMeanDistance.toFixed(4)),
       sampleSupport: best.supportCount,
       sampleCount: best.sampleCount,
-      confidence,
-      adaptiveThreshold: Number(adaptiveThreshold.toFixed(4)),
+      confidence: distanceToConfidence(best.distance),
       matched,
       reason,
     };

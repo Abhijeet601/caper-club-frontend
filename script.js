@@ -12,9 +12,8 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 80;
+const LIVE_SCAN_INTERVAL = 650;
 const DOOR_STATUS_POLL_MS = 3000;
-const DOOR_OPEN_WARNING_INTERVAL_MS = 8000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
@@ -26,31 +25,6 @@ const DEFAULT_CAMERA_FOCUS_X = 0.5;
 const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
 const STARTUP_IDLE_TIMEOUT_MS = 1200;
-const STABLE_MATCH_WINDOW_MS = 3500;
-const REQUIRED_STABLE_MATCHES = 1;
-const REQUIRED_STABLE_MATCHES_LONG_RANGE = 1;
-const STRICT_MATCH_DISTANCE = 0.46;
-const STRICT_MATCH_MARGIN = 0.04;
-const MIN_DETECTION_SCORE = 0.50;
-const MIN_FACE_RATIO = 0.10;
-const FAST_TRACK_MATCH_DISTANCE = 0.40;
-const FAST_TRACK_MIN_MARGIN = 0.05;
-const FAST_TRACK_MIN_DETECTION_SCORE = 0.65;
-const FAST_TRACK_MIN_FACE_RATIO = 0.12;
-const MIN_ATTENDANCE_CONFIDENCE = 0.55;
-const BORDERLINE_MATCH_DISTANCE = 0.44;
-const BORDERLINE_MATCH_MARGIN = 0.04;
-const ATTENDANCE_API_TIMEOUT_MS = 2500;
-const SCAN_PROCESS_EVERY_N_TICKS = 1;
-const MIN_SCAN_PROCESS_GAP_MS = 180;
-const ATTENDANCE_SUBMIT_DEDUPE_MS = 4000;
-const FACE_CROP_OUTPUT_SIZE = 224;
-const FACE_CROP_JPEG_QUALITY = 0.72;
-const AUTO_RESET_AFTER_SUCCESS_MS = 1400;
-const MIN_SCAN_BRIGHTNESS = 40;
-const MAX_SCAN_BRIGHTNESS = 240;
-const MIN_SCAN_BLUR_SCORE = 5;
-const BLINK_LIVENESS_WINDOW_MS = 2200;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -61,20 +35,20 @@ const CAMERA_CONSTRAINT_SETS = Object.freeze([
     audio: false,
     video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 960 },
-      height: { ideal: 540 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
       aspectRatio: { ideal: 16 / 9 },
-      frameRate: { ideal: 20, max: 24 },
+      frameRate: { ideal: 24, max: 30 },
     },
   },
   {
     audio: false,
     video: {
       facingMode: { ideal: 'user' },
-      width: { ideal: 960 },
-      height: { ideal: 540 },
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
       aspectRatio: { ideal: 16 / 9 },
-      frameRate: { ideal: 20, max: 24 },
+      frameRate: { ideal: 24, max: 30 },
     },
   },
   {
@@ -153,22 +127,12 @@ const S = {
   cameraRequested: false, cameraRestarting: false,
   liveDetection: null, cameraZoom: 1,
   faceModelsReady: false, faceModelsLoading: false, faceModelsError: '',
-  faceUsers: [], recognitionThreshold: window.FaceAi?.DEFAULT_THRESHOLD || 0.42,
+  faceUsers: [], recognitionThreshold: window.FaceAi?.DEFAULT_THRESHOLD || 0.56,
   scanState: 'idle', scanPill: 'Idle',
   scanStatusText: 'Live scanner is offline',
   scanStatusDetail: 'Enable Live Scan to start face recognition.',
-  scanTickCount: 0,
-  lastScanProcessAt: 0,
-  lastBlinkAt: 0,
-  lastFaceSignature: '',
-  lastSubmissionKey: '',
-  lastSubmissionAt: 0,
-  lastScanResultKey: '',
-  lastConsoleKey: '',
-  scanResetTimer: null,
   cooldowns: loadCooldownStore(),
   cooldownVoiceAt: {},
-  pendingRecognition: null,
   activeSessions: {},        // { userId: { sessionId, startTime, deadlineTime, duration, name, announced5, announcedEnd } }
   activeSessionsRenderKey: '',
   sessionTimerLoop: null,
@@ -176,7 +140,6 @@ const S = {
   doorUpdatedAt: null,
   doorStatusTimer: null,
   doorStatusSyncPromise: null,
-  doorOpenWarningTimer: null,
   lastDoorDetectionSignal: '',
   enrollmentImages: [],
   enrollmentZoom: 1,
@@ -877,56 +840,10 @@ async function pingHealth() {
   return S.healthOk;
 }
 
-function applyDoorStateSnapshot(state, opts = {}) {
-  const previousCommand = S.doorCommand;
+function applyDoorStateSnapshot(state) {
   S.doorCommand = String(state?.command || 'LOCK').toUpperCase() === 'UNLOCK' ? 'UNLOCK' : 'LOCK';
   S.doorUpdatedAt = state?.updatedAt || null;
   updateDoorUi();
-
-  if (opts.silent) {
-    if (S.doorCommand !== 'UNLOCK') stopDoorOpenWarningTimer();
-    return;
-  }
-
-  if (S.doorCommand === 'UNLOCK') {
-    if (previousCommand !== 'UNLOCK') {
-      speakText('दरवाज़ा खुला हुआ है।', 'MEDIUM', {
-        cooldownKey: 'door:open',
-        cooldownMs: 0,
-      });
-    }
-    startDoorOpenWarningTimer();
-    return;
-  }
-
-  if (previousCommand === 'UNLOCK') {
-    speakText('दरवाज़ा बंद हो गया है।', 'MEDIUM', {
-      cooldownKey: 'door:closed',
-      cooldownMs: 0,
-    });
-  }
-  stopDoorOpenWarningTimer();
-}
-
-function startDoorOpenWarningTimer() {
-  if (S.doorOpenWarningTimer) return;
-  if (S.doorCommand !== 'UNLOCK') return;
-  S.doorOpenWarningTimer = setInterval(() => {
-    if (S.doorCommand !== 'UNLOCK') {
-      stopDoorOpenWarningTimer();
-      return;
-    }
-    speakText('दरवाज़ा खुला हुआ है।', 'MEDIUM', {
-      cooldownKey: 'door:open-warning',
-      cooldownMs: 0,
-    });
-  }, DOOR_OPEN_WARNING_INTERVAL_MS);
-}
-
-function stopDoorOpenWarningTimer() {
-  if (!S.doorOpenWarningTimer) return;
-  clearInterval(S.doorOpenWarningTimer);
-  S.doorOpenWarningTimer = null;
 }
 
 function updateDoorUi() {
@@ -1092,24 +1009,9 @@ function renderConsole() {
   const buttonCooldown = { remainingMs: 0 };
   const cooldownActive = false;
   const zoomLabel = S.cameraZoom > 1.05 ? ` | ${formatZoomLabel(S.cameraZoom)}` : '';
-  const nextConsoleKey = [
-    live ? '1' : '0',
-    cameraReady ? '1' : '0',
-    cameraAccess ? '1' : '0',
-    S.scanInFlight ? '1' : '0',
-    S.cameraZoom.toFixed(2),
-    S.scanResult?.status || '',
-    S.scanResult?.message || '',
-    S.scanStatusText || '',
-    activeSession?.remainingMinutes || '',
-    $('scanAreaInput')?.value || '',
-    S.scanImage ? 'img' : 'cam',
-  ].join('|');
-  if (nextConsoleKey === S.lastConsoleKey) return;
-  S.lastConsoleKey = nextConsoleKey;
 
   $('camStatusPrimary').textContent = live ? 'Live scan active' : (cameraReady ? 'Camera ready' : 'Scanner ready');
-  $('camDetect').textContent = live ? `${S.scanStatusText || 'Detecting Face'}${zoomLabel}` : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
+  $('camDetect').textContent = live ? `Scanning...${zoomLabel}` : (S.scanResult ? `Result: ${S.scanResult.status?.toUpperCase()}` : 'No scan yet');
   $('camLastAction').textContent = S.scanResult?.message || 'Waiting';
   $('camSource').textContent = cameraReady ? 'Live camera' : (S.scanImage ? 'Image upload' : 'Camera / Upload');
   $('camArea').textContent = $('scanAreaInput').value || 'Club Entry';
@@ -1143,7 +1045,6 @@ function setScanState(mode, title, detail = '', pill = '') {
   S.scanStatusText = title;
   S.scanStatusDetail = detail;
   renderScannerStatus();
-  renderConsole();
 }
 
 function renderScannerStatus() {
@@ -1153,37 +1054,15 @@ function renderScannerStatus() {
   $('scanStatusText').textContent = S.scanStatusText;
   $('scanStatusDetail').textContent = S.scanStatusDetail;
   $('scannerStatusLoader').hidden = S.scanState !== 'loading';
-
-  const warningText = getScanWarningMessage();
-  const warningEl = $('scanWarning');
-  if (warningEl) {
-    if (warningText) {
-      warningEl.textContent = warningText;
-      warningEl.hidden = false;
-    } else {
-      warningEl.textContent = '';
-      warningEl.hidden = true;
-    }
-  }
-
   updateFaceBoxOverlay(S.liveDetection?.faceBox || S.scanResult?.faceBox || null);
 
   const shell = $('cameraShell');
   shell.classList.remove('is-scanning','is-granted','is-denied','is-detected');
   if (S.scanState === 'loading')   { shell.classList.add('is-scanning'); $('faceDetectLabel').textContent = 'Scanningâ€¦'; }
-  else if (S.scanState === 'granted') { shell.classList.add('is-granted'); $('faceDetectLabel').textContent = 'ATTENDANCE MARKED'; }
-  else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'FACE NOT RECOGNIZED'; }
-  else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'MATCHING IDENTITY'; }
+  else if (S.scanState === 'granted') { shell.classList.add('is-granted'); $('faceDetectLabel').textContent = 'GRANTED'; }
+  else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
+  else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'FACE FOUND'; }
   renderCameraAssistBadge();
-}
-
-function getScanWarningMessage() {
-  const detection = S.scanResult?.distanceHint ? S.scanResult : S.liveDetection;
-  if (!detection) return '';
-  if (String(detection.distanceHint || '').toLowerCase() === 'long-range') {
-    return 'Warning: Face is too far from the camera. Please step closer so the scanner can read your face.';
-  }
-  return '';
 }
 
 function updateFaceBoxOverlay(faceBox) {
@@ -1503,6 +1382,17 @@ function renderUsers() {
       return true;
     });
 
+    // Implement pagination for very large lists (>500 users)
+    const PAGE_SIZE = 100;
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    const currentPage = S.userPage || 1;
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+
+    if (filtered.length > PAGE_SIZE) {
+      filtered = filtered.slice(startIndex, endIndex);
+    }
+
     if ($('allMembersCount')) {
       const totalFiltered = S.users.filter(u => {
         const statusValue = getUserStatusValue(u);
@@ -1571,7 +1461,6 @@ function renderUsers() {
           <td>${faceStatus}</td>
           <td>
             <div class="action-buttons">
-              ${u.faceImageUrl ? `<button class="btn btn-xs secondary" data-user-face-image="${u.id}" title="View enrolled face image">👁️ Photo</button>` : ''}
               ${fc > 0 ? `<button class="btn btn-xs warn" data-user-delete-face="${u.id}" title="Clear enrolled face data">🗑️ Face</button>` : ''}
               <button class="btn btn-xs" data-user-report="${u.id}" title="View detailed report">📊 Report</button>
               <button class="btn btn-xs primary" data-user-edit="${u.id}" title="Edit member details">✏️ Edit</button>
@@ -1581,6 +1470,16 @@ function renderUsers() {
         </tr>`);
       }
 
+      // Add pagination controls if needed
+      if (totalPages > 1) {
+        htmlParts.push(`<tr><td colspan="5" style="text-align: center; padding: 16px;">
+          <div class="pagination-controls">
+            <button class="btn-ghost btn-sm" ${currentPage <= 1 ? 'disabled' : ''} onclick="changeUserPage(${currentPage - 1})">Previous</button>
+            <span>Page ${currentPage} of ${totalPages}</span>
+            <button class="btn-ghost btn-sm" ${currentPage >= totalPages ? 'disabled' : ''} onclick="changeUserPage(${currentPage + 1})">Next</button>
+          </div>
+        </td></tr>`);
+      }
     } else {
       htmlParts.push(`<tr><td colspan="5"><div class="empty-hint">No members found.</div></td></tr>`);
     }
@@ -2496,35 +2395,13 @@ function updateAlertBadge() {
 /* â”€â”€ SCAN RESULT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function renderScanResult() {
   const el = $('scanResult');
-  if (!S.scanResult) {
-    S.lastScanResultKey = '';
-    el.innerHTML = '<div class="empty-hint">Scan results appear here</div>';
-    return;
-  }
+  if (!S.scanResult) { el.innerHTML = '<div class="empty-hint">Scan results appear here</div>'; return; }
   const r = S.scanResult;
-  const renderKey = [
-    r.status || '',
-    r.message || '',
-    r.name || '',
-    r.attendanceAction || '',
-    r.scannedAt || '',
-    r.cooldownRemainingSeconds || 0,
-    r.confidence || 0,
-    r.brightness || 0,
-    r.blurScore || 0,
-    r.blinkDetected ? '1' : '0',
-    r.livenessPassed ? '1' : '0',
-  ].join('|');
-  if (renderKey === S.lastScanResultKey) return;
-  S.lastScanResultKey = renderKey;
   const actionLabel = actionLabelFor(r.attendanceAction);
   const waitText = r.cooldownRemainingSeconds ? `Wait ${formatCountdown(r.cooldownRemainingSeconds * 1000)}` : '';
   const zoomText = r.zoomFactor > 1 ? `Zoom: ${formatZoomLabel(r.zoomFactor)}` : '';
   const rangeText = r.distanceHint ? formatHintLabel(r.distanceHint) : '';
   const modeText = r.captureMode ? formatHintLabel(r.captureMode) : '';
-  const brightnessText = r.brightness ? `Light: ${Math.round(r.brightness)}` : '';
-  const blurText = r.blurScore ? `Sharpness: ${Math.round(r.blurScore)}` : '';
-  const livenessText = r.livenessPassed ? 'Liveness: OK' : (r.blinkDetected ? 'Blink: Seen' : '');
   el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px;">
       <strong style="font-family:var(--font-display);font-size:.86rem;">${esc(r.name||'Unknown face')}</strong>
@@ -2538,9 +2415,6 @@ function renderScanResult() {
       ${rangeText ? `<span>${esc(rangeText)}</span>` : ''}
       ${modeText ? `<span>${esc(modeText)}</span>` : ''}
       ${zoomText ? `<span>${esc(zoomText)}</span>` : ''}
-      ${brightnessText ? `<span>${esc(brightnessText)}</span>` : ''}
-      ${blurText ? `<span>${esc(blurText)}</span>` : ''}
-      ${livenessText ? `<span>${esc(livenessText)}</span>` : ''}
       <span>${esc(fmtDT(r.scannedAt))}</span>
     </div>`;
   el.classList.remove('result-pop');
@@ -2710,18 +2584,10 @@ function showFormSuccess(id) {
 }
 
 async function handleUsersClick(e) {
-  if (e.target.dataset.userFaceImage) await openFaceImagePreview(e.target.dataset.userFaceImage);
   if (e.target.dataset.userReport) await openAllMemberReport(e.target.dataset.userReport);
   if (e.target.dataset.userEdit)   beginUserEdit(e.target.dataset.userEdit);
   if (e.target.dataset.userDeleteFace) await deleteFaceForUser(e.target.dataset.userDeleteFace);
   if (e.target.dataset.userDelete) deleteUser(e.target.dataset.userDelete);
-}
-
-async function openFaceImagePreview(id) {
-  const user = S.users.find(x => x.id === id);
-  if (!user) { toast('Member not found.', 'error'); return; }
-  if (!user.faceImageUrl) { toast('No enrolled face image available.', 'warning'); return; }
-  await openAllMemberReport(id);
 }
 
 async function openAllMemberReport(id) {
@@ -2784,10 +2650,6 @@ function renderAllMemberReport(report, fallbackUser = {}) {
   ].filter(Boolean).join(' | ') || 'Full member report';
 
   reportBody.innerHTML = `
-    ${profile.faceImageUrl ? `<div class="all-member-report-face-image">
-      <img src="${esc(profile.faceImageUrl)}" alt="Enrolled face image" />
-      <div class="face-image-caption">Enrolled face image</div>
-    </div>` : ''}
     <div class="meta-grid">
       ${meta('Member ID', profile.memberId)}
       ${meta('Role', profile.role)}
@@ -3149,9 +3011,6 @@ async function startLiveScan(opts = {}) {
   if (S.isScanning) return true;
   S.cameraRequested = true;
   S.scanMissStreak = 0;
-  S.scanTickCount = 0;
-  S.lastScanProcessAt = 0;
-  clearPendingRecognition();
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
@@ -3160,7 +3019,7 @@ async function startLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer);
   S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
   renderConsole();
-  setScanState('loading','Detecting Face','Preparing lightweight live recognition.');
+  setScanState('loading','Scanning...','Matching in browser and validating membership.');
   if (opts.toast) toast('Live scan started.','success');
   await runLiveCycle();
   return true;
@@ -3172,10 +3031,6 @@ function stopLiveScan(opts = {}) {
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
-  S.scanTickCount = 0;
-  S.lastScanProcessAt = 0;
-  clearTimeout(S.scanResetTimer);
-  clearPendingRecognition();
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
@@ -3295,102 +3150,9 @@ function getCameraErrorMessage(err) {
   return err?.message || 'Cannot start camera.';
 }
 
-function yieldToBrowser() {
-  return new Promise(resolve => requestAnimationFrame(() => resolve()));
-}
-
-function shouldProcessLiveScanTick() {
-  S.scanTickCount += 1;
-  if ((S.scanTickCount % SCAN_PROCESS_EVERY_N_TICKS) !== 0) return false;
-  const now = Date.now();
-  if ((now - Number(S.lastScanProcessAt || 0)) < MIN_SCAN_PROCESS_GAP_MS) return false;
-  S.lastScanProcessAt = now;
-  return true;
-}
-
-function updateBlinkLiveness(detection) {
-  const eyeRatio = Number(detection?.eyeAspectRatio || 0);
-  if (!eyeRatio) return false;
-  const now = Date.now();
-  if (eyeRatio <= 0.19) {
-    S.lastBlinkAt = now;
-    return true;
-  }
-  return (now - Number(S.lastBlinkAt || 0)) <= BLINK_LIVENESS_WINDOW_MS;
-}
-
-function validateDetectionQuality(detection) {
-  if (!detection) return '';
-  const blurScore = Number(detection.blurScore || 0);
-  const brightness = Number(detection.brightness || 0);
-  if (blurScore > 0 && blurScore < MIN_SCAN_BLUR_SCORE) {
-    return 'Image is blurry. Hold still and look at the camera.';
-  }
-  if (brightness > 0 && brightness < MIN_SCAN_BRIGHTNESS) {
-    return 'Lighting is too low. Move closer to the light.';
-  }
-  if (brightness > MAX_SCAN_BRIGHTNESS) {
-    return 'Too much glare on the face. Reduce direct light and retry.';
-  }
-  return '';
-}
-
-function createFaceCropDataUrl(video, detection) {
-  if (!video || !detection?.faceBox) return '';
-  const sourceWidth = Number(video.videoWidth || 0);
-  const sourceHeight = Number(video.videoHeight || 0);
-  if (!sourceWidth || !sourceHeight) return '';
-
-  const cropSize = FACE_CROP_OUTPUT_SIZE;
-  const canvas = document.createElement('canvas');
-  canvas.width = cropSize;
-  canvas.height = cropSize;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
-
-  const faceBox = detection.faceBox;
-  const cropWidth = clamp(Math.round(Number(faceBox.width || 0) * sourceWidth * 1.45), 48, sourceWidth);
-  const cropHeight = clamp(Math.round(Number(faceBox.height || 0) * sourceHeight * 1.7), 48, sourceHeight);
-  const centerX = Math.round((Number(faceBox.left || 0) + (Number(faceBox.width || 0) / 2)) * sourceWidth);
-  const centerY = Math.round((Number(faceBox.top || 0) + (Number(faceBox.height || 0) / 2)) * sourceHeight);
-  const sx = clamp(centerX - Math.round(cropWidth / 2), 0, sourceWidth - cropWidth);
-  const sy = clamp(centerY - Math.round(cropHeight / 2), 0, sourceHeight - cropHeight);
-
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'medium';
-  ctx.drawImage(video, sx, sy, cropWidth, cropHeight, 0, 0, cropSize, cropSize);
-  return canvas.toDataURL('image/jpeg', FACE_CROP_JPEG_QUALITY);
-}
-
-function getSubmissionKey(userId, action) {
-  return `${String(userId || '').trim()}:${normalizeAttendanceAction(action) || 'SCAN'}`;
-}
-
-function shouldSkipAttendanceSubmit(userId, action) {
-  const key = getSubmissionKey(userId, action);
-  const now = Date.now();
-  return key === S.lastSubmissionKey && (now - Number(S.lastSubmissionAt || 0)) < ATTENDANCE_SUBMIT_DEDUPE_MS;
-}
-
-function markAttendanceSubmit(userId, action) {
-  S.lastSubmissionKey = getSubmissionKey(userId, action);
-  S.lastSubmissionAt = Date.now();
-}
-
-function scheduleScannerAutoReset() {
-  clearTimeout(S.scanResetTimer);
-  S.scanResetTimer = setTimeout(() => {
-    if (S.scanState === 'granted') {
-      setScanState(S.isScanning ? 'loading' : 'idle', S.isScanning ? 'Detecting Face' : 'Scanner ready', S.isScanning ? 'Ready for the next member.' : 'Ready to scan.');
-    }
-    if (S.isScanning) setLiveDetection(null, { keepSearchZoom: true });
-  }, AUTO_RESET_AFTER_SUCCESS_MS);
-}
-
 async function runLiveCycle() {
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
-  if (!shouldProcessLiveScanTick()) return;
   await runScan({ source: 'camera', showToast: false });
 }
 
@@ -3454,114 +3216,6 @@ async function handleManualScan() {
   await runScan({ source, image, showToast: true });
 }
 
-function clearPendingRecognition() {
-  S.pendingRecognition = null;
-}
-
-function shouldFastTrackRecognition(match, detection) {
-  if (!match?.matched) return false;
-  if (Number(match.distance || 1) > FAST_TRACK_MATCH_DISTANCE) return false;
-  if (match.margin != null && Number(match.margin) < FAST_TRACK_MIN_MARGIN) return false;
-  if (Number(detection?.score || 0) < FAST_TRACK_MIN_DETECTION_SCORE) return false;
-  if (Number(detection?.faceRatio || 0) < FAST_TRACK_MIN_FACE_RATIO) return false;
-  return true;
-}
-
-function requiredStableMatchesForDetection(match, detection) {
-  return 1;
-}
-
-function validateRecognitionAttempt(match, detection) {
-  if (!match?.matched) {
-    if (match?.reason === 'ambiguous') {
-      return 'Similar face found. Hold still and try again.';
-    }
-    return null;
-  }
-
-  if (Number(detection?.score || 0) < MIN_DETECTION_SCORE) {
-    return 'Camera view is noisy. Look at the camera and try again.';
-  }
-
-  if (Number(detection?.faceRatio || 0) < MIN_FACE_RATIO) {
-    return 'Face is too far from the camera. Please step closer.';
-  }
-
-  if (Number(match.confidence || 0) >= MIN_ATTENDANCE_CONFIDENCE) {
-    return '';
-  }
-
-  if (Number(match.distance || 1) <= STRICT_MATCH_DISTANCE) {
-    return '';
-  }
-
-  if (
-    match.margin != null
-    && Number(match.margin) < STRICT_MATCH_MARGIN
-    && Number(match.distance || 1) > 0.44
-  ) {
-    return 'Face match is too close to another member. Hold still and try again.';
-  }
-
-  return '';
-}
-
-function registerRecognitionAttempt(match, detection) {
-  const now = Date.now();
-  const userId = String(match?.user?.id || '').trim();
-  if (!userId) {
-    clearPendingRecognition();
-    return { confirmed: false, count: 0, required: REQUIRED_STABLE_MATCHES };
-  }
-
-  const required = requiredStableMatchesForDetection(match, detection);
-  const current = S.pendingRecognition;
-  const sameWindow = current
-    && current.userId === userId
-    && (now - current.lastSeenAt) <= STABLE_MATCH_WINDOW_MS;
-
-  const next = sameWindow
-    ? {
-      userId,
-      count: current.count + 1,
-      firstSeenAt: current.firstSeenAt,
-      lastSeenAt: now,
-      bestDistance: Math.min(Number(current.bestDistance || 1), Number(match.distance || 1)),
-      lastDistance: Number(match.distance || 1),
-      minMargin: Math.min(
-        Number.isFinite(current.minMargin) ? Number(current.minMargin) : Number.POSITIVE_INFINITY,
-        Number.isFinite(match.margin) ? Number(match.margin) : Number.POSITIVE_INFINITY,
-      ),
-      minScore: Math.min(Number(current.minScore || 1), Number(detection?.score || 0)),
-      minFaceRatio: Math.min(Number(current.minFaceRatio || 1), Number(detection?.faceRatio || 0)),
-      captureMode: String(detection?.captureMode || current.captureMode || ''),
-      sampleSupport: Math.max(Number(current.sampleSupport || 0), Number(match.sampleSupport || 0)),
-      sampleCount: Math.max(Number(current.sampleCount || 0), Number(match.sampleCount || 0)),
-    }
-    : {
-      userId,
-      count: 1,
-      firstSeenAt: now,
-      lastSeenAt: now,
-      bestDistance: Number(match.distance || 1),
-      lastDistance: Number(match.distance || 1),
-      minMargin: Number.isFinite(match.margin) ? Number(match.margin) : Number.POSITIVE_INFINITY,
-      minScore: Number(detection?.score || 0),
-      minFaceRatio: Number(detection?.faceRatio || 0),
-      captureMode: String(detection?.captureMode || ''),
-      sampleSupport: Number(match.sampleSupport || 0),
-      sampleCount: Number(match.sampleCount || 0),
-    };
-
-  S.pendingRecognition = next;
-  return {
-    confirmed: next.count >= required,
-    count: next.count,
-    required,
-    state: next,
-  };
-}
-
 async function runScan(opts = {}) {
   if (S.scanInFlight) return null;
   const source = opts.source || (opts.image ? 'upload' : 'camera');
@@ -3570,18 +3224,16 @@ async function runScan(opts = {}) {
   S.scanInFlight = true;
   if (image) S.scanImage = image;
   renderConsole();
-  setScanState('loading', 'Detecting Face', 'Analyzing a lightweight camera frame.');
+  setScanState('loading', 'Scanning...', 'Matching face in browser and validating access.');
   try {
-    await yieldToBrowser();
     const probe = await detectRecognitionProbe({ source, image });
     if (source === 'camera') {
       setLiveDetection(probe?.detection || null, { keepSearchZoom: true });
       if (probe?.detection) {
-        setScanState('loading', 'Matching Identity', buildDetectionAssistDetail(probe.detection), 'Matching');
+        setScanState('loading', 'Face locked', buildDetectionAssistDetail(probe.detection), 'Face Lock');
       }
     }
     if (!probe?.detection) {
-      clearPendingRecognition();
       const result = buildClientScanResult({
         status: 'retry',
         message: probe?.message || 'No face detected. Align your face and try again.',
@@ -3594,101 +3246,22 @@ async function runScan(opts = {}) {
       return result;
     }
 
-    probe.detection.livenessPassed = updateBlinkLiveness(probe.detection);
-    const qualityError = validateDetectionQuality(probe.detection);
-    if (qualityError) {
-      clearPendingRecognition();
-      const result = buildClientScanResult({
-        status: 'retry',
-        message: qualityError,
-        confidence: probe.detection.score || 0,
-        faceBox: probe.detection.faceBox,
-        distanceHint: probe.detection.distanceHint,
-        captureMode: probe.detection.captureMode,
-        zoomFactor: probe.detection.recommendedZoom,
-        brightness: probe.detection.brightness,
-        blurScore: probe.detection.blurScore,
-        blinkDetected: probe.detection.blinkDetected,
-        livenessPassed: probe.detection.livenessPassed,
-        source,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      return result;
-    }
-
     const match = window.FaceAi.bestMatch(
       probe.detection.descriptor,
       S.faceUsers,
-      0.46
+      S.recognitionThreshold
     );
 
     if (!match?.matched || !match.user?.id) {
-      clearPendingRecognition();
       const result = buildClientScanResult({
-        status: match?.reason === 'ambiguous' ? 'retry' : 'unknown',
-        message: match?.reason === 'ambiguous'
-          ? 'Face is too close to another member. Hold still and try again.'
-          : 'Unknown face. No enrolled member matched this scan.',
+        status: 'unknown',
+        message: 'Unknown face. No enrolled member matched this scan.',
         confidence: match?.confidence || probe.detection.score || 0,
         faceBox: probe.detection.faceBox,
         distanceHint: probe.detection.distanceHint,
         captureMode: probe.detection.captureMode,
         zoomFactor: probe.detection.recommendedZoom,
-        brightness: probe.detection.brightness,
-        blurScore: probe.detection.blurScore,
-        blinkDetected: probe.detection.blinkDetected,
-        livenessPassed: probe.detection.livenessPassed,
         source,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      return result;
-    }
-
-    const attemptError = validateRecognitionAttempt(match, probe.detection);
-    if (attemptError) {
-      clearPendingRecognition();
-      const result = buildClientScanResult({
-        status: 'retry',
-        message: attemptError,
-        confidence: match?.confidence || probe.detection.score || 0,
-        faceBox: probe.detection.faceBox,
-        distanceHint: probe.detection.distanceHint,
-        captureMode: probe.detection.captureMode,
-        zoomFactor: probe.detection.recommendedZoom,
-        brightness: probe.detection.brightness,
-        blurScore: probe.detection.blurScore,
-        blinkDetected: probe.detection.blinkDetected,
-        livenessPassed: probe.detection.livenessPassed,
-        source,
-        userId: match.user.id,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      return result;
-    }
-
-    const stability = registerRecognitionAttempt(match, probe.detection);
-    if (!stability.confirmed) {
-      const result = buildClientScanResult({
-        status: 'retry',
-        message: `Hold still for confirmation (${stability.count}/${stability.required}).`,
-        name: match.user.name || null,
-        confidence: match?.confidence || probe.detection.score || 0,
-        faceBox: probe.detection.faceBox,
-        distanceHint: probe.detection.distanceHint,
-        captureMode: probe.detection.captureMode,
-        zoomFactor: probe.detection.recommendedZoom,
-        brightness: probe.detection.brightness,
-        blurScore: probe.detection.blurScore,
-        blinkDetected: probe.detection.blinkDetected,
-        livenessPassed: probe.detection.livenessPassed,
-        source,
-        userId: match.user.id,
       });
       S.scanResult = result;
       renderScanResult();
@@ -3703,29 +3276,6 @@ async function runScan(opts = {}) {
 
     const attendanceRecord = getAttendanceRecord(match.user.id);
     const action = inferAttendanceAction(match.user.id);
-    if (shouldSkipAttendanceSubmit(match.user.id, action)) {
-      const result = buildClientScanResult({
-        status: 'duplicate',
-        message: 'Attendance already sent. Please wait a moment.',
-        name: userRecord?.name || match.user.name,
-        confidence: Number(match.confidence || probe.detection.score || 0),
-        attendanceAction: action,
-        faceBox: probe.detection.faceBox,
-        distanceHint: probe.detection.distanceHint,
-        captureMode: probe.detection.captureMode,
-        zoomFactor: probe.detection.recommendedZoom,
-        brightness: probe.detection.brightness,
-        blurScore: probe.detection.blurScore,
-        blinkDetected: probe.detection.blinkDetected,
-        livenessPassed: probe.detection.livenessPassed,
-        source,
-        userId: match.user.id,
-      });
-      S.scanResult = result;
-      renderScanResult();
-      applyScanResult(result);
-      return result;
-    }
 
     const localCooldown = getCooldownInfo(match.user.id, action);
     if (localCooldown.remainingMs > 0) {
@@ -3740,10 +3290,6 @@ async function runScan(opts = {}) {
         distanceHint: probe.detection.distanceHint,
         captureMode: probe.detection.captureMode,
         zoomFactor: probe.detection.recommendedZoom,
-        brightness: probe.detection.brightness,
-        blurScore: probe.detection.blurScore,
-        blinkDetected: probe.detection.blinkDetected,
-        livenessPassed: probe.detection.livenessPassed,
         source,
         userId: match.user.id,
       });
@@ -3754,30 +3300,13 @@ async function runScan(opts = {}) {
       return result;
     }
 
-    const faceCropDataUrl = source === 'camera' ? createFaceCropDataUrl($('cameraPreview'), probe.detection) : '';
-    markAttendanceSubmit(match.user.id, action);
     const backendResult = await api('/attendance', {
       method:'POST',
-      timeoutMs: ATTENDANCE_API_TIMEOUT_MS,
       body:{
         userId: match.user.id,
         action,
         area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
         confidence: match.confidence,
-        matchDistance: Number(match.distance || 0),
-        secondDistance: match.secondDistance == null ? null : Number(match.secondDistance),
-        matchMargin: match.margin == null ? null : Number(match.margin),
-        sampleSupport: Number(match.sampleSupport || 0),
-        sampleCount: Number(match.sampleCount || 0),
-        detectorScore: Number(probe.detection.score || 0),
-        faceRatio: Number(probe.detection.faceRatio || 0),
-        brightness: Number(probe.detection.brightness || 0),
-        blurScore: Number(probe.detection.blurScore || 0),
-        blinkDetected: Boolean(probe.detection.blinkDetected),
-        livenessPassed: Boolean(probe.detection.livenessPassed),
-        stableFrames: Number(stability.count || 0),
-        captureMode: String(probe.detection.captureMode || ''),
-        faceImage: faceCropDataUrl || null,
       },
     });
     const result = buildClientScanResult({
@@ -3793,26 +3322,16 @@ async function runScan(opts = {}) {
       distanceHint: probe.detection.distanceHint,
       captureMode: probe.detection.captureMode,
       zoomFactor: probe.detection.recommendedZoom,
-      brightness: probe.detection.brightness,
-      blurScore: probe.detection.blurScore,
-      blinkDetected: probe.detection.blinkDetected,
-      livenessPassed: probe.detection.livenessPassed,
       source,
       userId: match.user.id || match.user?.userId || null,
     });
     if (result.status === 'granted' && result.attendanceAction) {
-      clearPendingRecognition();
       recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
       updateLocalUserAttendance(match.user.id, result.attendanceAction, result.scannedAt);
-      scheduleScannerAutoReset();
     } else if (result.status === 'cooldown') {
-      clearPendingRecognition();
       syncCooldownFromResult(result, action);
     } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
-      clearPendingRecognition();
       recordAttendanceAction(match.user.id, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
-    } else if (result.status !== 'retry') {
-      clearPendingRecognition();
     }
     S.scanResult = result;
     renderScanResult();
@@ -3828,8 +3347,7 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
-    const timedOut = err?.name === 'AbortError' || /timeout/i.test(String(err?.message || ''));
-    setScanState('denied', timedOut ? 'Backend Slow' : 'Access Denied', timedOut ? 'Attendance request took too long. Please try again.' : (err?.message || 'Scan failed.'));
+    setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
@@ -3859,10 +3377,6 @@ async function detectRecognitionProbe(opts = {}) {
     allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
     recoveryMode: S.scanMissStreak >= 2,
   });
-  const roundedBox = detection?.faceBox
-    ? `${detection.faceBox.left.toFixed(2)}:${detection.faceBox.top.toFixed(2)}:${detection.faceBox.width.toFixed(2)}:${detection.faceBox.height.toFixed(2)}`
-    : '';
-  S.lastFaceSignature = roundedBox;
   S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
   return { source, detection };
 }
@@ -3881,10 +3395,6 @@ function buildClientScanResult(opts = {}) {
     distanceHint: opts.distanceHint || '',
     captureMode: opts.captureMode || '',
     zoomFactor: Number(opts.zoomFactor || 0),
-    brightness: Number(opts.brightness || 0),
-    blurScore: Number(opts.blurScore || 0),
-    blinkDetected: Boolean(opts.blinkDetected),
-    livenessPassed: Boolean(opts.livenessPassed),
     source: opts.source || 'camera',
     userId: opts.userId || null,
     ttsMessage: opts.ttsMessage || '',
@@ -3936,9 +3446,7 @@ function applyScanResultLegacy(r) {
     setScanState('granted','Access Granted âœ“', detail);
     const isExit = String(r.attendanceAction || '').toUpperCase() === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail);
-    const nameText = r.name ? ` ${r.name} के लिए` : '';
-    speakText(`उपस्थिति सफलतापूर्वक दर्ज हुई।${nameText}`, 'HIGH');
-    toast('Attendance marked successfully.', 'success');
+    speakText(`${isExit ? 'Exit' : 'Entry'} marked successfully for ${r.name || 'the member'}`, 'HIGH');
     return;
   }
   if (r.status === 'cooldown') {
@@ -3960,9 +3468,7 @@ function applyScanResultBrowser(r) {
     setScanState('granted','Access Granted âœ“', detail);
     const isExit = String(r.attendanceAction || '').toUpperCase() === 'OUT';
     setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail);
-    const nameText = r.name ? ` ${r.name} के लिए` : '';
-    speakText(`उपस्थिति सफलतापूर्वक दर्ज हुई।${nameText}`, 'HIGH');
-    toast('Attendance marked successfully.', 'success');
+    speakText(`${isExit ? 'Exit' : 'Entry'} marked successfully for ${r.name || 'the member'}`, 'HIGH');
     return;
   }
   if (r.status === 'duplicate' || r.status === 'retry' || r.status === 'cooldown') {
@@ -4502,20 +4008,8 @@ function fillSelect(sel, items, opts = {}) {
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers||{}) };
   const init = { method: opts.method||'GET', headers, cache:'no-store' };
-  let timeoutId = null;
-  let timeoutController = null;
   if (S.token) headers.Authorization = `Bearer ${S.token}`;
   if (opts.body !== undefined) { headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
-  if (opts.signal) init.signal = opts.signal;
-  if (Number(opts.timeoutMs || 0) > 0) {
-    timeoutController = new AbortController();
-    timeoutId = setTimeout(() => timeoutController.abort(new Error('Request timeout')), Number(opts.timeoutMs));
-    if (init.signal && typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function') {
-      init.signal = AbortSignal.any([init.signal, timeoutController.signal]);
-    } else {
-      init.signal = timeoutController.signal;
-    }
-  }
   let res;
   try {
     res = await fetch(`${S.apiBase}${path}`, init);
@@ -4525,8 +4019,6 @@ async function api(path, opts = {}) {
       updateHealthUi();
     }
     throw error;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
   }
   if (!S.healthOk) {
     S.healthOk = true;
@@ -4545,14 +4037,7 @@ async function api(path, opts = {}) {
 }
 
 /* â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-function $(id) {
-  const activeTab = document.querySelector('.tab-page.active');
-  if (activeTab) {
-    const el = activeTab.querySelector(`#${CSS.escape(id)}`);
-    if (el) return el;
-  }
-  return document.getElementById(id);
-}
+function $(id) { return document.getElementById(id); }
 function isAdmin() { return S.currentUser?.role === 'admin'; }
 function ensureAdmin() {
   if (!S.currentUser || !S.token) { toast('Sign in first.','error'); return false; }
@@ -5198,7 +4683,7 @@ function refreshCooldownUi() {
     S.scanResult.message = 'Ready for the next action.';
   }
   if (S.scanState === 'detected') {
-    setScanState(S.isScanning ? 'loading' : 'idle', S.isScanning ? 'Detecting Face' : 'Scanner ready', S.isScanning ? 'Live scan remains active.' : 'Ready to scan.');
+    setScanState(S.isScanning ? 'loading' : 'idle', S.isScanning ? 'Scanning...' : 'Scanner ready', S.isScanning ? 'Live scan remains active.' : 'Ready to scan.');
   }
   renderScanResult();
   renderConsole();
@@ -5438,7 +4923,7 @@ function applyScanResult(r) {
   const detail = r.name ? `${r.name} - ${fmtDT(r.scannedAt)}` : (r.message || fmtDT(r.scannedAt));
   if (r.status === 'granted') {
     const isExit = normalizeAttendanceAction(r.attendanceAction) === 'OUT';
-    setScanState('granted', 'Attendance Marked', detail, isExit ? 'EXIT' : 'ENTRY');
+    setScanState('granted', isExit ? 'Exit Marked' : 'Entry Marked', detail, isExit ? 'EXIT' : 'ENTRY');
     speakText(buildScanSpeechText(r), 'HIGH', {
       cooldownKey: `granted:${r.userId || 'unknown'}:${r.attendanceAction || 'none'}:${localDateKey(r.scannedAt)}`,
       cooldownMs: 1500,
@@ -5464,17 +4949,17 @@ function applyScanResult(r) {
   }
   if (r.status === 'duplicate') {
     maybeSpeakDuplicate(r);
-    setScanState('detected', 'Matching Identity', r.message || detail, 'Duplicate');
+    setScanState('detected', 'Already Marked', r.message || detail, 'Duplicate');
     return;
   }
   if (r.status === 'cooldown') {
     maybeSpeakCooldown(r);
-    setScanState('detected', 'Matching Identity', r.message || detail, 'Cooldown');
+    setScanState('detected', 'Please Wait', r.message || detail, 'Cooldown');
     return;
   }
   if (r.status === 'retry') {
     if (S.isScanning) setLiveDetection(null, { keepSearchZoom: true });
-    setScanState(S.isScanning ? 'loading' : 'detected', 'Detecting Face', r.message || 'Ready for the next face.', 'Scanning');
+    setScanState(S.isScanning ? 'loading' : 'detected', 'Scanning...', r.message || 'Ready for the next face.', 'Scanning');
     return;
   }
   if (r.status === 'unknown') {
@@ -5483,7 +4968,7 @@ function applyScanResult(r) {
       cooldownMs: 8000,
       userId: r.userId,
     });
-    setScanState('denied', 'Face Not Recognized', r.message || detail, 'Unknown');
+    setScanState('denied', 'No Match', r.message || detail, 'Unknown');
     return;
   }
   speakText(buildScanSpeechText(r), 'HIGH', {
@@ -5491,7 +4976,7 @@ function applyScanResult(r) {
     cooldownMs: 4000,
     userId: r.userId,
   });
-  setScanState('denied', 'Face Not Recognized', r.message || detail, r.name ? 'Face Found' : 'No Match');
+  setScanState('denied', 'Access Denied', r.message || detail, r.name ? 'Face Found' : 'No Match');
 }
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
