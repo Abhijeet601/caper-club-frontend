@@ -12,10 +12,10 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 650;
+const LIVE_SCAN_INTERVAL = 180;
 const DOOR_STATUS_POLL_MS = 3000;
 const DOOR_OPEN_REPEAT_MS = 8000;
-const FACE_SCAN_DEBOUNCE_MS = 3000;
+const FACE_SCAN_DEBOUNCE_MS = 400;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
 const MIN_EXIT_BEFORE_CHECKOUT_MS = 5 * 60 * 1000;
 const COOLDOWN_VOICE_THROTTLE_MS = 30000;

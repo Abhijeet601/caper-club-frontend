@@ -7,15 +7,12 @@
   const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
     Object.freeze({ inputSize: 224, scoreThreshold: 0.32, label: 'full-frame' }),
-    Object.freeze({ inputSize: 192, scoreThreshold: 0.4, label: 'balanced' }),
+    Object.freeze({ inputSize: 160, scoreThreshold: 0.4, label: 'balanced' }),
   ]);
   const VIDEO_FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 192, scoreThreshold: 0.5, label: 'video-fast' }),
-    Object.freeze({ inputSize: 224, scoreThreshold: 0.38, label: 'video-balanced' }),
+    Object.freeze({ inputSize: 160, scoreThreshold: 0.45, label: 'ultra-fast' }),
   ]);
-  const VIDEO_RECOVERY_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 192, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'video-center-1.35x' }),
-  ]);
+  const VIDEO_RECOVERY_PASSES = Object.freeze([]);
   const CENTER_CROP_PASSES = Object.freeze([
     Object.freeze({ inputSize: 224, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
     Object.freeze({ inputSize: 192, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
@@ -23,15 +20,11 @@
   // Disabled for lower CPU usage in realtime mode.
   const VIDEO_CENTER_CROP_PASSES = Object.freeze([]);
   const FOCUS_PASS = Object.freeze({
-    inputSize: 192,
+    inputSize: 160,
     scoreThreshold: 0.24,
     label: 'focus-zoom',
   });
-  const VIDEO_FOCUS_PASS = Object.freeze({
-    inputSize: 192,
-    scoreThreshold: 0.24,
-    label: 'video-focus-zoom',
-  });
+  const VIDEO_FOCUS_PASS = null;
   const SMALL_FACE_RATIO = 0.18;
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
@@ -114,7 +107,7 @@
   }
 
   function isFaceTooSmall(faceRatio) {
-    return faceRatio < 0.12;
+    return faceRatio < 0.08;
   }
 
   function classifyDistanceHint(faceRatio) {
@@ -241,7 +234,7 @@
   }
 
   function getDetectorOptions(pass) {
-    const inputSize = Number(pass?.inputSize || 192);
+    const inputSize = Number(pass?.inputSize || 160);
     const scoreThreshold = Number(pass?.scoreThreshold || 0.4);
     const cacheKey = `${inputSize}:${scoreThreshold}`;
     if (!DETECTOR_OPTIONS_CACHE.has(cacheKey)) {
@@ -597,6 +590,7 @@
       sampleCount: best.sampleCount,
       confidence: distanceToConfidence(best.distance),
       matched,
+      instant: best.distance < 0.28,
       reason,
     };
   }
