@@ -1,9 +1,9 @@
 (function initFaceAi(global) {
   'use strict';
 
-  const DEFAULT_THRESHOLD = 0.47;
-  const STRONG_MATCH_THRESHOLD = 0.42;
-  const MIN_MATCH_MARGIN = 0.045;
+  const DEFAULT_THRESHOLD = 0.42;
+  const STRONG_MATCH_THRESHOLD = 0.38;
+  const MIN_MATCH_MARGIN = 0.06;
   const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
     Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),

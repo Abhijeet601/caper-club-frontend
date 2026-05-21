@@ -29,10 +29,10 @@ const STARTUP_IDLE_TIMEOUT_MS = 1200;
 const STABLE_MATCH_WINDOW_MS = 2500;
 const REQUIRED_STABLE_MATCHES = 2;
 const REQUIRED_STABLE_MATCHES_LONG_RANGE = 3;
-const STRICT_MATCH_DISTANCE = 0.43;
-const STRICT_MATCH_MARGIN = 0.05;
+const STRICT_MATCH_DISTANCE = 0.40;
+const STRICT_MATCH_MARGIN = 0.06;
 const MIN_DETECTION_SCORE = 0.62;
-const MIN_FACE_RATIO = 0.11;
+const MIN_FACE_RATIO = 0.14;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -1110,6 +1110,19 @@ function renderScannerStatus() {
   $('scanStatusText').textContent = S.scanStatusText;
   $('scanStatusDetail').textContent = S.scanStatusDetail;
   $('scannerStatusLoader').hidden = S.scanState !== 'loading';
+
+  const warningText = getScanWarningMessage();
+  const warningEl = $('scanWarning');
+  if (warningEl) {
+    if (warningText) {
+      warningEl.textContent = warningText;
+      warningEl.hidden = false;
+    } else {
+      warningEl.textContent = '';
+      warningEl.hidden = true;
+    }
+  }
+
   updateFaceBoxOverlay(S.liveDetection?.faceBox || S.scanResult?.faceBox || null);
 
   const shell = $('cameraShell');
@@ -1119,6 +1132,15 @@ function renderScannerStatus() {
   else if (S.scanState === 'denied')  { shell.classList.add('is-denied');  $('faceDetectLabel').textContent = 'DENIED'; }
   else if (S.scanState === 'detected'){ shell.classList.add('is-detected'); $('faceDetectLabel').textContent = 'FACE FOUND'; }
   renderCameraAssistBadge();
+}
+
+function getScanWarningMessage() {
+  const detection = S.scanResult?.distanceHint ? S.scanResult : S.liveDetection;
+  if (!detection) return '';
+  if (String(detection.distanceHint || '').toLowerCase() === 'long-range') {
+    return 'Warning: Face is too far from the camera. Please step closer so the scanner can read your face.';
+  }
+  return '';
 }
 
 function updateFaceBoxOverlay(faceBox) {
