@@ -4266,7 +4266,14 @@ async function api(path, opts = {}) {
 }
 
 /* â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-function $(id) { return document.getElementById(id); }
+function $(id) {
+  const activeTab = document.querySelector('.tab-page.active');
+  if (activeTab) {
+    const el = activeTab.querySelector(`#${CSS.escape(id)}`);
+    if (el) return el;
+  }
+  return document.getElementById(id);
+}
 function isAdmin() { return S.currentUser?.role === 'admin'; }
 function ensureAdmin() {
   if (!S.currentUser || !S.token) { toast('Sign in first.','error'); return false; }
