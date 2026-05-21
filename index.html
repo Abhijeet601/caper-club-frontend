@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -24,7 +24,7 @@
 
   <div class="app-shell">
 
-    <!-- â•â•â• TOP BAR â•â•â• -->
+    <!-- ═══ TOP BAR ═══ -->
     <header class="top-bar glass-card">
       <div class="brand">
         <div class="brand-icon">
@@ -93,7 +93,7 @@
     </header>
     
 
-    <!-- â•â•â• TAB NAV â•â•â• -->
+    <!-- ═══ TAB NAV ═══ -->
     <nav class="tab-nav glass-card">
       <div class="tab-nav-inner">
         <button class="nav-tab active" data-tab="liveOpsTab">
@@ -132,10 +132,10 @@
       </div>
     </nav>
 
-    <!-- â•â•â• MAIN AREA â•â•â• -->
+    <!-- ═══ MAIN AREA ═══ -->
     <main class="main-area-full">
 
-      <!-- â•â• LIVE OPS TAB (scanner + right panels together) â•â• -->
+      <!-- ══ LIVE OPS TAB (scanner + right panels together) ══ -->
       <div class="tab-page active" id="liveOpsTab">
         <div class="liveops-layout">
 
@@ -167,7 +167,6 @@
           <div class="scan-state-text">
             <strong id="scanStatusText">Live scanner is offline</strong>
             <span id="scanStatusDetail">Enable Live Scan in the header to start.</span>
-            <span id="scanWarning" class="scan-status-warning" hidden style="display:block;margin-top:4px;color:var(--amber);font-size:.82rem;font-weight:600;">Please step closer to the camera.</span>
           </div>
           <div class="scan-state-loader" id="scannerStatusLoader" hidden>
             <div class="spin-ring"></div>
@@ -270,7 +269,7 @@
           <!-- System Status Card -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">★ System Status</span>
+              <span class="card-title">⚙ System Status</span>
             </div>
             <div class="sys-status-grid" id="statsGrid">
               <!-- Rendered by JS -->
@@ -291,7 +290,7 @@
           <!-- Quick Info: Live Feed -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">‼ Live Feed</span>
+              <span class="card-title">⚡ Live Feed</span>
               <div class="btn-row">
                 <button type="button" class="btn-ghost btn-sm" id="clearLiveFeedBtn">Clear</button>
                 <span class="badge-chip chip-green" id="feedCount">0</span>
@@ -323,7 +322,7 @@
 
           <!-- Backend Config -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">🌐 Backend</span></div>
+            <div class="card-head"><span class="card-title">🔗 Backend</span></div>
             <form id="apiConfigForm" class="compact-form">
               <input type="url" id="apiBaseInput" placeholder="http://localhost:8001">
               <div class="btn-row">
@@ -337,7 +336,7 @@
         </div>
       </div>
 
-      <!-- â•â• NEW USER TAB â•â• -->
+      <!-- ══ NEW USER TAB ══ -->
       <div class="tab-page" id="newUserTab">
         <div class="single-col-layout">
 
@@ -387,7 +386,7 @@
           <!-- User Form -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title" id="userFormTitle">+ Create Member</span>
+              <span class="card-title" id="userFormTitle">➕ Create Member</span>
             </div>
             <form id="userForm" class="user-form">
               <input type="hidden" id="userIdInput">
@@ -432,7 +431,7 @@
                     <option value="Zumba">💃 Zumba</option>
                     <option value="Tennis">🎾 Tennis</option>
                     <option value="Skating">⛸ Skating</option>
-                    <option value="General">👥 General</option>
+                    <option value="General">🏃 General</option>
                   </select>
                 </label>
                 <label class="field-stack">
@@ -515,7 +514,7 @@
 
           <!-- Face Upload submit -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">📝 Enroll Faces</span></div>
+            <div class="card-head"><span class="card-title">📤 Enroll Faces</span></div>
             <form id="faceUploadForm">
               <label class="field-stack">
                 <span>Search Member</span>
@@ -535,10 +534,15 @@
         </div>
       </div>
 
-      <!-- â•â• FACE ENROLLMENT STATUS TAB â•â• -->
+      <!-- ══ FACE ENROLLMENT STATUS TAB ══ -->
       <div class="tab-page" id="faceEnrollmentTab"></div>
 
-      <!-- â•â• REPORTS TAB â•â• --><!-- â•â• REPORTS TAB â•â• -->
+      <!-- ══ FACE ENROLLMENT STATUS TAB ══ -->
+      <div class="tab-page" id="faceEnrollmentTab">
+        <object data="faceEnrollmentTab.html" type="text/html" style="width:100%;height:100vh;border:none;"></object>
+      </div>
+
+      <!-- ══ REPORTS TAB ══ -->
       <div class="tab-page" id="reportsTab">
 
         <div class="single-col-layout">
@@ -551,7 +555,7 @@
         <div class="rpt-stat-label">Total Members</div>
       </div>
       <div class="rpt-stat-card active" id="rptActiveMembers" data-card-filter="active">
-        <span class="rpt-stat-icon">✓</span>
+        <span class="rpt-stat-icon">✅</span>
         <div class="rpt-stat-val" id="rptActiveMembersVal">0</div>
         <div class="rpt-stat-label">Active</div>
       </div>
@@ -566,7 +570,7 @@
         <div class="rpt-stat-label">Today's Revenue</div>
       </div>
       <div class="rpt-stat-card info" id="rptTodayCheckins" data-card-filter="all">
-        <span class="rpt-stat-icon">📈</span>
+        <span class="rpt-stat-icon">🔑</span>
         <div class="rpt-stat-val" id="rptTodayCheckinsVal">0</div>
         <div class="rpt-stat-label">Today's Check-ins</div>
       </div>
@@ -643,7 +647,7 @@
     <!-- Daily Admission Report Table -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">📊 Daily Admission Report</span>
+        <span class="card-title">🧾 Daily Admission Report</span>
         <span class="badge-chip chip-blue" id="rptAdmissionCount">0</span>
       </div>
       <div class="rpt-table-wrap">
@@ -707,7 +711,7 @@
 
       <!-- Slot Engagement -->
       <div class="panel-card glass-card rpt-chart-card">
-        <div class="card-head"><span class="card-title">📣 Slot Engagement</span></div>
+        <div class="card-head"><span class="card-title">🕒 Slot Engagement</span></div>
         <div id="slotEngagementBars" class="slot-bars"></div>
       </div>
 
@@ -716,7 +720,7 @@
     <!-- Payment Details -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">💳 Payment Summary</span>
+        <span class="card-title">💰 Payment Summary</span>
       </div>
       <div class="rpt-payment-grid">
         <div class="rpt-pay-card green">
@@ -753,8 +757,8 @@
       </div>
       <div class="rpt-renewal-tabs">
         <button class="rpt-rtab active" data-rtab="expiring">⚠ Expiring</button>
-        <button class="rpt-rtab" data-rtab="expired">⏳ Expired</button>
-        <button class="rpt-rtab" data-rtab="renewed">✓ Renewed</button>
+        <button class="rpt-rtab" data-rtab="expired">🔴 Expired</button>
+        <button class="rpt-rtab" data-rtab="renewed">✅ Renewed</button>
       </div>
       <div id="renewalList" class="alert-list mt8">
         <div class="empty-hint">No renewal data.</div>
@@ -765,7 +769,7 @@
 
       </div>
 
-      <!-- â•â• ALL MEMBERS TAB â•â• -->
+      <!-- ══ ALL MEMBERS TAB ══ -->
       <div class="tab-page" id="allMembersTab">
         <div class="single-col-layout all-members-layout">
           <div class="panel-card glass-card all-members-panel">
@@ -814,7 +818,7 @@
             <div class="all-members-insights" id="allMembersInsights">
               <div class="insight-grid">
                 <div class="insight-card" data-filter="all" title="Click to show all members">
-                  <div class="insight-icon">👍</div>
+                  <div class="insight-icon">👁️</div>
                   <div class="insight-content">
                     <div class="insight-value" id="allMembersVisibleCount">0</div>
                     <div class="insight-label">Total Members</div>
@@ -838,7 +842,7 @@
                   </div>
                 </div>
                 <div class="insight-card" data-filter="active" title="Click to show active membership members">
-                  <div class="insight-icon">✓</div>
+                  <div class="insight-icon">✅</div>
                   <div class="insight-content">
                     <div class="insight-value" id="allMembersActiveMembership">0 / 0</div>
                     <div class="insight-label">Active Memberships</div>
@@ -870,14 +874,14 @@
         </div>
       </div>
 
-      <!-- â•â• MEMBERSHIP TAB â•â• -->
+      <!-- ══ MEMBERSHIP TAB ══ -->
       <div class="tab-page" id="membershipTab">
         <div class="single-col-layout">
 
     <!-- Plan Calculator -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">🛡 Plan Calculator</span>
+        <span class="card-title">🧮 Plan Calculator</span>
       </div>
       <div class="plan-calc-grid">
         <label class="field-stack">
@@ -913,14 +917,14 @@
     <div class="panel-card glass-card membership-filters">
       <button class="filter-chip active" data-mfilter="all">All</button>
       <button class="filter-chip" data-mfilter="active">🟢 Active</button>
-      <button class="filter-chip" data-mfilter="expiring">⚠ Expiring</button>
-      <button class="filter-chip" data-mfilter="expired">⏳ Expired</button>
+      <button class="filter-chip" data-mfilter="expiring">🟡 Expiring</button>
+      <button class="filter-chip" data-mfilter="expired">🔴 Expired</button>
     </div>
 
     <!-- Members list -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">👥 Members</span>
+        <span class="card-title">💳 Members</span>
         <span class="badge-chip" id="membershipCountChip">0</span>
       </div>
       <div class="membership-list" id="membershipList">
@@ -930,7 +934,7 @@
 
     <!-- Create membership -->
     <div class="panel-card glass-card">
-      <div class="card-head"><span class="card-title">+ Add Membership</span></div>
+      <div class="card-head"><span class="card-title">➕ Add Membership</span></div>
       <form id="membershipForm" class="compact-form">
         <input type="search" id="membershipUserSearchInput" placeholder="Search member, email, ID, mobile…" class="rpt-input">
         <select id="membershipUserInput" required></select>
@@ -970,7 +974,7 @@
 
       </div>
 
-      <!-- â•â• ALERTS TAB â•â• -->
+      <!-- ══ ALERTS TAB ══ -->
       <div class="tab-page" id="alertsTab">
         <div class="single-col-layout">
 
@@ -988,7 +992,7 @@
           <!-- Expired -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">⏳ Expired</span>
+              <span class="card-title">🔴 Expired</span>
               <span class="badge-chip chip-rose" id="expiredCount">0</span>
             </div>
             <div class="alert-list" id="expiredList">
@@ -999,7 +1003,7 @@
           <!-- Payment pending -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">💳 Payment Pending</span>
+              <span class="card-title">💸 Payment Pending</span>
               <span class="badge-chip chip-amber" id="pendingPayCount">0</span>
             </div>
             <div class="alert-list" id="pendingPayList">
@@ -1010,7 +1014,7 @@
           <!-- Defaulters -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">⚠ Defaulters</span>
+              <span class="card-title">🚫 Defaulters</span>
             </div>
             <div class="alert-list" id="defaultersList">
               <div class="empty-hint">No defaulters.</div>
@@ -1039,13 +1043,13 @@
         </div>
       </div>
 
-      <!-- â•â• SETTINGS TAB â•â• -->
+      <!-- ══ SETTINGS TAB ══ -->
       <div class="tab-page" id="settingsTab">
         <div class="single-col-layout">
 
           <!-- Slots -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">🕒 Time Slots</span></div>
+            <div class="card-head"><span class="card-title">⏰ Time Slots</span></div>
             <form id="slotForm" class="compact-form">
               <input type="hidden" id="slotIdInput">
               <input type="text" id="slotNameInput" placeholder="Slot name" required>
@@ -1084,7 +1088,7 @@
 
           <!-- My Records -->
           <div class="panel-card glass-card" id="myRecordsSection" hidden>
-            <div class="card-head"><span class="card-title">📄 My Records</span></div>
+            <div class="card-head"><span class="card-title">📂 My Records</span></div>
             <div class="card-sub-head">Attendance</div>
             <div class="alert-list" id="memberHistoryList"></div>
             <div class="card-sub-head mt8">Payments</div>
@@ -1116,4 +1120,3 @@
   <script src="script.js"></script>
 </body>
 </html>
-
