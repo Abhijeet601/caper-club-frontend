@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 1200;
+const LIVE_SCAN_INTERVAL = 450;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -137,6 +137,7 @@ const S = {
 const scannedUsers = new Map();
 const scanDebounceUsers = new Map();
 const stableDetectionCounter = {};
+let lastDetectionAt = 0;
 let frameCounter = 0;
 const lazyScriptPromises = Object.create(null);
 const selectRenderCache = {
@@ -3048,7 +3049,7 @@ async function startLiveScan(opts = {}) {
   frameCounter = 0;
   S.scanLoopTimer = setInterval(async () => {
     frameCounter += 1;
-    if (frameCounter % 4 !== 0) return;
+    if (frameCounter % 2 !== 0) return;
     await runLiveCycle().catch(console.error);
   }, LIVE_SCAN_INTERVAL);
   renderConsole();
@@ -3187,6 +3188,11 @@ function getCameraErrorMessage(err) {
 
 async function processLiveRecognition() {
   if (!S.isScanning || S.scanInFlight) return;
+  const now = Date.now();
+  if (now - lastDetectionAt < 700) {
+    return;
+  }
+  lastDetectionAt = now;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
   await runScan({ source: 'camera', showToast: false });
 }
@@ -3341,7 +3347,7 @@ async function runScan(opts = {}) {
     }
 
     stableDetectionCounter[userId] = (stableDetectionCounter[userId] || 0) + 1;
-    if (stableDetectionCounter[userId] < 3) {
+    if (stableDetectionCounter[userId] < 2) {
       setScanState('loading', 'Confirming face...', `Stable detection ${stableDetectionCounter[userId]}/3`, 'Confirm');
       return null;
     }

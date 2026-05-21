@@ -185,7 +185,7 @@
     const centerBias = 1 - clamp(Math.hypot(centerX - 0.5, centerY - 0.44) / 0.65, 0, 1);
     const sizeBias = clamp(Math.max(box.width / width, box.height / height) / 0.28, 0, 1);
     const score = clamp(detection?.detection?.score || 0, 0, 1);
-    return (score * 0.68) + (centerBias * 0.22) + (sizeBias * 0.1);
+    return (score * 0.60) + (centerBias * 0.30) + (sizeBias * 0.10);
   }
 
   function pickBestDetection(detections, width, height) {
@@ -259,11 +259,28 @@
         .withFaceDescriptor();
       return detection ? [detection] : [];
     }
-    return faceapi
+
+    const detections = await faceapi
       .detectAllFaces(input, options)
       .withFaceLandmarks()
       .withFaceDescriptors();
+
+    // STEP 7: Limit face candidates to avoid CPU overload when many faces are present.
+    // Prefer larger faces (background clutter reduction) rather than detection score.
+    if (Array.isArray(detections) && detections.length > 3) {
+      detections.sort((a, b) => {
+        const aw = a?.detection?.box?.width || 0;
+        const ah = a?.detection?.box?.height || 0;
+        const bw = b?.detection?.box?.width || 0;
+        const bh = b?.detection?.box?.height || 0;
+        return (bw * bh) - (aw * ah);
+      });
+      return detections.slice(0, 3);
+    }
+
+    return detections;
   }
+
 
   function buildDetectionPayload(bestDetection, sourceWidth, sourceHeight, meta) {
     const descriptor = normalizeDescriptor(Array.from(bestDetection?.descriptor || []));
