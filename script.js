@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 120;
+const LIVE_SCAN_INTERVAL = 80;
 const DOOR_STATUS_POLL_MS = 3000;
 const DOOR_OPEN_WARNING_INTERVAL_MS = 8000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
@@ -26,30 +26,30 @@ const DEFAULT_CAMERA_FOCUS_X = 0.5;
 const DEFAULT_CAMERA_FOCUS_Y = 0.46;
 const ACTIVE_SESSIONS_RENDER_INTERVAL_MS = 5000;
 const STARTUP_IDLE_TIMEOUT_MS = 1200;
-const STABLE_MATCH_WINDOW_MS = 2500;
+const STABLE_MATCH_WINDOW_MS = 3500;
 const REQUIRED_STABLE_MATCHES = 1;
-const REQUIRED_STABLE_MATCHES_LONG_RANGE = 2;
-const STRICT_MATCH_DISTANCE = 0.40;
-const STRICT_MATCH_MARGIN = 0.06;
-const MIN_DETECTION_SCORE = 0.62;
-const MIN_FACE_RATIO = 0.14;
-const FAST_TRACK_MATCH_DISTANCE = 0.34;
-const FAST_TRACK_MIN_MARGIN = 0.08;
-const FAST_TRACK_MIN_DETECTION_SCORE = 0.78;
-const FAST_TRACK_MIN_FACE_RATIO = 0.18;
-const MIN_ATTENDANCE_CONFIDENCE = 0.65;
-const BORDERLINE_MATCH_DISTANCE = 0.365;
-const BORDERLINE_MATCH_MARGIN = 0.075;
+const REQUIRED_STABLE_MATCHES_LONG_RANGE = 1;
+const STRICT_MATCH_DISTANCE = 0.46;
+const STRICT_MATCH_MARGIN = 0.04;
+const MIN_DETECTION_SCORE = 0.50;
+const MIN_FACE_RATIO = 0.10;
+const FAST_TRACK_MATCH_DISTANCE = 0.40;
+const FAST_TRACK_MIN_MARGIN = 0.05;
+const FAST_TRACK_MIN_DETECTION_SCORE = 0.65;
+const FAST_TRACK_MIN_FACE_RATIO = 0.12;
+const MIN_ATTENDANCE_CONFIDENCE = 0.55;
+const BORDERLINE_MATCH_DISTANCE = 0.44;
+const BORDERLINE_MATCH_MARGIN = 0.04;
 const ATTENDANCE_API_TIMEOUT_MS = 2500;
-const SCAN_PROCESS_EVERY_N_TICKS = 3;
-const MIN_SCAN_PROCESS_GAP_MS = 260;
+const SCAN_PROCESS_EVERY_N_TICKS = 1;
+const MIN_SCAN_PROCESS_GAP_MS = 180;
 const ATTENDANCE_SUBMIT_DEDUPE_MS = 4000;
 const FACE_CROP_OUTPUT_SIZE = 224;
 const FACE_CROP_JPEG_QUALITY = 0.72;
 const AUTO_RESET_AFTER_SUCCESS_MS = 1400;
-const MIN_SCAN_BRIGHTNESS = 62;
-const MAX_SCAN_BRIGHTNESS = 225;
-const MIN_SCAN_BLUR_SCORE = 9;
+const MIN_SCAN_BRIGHTNESS = 40;
+const MAX_SCAN_BRIGHTNESS = 240;
+const MIN_SCAN_BLUR_SCORE = 5;
 const BLINK_LIVENESS_WINDOW_MS = 2200;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
@@ -153,7 +153,7 @@ const S = {
   cameraRequested: false, cameraRestarting: false,
   liveDetection: null, cameraZoom: 1,
   faceModelsReady: false, faceModelsLoading: false, faceModelsError: '',
-  faceUsers: [], recognitionThreshold: window.FaceAi?.DEFAULT_THRESHOLD || 0.56,
+  faceUsers: [], recognitionThreshold: window.FaceAi?.DEFAULT_THRESHOLD || 0.42,
   scanState: 'idle', scanPill: 'Idle',
   scanStatusText: 'Live scanner is offline',
   scanStatusDetail: 'Enable Live Scan to start face recognition.',
@@ -3468,22 +3468,7 @@ function shouldFastTrackRecognition(match, detection) {
 }
 
 function requiredStableMatchesForDetection(match, detection) {
-  if (shouldFastTrackRecognition(match, detection)) {
-    return 1;
-  }
-  if (
-    Number(match?.distance || 1) >= BORDERLINE_MATCH_DISTANCE
-    || Number(match?.sampleMeanDistance || 1) >= Number((match?.adaptiveThreshold || STRICT_MATCH_DISTANCE) + 0.01)
-    || Number(match?.margin || 0) < BORDERLINE_MATCH_MARGIN
-    || detection?.livenessPassed === false
-  ) {
-    return 2;
-  }
-  const captureMode = String(detection?.captureMode || '').toLowerCase();
-  if (captureMode === 'center-zoom') {
-    return REQUIRED_STABLE_MATCHES_LONG_RANGE;
-  }
-  return REQUIRED_STABLE_MATCHES;
+  return 1;
 }
 
 function validateRecognitionAttempt(match, detection) {
@@ -3506,27 +3491,16 @@ function validateRecognitionAttempt(match, detection) {
     return '';
   }
 
-  if (Number(match.distance || 1) > STRICT_MATCH_DISTANCE) {
-    return 'Face match is weak. Move closer and try again.';
+  if (Number(match.distance || 1) <= STRICT_MATCH_DISTANCE) {
+    return '';
   }
 
   if (
-    Number(match.sampleMeanDistance || 1) > Number((match.adaptiveThreshold || STRICT_MATCH_DISTANCE) + 0.02)
-    && Number(match.sampleCount || 0) >= 3
+    match.margin != null
+    && Number(match.margin) < STRICT_MATCH_MARGIN
+    && Number(match.distance || 1) > 0.44
   ) {
-    return 'Face match is inconsistent. Please look straight at the camera and try again.';
-  }
-
-  if (match.margin != null && Number(match.margin) < STRICT_MATCH_MARGIN) {
     return 'Face match is too close to another member. Hold still and try again.';
-  }
-
-  if (
-    detection?.livenessPassed === false
-    && Number(match.distance || 1) >= BORDERLINE_MATCH_DISTANCE
-    && Number(match.margin || 0) < 0.1
-  ) {
-    return 'Please blink once and look directly at the camera.';
   }
 
   return '';
@@ -3647,7 +3621,7 @@ async function runScan(opts = {}) {
     const match = window.FaceAi.bestMatch(
       probe.detection.descriptor,
       S.faceUsers,
-      S.recognitionThreshold
+      0.46
     );
 
     if (!match?.matched || !match.user?.id) {

@@ -3,8 +3,8 @@
 
   const DEFAULT_THRESHOLD = 0.42;
   const STRONG_MATCH_THRESHOLD = 0.38;
-  const MIN_ATTENDANCE_CONFIDENCE = 0.65;
-  const MIN_MATCH_MARGIN = 0.06;
+  const MIN_ATTENDANCE_CONFIDENCE = 0.55;
+  const MIN_MATCH_MARGIN = 0.04;
   const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
     Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
