@@ -12,8 +12,8 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 250;
-const REQUIRED_STABLE_DETECTIONS = 1;
+const LIVE_SCAN_INTERVAL = 450;
+const REQUIRED_STABLE_DETECTIONS = 2;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -42,28 +42,6 @@ const CAMERA_CONSTRAINT_SETS = Object.freeze([
       frameRate: { ideal: 15, max: 20 },
       aspectRatio: { ideal: 4 / 3 },
     },
-  },
-  {
-    audio: false,
-    video: {
-      facingMode: { ideal: 'user' },
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      frameRate: { ideal: 15, max: 20 },
-      aspectRatio: { ideal: 4 / 3 },
-    },
-  },
-  {
-    audio: false,
-    video: {
-      width: { ideal: 640 },
-      height: { ideal: 480 },
-      frameRate: { ideal: 15, max: 20 },
-    },
-  },
-  {
-    audio: false,
-    video: true,
   },
 ]);
 
@@ -162,6 +140,25 @@ const scanDebounceUsers = new Map();
 const stableDetectionCounter = {};
 let lastDetectionAt = 0;
 let frameCounter = 0;
+
+function resetStableDetectionCounters(exceptUserId = '') {
+  const keepId = String(exceptUserId || '').trim();
+  Object.keys(stableDetectionCounter).forEach((userId) => {
+    if (!keepId || userId !== keepId) {
+      delete stableDetectionCounter[userId];
+    }
+  });
+}
+
+setInterval(() => {
+  const now = Date.now();
+  scannedUsers.forEach((time, userId) => {
+    if ((now - Number(time || 0)) > 600000) {
+      scannedUsers.delete(userId);
+      delete stableDetectionCounter[userId];
+    }
+  });
+}, 60000);
 const lazyScriptPromises = Object.create(null);
 const selectRenderCache = {
   usersRef: null,
@@ -3072,7 +3069,32 @@ async function startLiveScan(opts = {}) {
   frameCounter = 0;
   S.scanLoopTimer = setInterval(async () => {
     frameCounter += 1;
-    await runLiveCycle().catch(console.error);
+
+    if ((frameCounter % 2) !== 0) {
+      return;
+    }
+
+    if (S.scanInFlight) {
+      return;
+    }
+
+    const now = Date.now();
+    if ((now - lastDetectionAt) < 700) {
+      return;
+    }
+
+    lastDetectionAt = now;
+    S.scanInFlight = true;
+
+    try {
+      const scanStart = performance.now();
+      await processLiveRecognition({ prelocked: true });
+      console.log('Scan time:', performance.now() - scanStart);
+    } catch (err) {
+      console.error('Live scan error:', err);
+    } finally {
+      S.scanInFlight = false;
+    }
   }, LIVE_SCAN_INTERVAL);
   renderConsole();
   setScanState('loading','Scanning...','Matching in browser and validating membership.');
@@ -3219,15 +3241,11 @@ function getCameraErrorMessage(err) {
   return err?.message || 'Cannot start camera.';
 }
 
-async function processLiveRecognition() {
-  if (!S.isScanning || S.scanInFlight) return;
-  const now = Date.now();
-  if (now - lastDetectionAt < 350) {
-    return;
-  }
-  lastDetectionAt = now;
+async function processLiveRecognition(opts = {}) {
+  if (!S.isScanning) return;
+  if (!opts.prelocked && S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
-  await runScan({ source: 'camera', showToast: false });
+  await runScan({ source: 'camera', showToast: false, prelocked: Boolean(opts.prelocked) });
 }
 
 async function runLiveCycle() {
@@ -3295,11 +3313,13 @@ async function handleManualScan() {
 }
 
 async function runScan(opts = {}) {
-  if (S.scanInFlight) return null;
+  if (S.scanInFlight && !opts.prelocked) return null;
   const source = opts.source || (opts.image ? 'upload' : 'camera');
   const image = source === 'upload' ? (opts.image || S.scanImage || '') : '';
   if (source === 'upload' && !image) return null;
-  S.scanInFlight = true;
+  if (!opts.prelocked) {
+    S.scanInFlight = true;
+  }
   if (image) S.scanImage = image;
   renderConsole();
   setScanState('loading', 'Scanning...', 'Matching face in browser and validating access.');
@@ -3312,6 +3332,7 @@ async function runScan(opts = {}) {
       }
     }
     if (!probe?.detection) {
+      resetStableDetectionCounters();
       const result = buildClientScanResult({
         status: 'retry',
         message: probe?.message || 'No face detected. Align your face and try again.',
@@ -3330,7 +3351,8 @@ async function runScan(opts = {}) {
       S.recognitionThreshold
     );
 
-    if (!match?.matched || !match.user?.id) {
+    if (!match?.matched || !match.user?.id || Number(match.distance || 1) > 0.38) {
+      resetStableDetectionCounters();
       const result = buildClientScanResult({
         status: 'unknown',
         message: 'Unknown face. No enrolled member matched this scan.',
@@ -3380,6 +3402,7 @@ async function runScan(opts = {}) {
     }
 
     stableDetectionCounter[userId] = (stableDetectionCounter[userId] || 0) + 1;
+    resetStableDetectionCounters(userId);
     if (stableDetectionCounter[userId] < REQUIRED_STABLE_DETECTIONS) {
       setScanState('loading', 'Confirming face...', `Stable detection ${stableDetectionCounter[userId]}/${REQUIRED_STABLE_DETECTIONS}`, 'Confirm');
       return null;
@@ -3388,7 +3411,7 @@ async function runScan(opts = {}) {
     const now = Date.now();
     if (scannedUsers.has(userId)) {
       const lastScan = Number(scannedUsers.get(userId) || 0);
-      if ((now - lastScan) < 90000) {
+      if ((now - lastScan) < 45000) {
         setScanState('detected', 'Cooldown Active', 'This member was already marked recently.', 'Cooldown');
         stableDetectionCounter[userId] = 0;
         return null;
@@ -3446,11 +3469,14 @@ async function runScan(opts = {}) {
     }
     return result;
   } catch (err) {
+    resetStableDetectionCounters();
     setScanState('denied', 'Access Denied', err?.message || 'Scan failed.');
     if (opts.showToast) handleErr(err, { toast: true });
     return null;
   } finally {
-    S.scanInFlight = false;
+    if (!opts.prelocked) {
+      S.scanInFlight = false;
+    }
     if (S.cameraRequested && !streamHasActiveVideo(S.stream)) {
       startCamera().catch(console.error);
     }

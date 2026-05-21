@@ -10,28 +10,21 @@
     Object.freeze({ inputSize: 192, scoreThreshold: 0.4, label: 'balanced' }),
   ]);
   const VIDEO_FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 224, scoreThreshold: 0.38, label: 'video-fast' }),
-    Object.freeze({ inputSize: 192, scoreThreshold: 0.32, label: 'video-balanced' }),
+    Object.freeze({ inputSize: 192, scoreThreshold: 0.5, label: 'video-fast' }),
   ]);
-  const VIDEO_RECOVERY_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 224, scoreThreshold: 0.28, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'video-center-1.35x' }),
-  ]);
+  const VIDEO_RECOVERY_PASSES = Object.freeze([]);
   const CENTER_CROP_PASSES = Object.freeze([
     Object.freeze({ inputSize: 224, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
+    Object.freeze({ inputSize: 192, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
   ]);
   // Disabled for lower CPU usage in realtime mode.
   const VIDEO_CENTER_CROP_PASSES = Object.freeze([]);
   const FOCUS_PASS = Object.freeze({
-    inputSize: 320,
+    inputSize: 192,
     scoreThreshold: 0.24,
     label: 'focus-zoom',
   });
-  const VIDEO_FOCUS_PASS = Object.freeze({
-    inputSize: 320,
-    scoreThreshold: 0.22,
-    label: 'video-focus-zoom',
-  });
+  const VIDEO_FOCUS_PASS = null;
   const SMALL_FACE_RATIO = 0.18;
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
@@ -241,7 +234,7 @@
   }
 
   function getDetectorOptions(pass) {
-    const inputSize = Number(pass?.inputSize || 320);
+    const inputSize = Number(pass?.inputSize || 192);
     const scoreThreshold = Number(pass?.scoreThreshold || 0.4);
     const cacheKey = `${inputSize}:${scoreThreshold}`;
     if (!DETECTOR_OPTIONS_CACHE.has(cacheKey)) {
@@ -353,7 +346,7 @@
 
     for (const pass of passes) {
       const region = buildCenterCrop(sourceWidth, sourceHeight, pass);
-      const targetLongEdge = Math.max(Number(opts.targetLongEdge || 720), Number(pass.inputSize || 416) * 2);
+      const targetLongEdge = Math.max(Number(opts.targetLongEdge || 720), Number(pass.inputSize || 224) * 2);
       const surface = drawCropSurface(input, region, targetLongEdge);
       const payload = await detectOnSurface(surface, sourceWidth, sourceHeight, [pass], {
         region,
@@ -375,7 +368,7 @@
     if (!currentDetection?.faceBox) return null;
     const region = buildFocusCrop(currentDetection.faceBox, sourceWidth, sourceHeight);
     const focusPass = opts.pass || FOCUS_PASS;
-    const targetLongEdge = Math.max(Number(opts.targetLongEdge || 800), Number(focusPass.inputSize || 512) * 2);
+    const targetLongEdge = Math.max(Number(opts.targetLongEdge || 800), Number(focusPass.inputSize || 224) * 2);
     const surface = drawCropSurface(input, region, targetLongEdge);
     const refined = await detectOnSurface(surface, sourceWidth, sourceHeight, [focusPass], {
       region,
@@ -403,27 +396,6 @@
           single: true,
         },
       );
-      if (!detection) {
-        detection = await detectLongRangeCandidate(input, dimensions.width, dimensions.height, {
-          passes: VIDEO_RECOVERY_PASSES,
-          captureMode: 'video-center-zoom',
-          single: true,
-          targetLongEdge: 640,
-        });
-      }
-
-      if (detection && detection.faceRatio < SMALL_FACE_RATIO && VIDEO_FOCUS_PASS) {
-        const refined = await refineSmallFace(input, dimensions.width, dimensions.height, detection, {
-          pass: VIDEO_FOCUS_PASS,
-          captureMode: 'video-focus-zoom',
-          single: true,
-          targetLongEdge: 720,
-        });
-        if (refined && shouldPrefer(refined, detection)) {
-          detection = refined;
-        }
-      }
-
       return detection || null;
     }
 
@@ -568,6 +540,7 @@
 
     const best = ranked[0];
     if (!best) return null;
+    if (best.distance > DEFAULT_THRESHOLD) return null;
 
     const runnerUp = ranked.find(candidate => String(candidate.user?.id || '') !== String(best.user?.id || '')) || null;
     const secondDistance = runnerUp?.distance ?? Number.POSITIVE_INFINITY;
