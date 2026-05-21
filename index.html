@@ -44,7 +44,7 @@
         <div class="status-pills">
           <div class="status-pill" id="healthPill">
             <span class="status-dot" id="healthDot"></span>
-            <span id="healthText">Checkingâ€¦</span>
+            <span id="healthText">Checking…</span>
           </div>
           <div class="status-pill" id="authPill">
             <span class="status-dot" id="authDot"></span>
@@ -81,13 +81,13 @@
         <!-- Door quick controls (admin only) -->
         <div class="door-quick-controls" style="display:flex;align-items:center;gap:8px;">
           <button type="button" class="btn-primary btn-sm" id="doorUnlockNavbarBtn" title="Unlock door for 5 seconds">
-            ðŸ”“ Unlock (5s)
+            🔓 Unlock (5s)
           </button>
         </div>
 
         <div class="clock-block">
           <div class="clock-time" id="liveTime">00:00:00</div>
-          <div class="clock-date" id="liveDate">â€”</div>
+          <div class="clock-date" id="liveDate">—</div>
         </div>
       </div>
     </header>
@@ -152,12 +152,12 @@
                 <circle cx="7" cy="9" r="2" stroke="currentColor" stroke-width="1.2"/>
               </svg>
             </div>
-            <span class="scanner-title">Live Scanner â€” CAM-01</span>
+            <span class="scanner-title">Live Scanner — CAM-01</span>
           </div>
           <div class="scanner-badges">
             <span class="scanner-badge blink-badge" id="camStatusPrimary">Ready</span>
-            <span class="scanner-badge live-badge">â— REC</span>
-            <span class="scanner-badge session-badge" id="sessionTimerBadge" hidden>â— 00:00</span>
+            <span class="scanner-badge live-badge">● REC</span>
+            <span class="scanner-badge session-badge" id="sessionTimerBadge" hidden>● 00:00</span>
           </div>
         </div>
 
@@ -190,7 +190,7 @@
           <div class="face-box" id="faceDetectBox">
             <div class="fc tl"></div><div class="fc tr"></div>
             <div class="fc bl"></div><div class="fc br"></div>
-            <div class="face-label" id="faceDetectLabel">Scanningâ€¦</div>
+            <div class="face-label" id="faceDetectLabel">Scanning…</div>
           </div>
 
           <div class="cam-placeholder" id="cameraPlaceholder">
@@ -238,8 +238,8 @@
               <input type="file" id="scanFileInput" accept="image/*">
             </label>
             <div class="scan-btns">
-              <button type="button" class="btn-capture" id="captureScanBtn">ðŸ“· Capture</button>
-              <button type="button" class="btn-scan" id="runScanBtn">â–¶ Run Scan</button>
+              <button type="button" class="btn-capture" id="captureScanBtn">📷 Capture</button>
+              <button type="button" class="btn-scan" id="runScanBtn">▶ Run Scan</button>
             </div>
           </div>
 
@@ -256,13 +256,13 @@
           <!-- Voice Control Card -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">ðŸŽ¤ Voice Control</span>
+              <span class="card-title">🎤 Voice Control</span>
               <span class="badge-chip chip-blue" id="ttsModeChip">READY</span>
             </div>
             <p class="card-sub" id="ttsStatusText">Preparing the browser voice assistant.</p>
             <form id="ttsForm" class="voice-form">
-              <textarea id="ttsText" rows="2" placeholder="Type an announcementâ€¦"></textarea>
-              <button type="submit" class="btn-primary btn-sm">ðŸ”Š Speak</button>
+              <textarea id="ttsText" rows="2" placeholder="Type an announcement…"></textarea>
+              <button type="submit" class="btn-primary btn-sm">🔊 Speak</button>
             </form>
             <audio id="ttsAudio" controls class="audio-bar" hidden></audio>
           </div>
@@ -270,7 +270,7 @@
           <!-- System Status Card -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">âš™ System Status</span>
+              <span class="card-title">★ System Status</span>
             </div>
             <div class="sys-status-grid" id="statsGrid">
               <!-- Rendered by JS -->
@@ -280,7 +280,7 @@
           <!-- Active Sessions Panel -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">ðŸƒ Active Sessions</span>
+              <span class="card-title">🏃 Active Sessions</span>
               <span class="badge-chip chip-green" id="activeSessionCount">0</span>
             </div>
             <div id="activeSessionsPanel">
@@ -291,7 +291,7 @@
           <!-- Quick Info: Live Feed -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">âš¡ Live Feed</span>
+              <span class="card-title">‼ Live Feed</span>
               <div class="btn-row">
                 <button type="button" class="btn-ghost btn-sm" id="clearLiveFeedBtn">Clear</button>
                 <span class="badge-chip chip-green" id="feedCount">0</span>
@@ -305,7 +305,7 @@
           <!-- Sign-In / Account (right panel) -->
           <div class="panel-card glass-card" id="authCard">
             <div class="card-head">
-              <span class="card-title">ðŸ” Admin Sign In</span>
+              <span class="card-title">🔐 Admin Sign In</span>
             </div>
             <form id="loginForm" class="compact-form">
               <input type="email" id="loginEmail" placeholder="admin@caperclub.ai" required>
@@ -323,7 +323,7 @@
 
           <!-- Backend Config -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">ðŸ”— Backend</span></div>
+            <div class="card-head"><span class="card-title">🌐 Backend</span></div>
             <form id="apiConfigForm" class="compact-form">
               <input type="url" id="apiBaseInput" placeholder="http://localhost:8001">
               <div class="btn-row">
@@ -344,12 +344,12 @@
           <!-- Enrollment Camera -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">ðŸ“¸ Face Capture</span>
+              <span class="card-title">📸 Face Capture</span>
               <span class="badge-chip chip-violet" id="enrollCountChip">0/5</span>
             </div>
             <div class="enroll-progress-bar"><div id="enrollProgress" style="width:0%"></div></div>
             <div id="enrollmentGallery" class="thumb-grid">
-              <div class="empty-hint">Capture 3â€“5 clear face images</div>
+              <div class="empty-hint">Capture 3–5 clear face images</div>
             </div>
             <div class="cam-viewport camera-shell enrollment-cam-viewport" id="enrollmentCameraShell">
               <video id="enrollmentCameraPreview" autoplay muted playsinline></video>
@@ -375,7 +375,7 @@
               </div>
             </div>
             <div class="btn-row mt8">
-              <button type="button" class="btn-capture" id="captureEnrollmentBtn">ðŸ“· Capture</button>
+              <button type="button" class="btn-capture" id="captureEnrollmentBtn">📷 Capture</button>
               <button type="button" class="btn-ghost btn-sm" id="clearEnrollmentBtn">Clear</button>
               <label class="btn-ghost btn-sm file-lbl">
                 Upload
@@ -387,7 +387,7 @@
           <!-- User Form -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title" id="userFormTitle">âž• Create Member</span>
+              <span class="card-title" id="userFormTitle">+ Create Member</span>
             </div>
             <form id="userForm" class="user-form">
               <input type="hidden" id="userIdInput">
@@ -427,12 +427,12 @@
                 <label class="field-stack">
                   <span>Sport / Activity</span>
                   <select id="userSportInput">
-                    <option value="Swimming">ðŸŠ Swimming</option>
-                    <option value="Cricket">ðŸ Cricket</option>
-                    <option value="Zumba">ðŸ’ƒ Zumba</option>
-                    <option value="Tennis">ðŸŽ¾ Tennis</option>
-                    <option value="Skating">â›¸ Skating</option>
-                    <option value="General">ðŸƒ General</option>
+                    <option value="Swimming">🏊 Swimming</option>
+                    <option value="Cricket">🏏 Cricket</option>
+                    <option value="Zumba">💃 Zumba</option>
+                    <option value="Tennis">🎾 Tennis</option>
+                    <option value="Skating">⛸ Skating</option>
+                    <option value="General">👥 General</option>
                   </select>
                 </label>
                 <label class="field-stack">
@@ -449,7 +449,7 @@
                     <option value="Quarterly">Quarterly (90 days)</option>
                     <option value="Half-Yearly">Half-Yearly (180 days)</option>
                     <option value="Yearly">Yearly (365 days)</option>
-                    <option value="Custom">Custom (1â€“29 days)</option>
+                    <option value="Custom">Custom (1–29 days)</option>
                   </select>
                 </label>
                 <label class="field-stack">
@@ -463,11 +463,11 @@
               </div>
               <div class="form-row">
                 <label class="field-stack">
-                  <span>Amount (â‚¹)</span>
+                  <span>Amount (₹)</span>
                   <input type="number" id="userAmountInput" min="0" step="0.01" value="0" required>
                 </label>
                 <label class="field-stack">
-                  <span>Due Amount (â‚¹)</span>
+                  <span>Due Amount (₹)</span>
                   <input type="number" id="userDueAmountInput" min="0" step="0.01" value="0">
                 </label>
               </div>
@@ -507,7 +507,7 @@
               </div>
               <!-- Success animation overlay -->
               <div class="form-success" id="userFormSuccess" hidden>
-                <div class="success-check">âœ“</div>
+                <div class="success-check">✓</div>
                 <p>Member Created!</p>
               </div>
             </form>
@@ -515,7 +515,7 @@
 
           <!-- Face Upload submit -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">ðŸ“¤ Enroll Faces</span></div>
+            <div class="card-head"><span class="card-title">📝 Enroll Faces</span></div>
             <form id="faceUploadForm">
               <label class="field-stack">
                 <span>Search Member</span>
@@ -546,27 +546,27 @@
     <!-- Summary Cards Row -->
     <div class="rpt-summary-grid panel-card glass-card">
       <div class="rpt-stat-card" id="rptTotalMembers" data-card-filter="all">
-        <span class="rpt-stat-icon">ðŸ‘¥</span>
+        <span class="rpt-stat-icon">👥</span>
         <div class="rpt-stat-val" id="rptTotalMembersVal">0</div>
         <div class="rpt-stat-label">Total Members</div>
       </div>
       <div class="rpt-stat-card active" id="rptActiveMembers" data-card-filter="active">
-        <span class="rpt-stat-icon">âœ…</span>
+        <span class="rpt-stat-icon">✓</span>
         <div class="rpt-stat-val" id="rptActiveMembersVal">0</div>
         <div class="rpt-stat-label">Active</div>
       </div>
       <div class="rpt-stat-card warning" id="rptExpiringSoon" data-card-filter="expiring">
-        <span class="rpt-stat-icon">âš </span>
+        <span class="rpt-stat-icon">⚠</span>
         <div class="rpt-stat-val" id="rptExpiringSoonVal">0</div>
         <div class="rpt-stat-label">Expiring Soon</div>
       </div>
       <div class="rpt-stat-card revenue" id="rptTodayRevenue" data-card-filter="all">
-        <span class="rpt-stat-icon">â‚¹</span>
-        <div class="rpt-stat-val" id="rptTodayRevenueVal">â‚¹0</div>
+        <span class="rpt-stat-icon">₹</span>
+        <div class="rpt-stat-val" id="rptTodayRevenueVal">₹0</div>
         <div class="rpt-stat-label">Today's Revenue</div>
       </div>
       <div class="rpt-stat-card info" id="rptTodayCheckins" data-card-filter="all">
-        <span class="rpt-stat-icon">ðŸ”‘</span>
+        <span class="rpt-stat-icon">📈</span>
         <div class="rpt-stat-val" id="rptTodayCheckinsVal">0</div>
         <div class="rpt-stat-label">Today's Check-ins</div>
       </div>
@@ -591,25 +591,25 @@
       </button>
       <button class="rpt-quick-card" data-qfilter="cash">
         <span class="rpt-quick-card-label">Cash Today</span>
-        <span class="rpt-quick-card-value" id="qcardCash">â‚¹0</span>
+        <span class="rpt-quick-card-value" id="qcardCash">₹0</span>
       </button>
       <button class="rpt-quick-card" data-qfilter="upi">
         <span class="rpt-quick-card-label">UPI Today</span>
-        <span class="rpt-quick-card-value" id="qcardUpi">â‚¹0</span>
+        <span class="rpt-quick-card-value" id="qcardUpi">₹0</span>
       </button>
       <button class="rpt-quick-card" data-qfilter="card">
         <span class="rpt-quick-card-label">Card Today</span>
-        <span class="rpt-quick-card-value" id="qcardCard">â‚¹0</span>
+        <span class="rpt-quick-card-value" id="qcardCard">₹0</span>
       </button>
       <button type="button" class="rpt-quick-card rpt-quick-card-static">
         <span class="rpt-quick-card-label">Total Revenue</span>
-        <span class="rpt-quick-card-value" id="qcardTotalRevenue">â‚¹0</span>
+        <span class="rpt-quick-card-value" id="qcardTotalRevenue">₹0</span>
       </button>
     </div>
 
     <!-- Filter Bar -->
     <div class="panel-card glass-card rpt-filter-bar">
-      <input type="search" id="rptSearch" placeholder="Search userâ€¦" class="rpt-input">
+      <input type="search" id="rptSearch" placeholder="Search user…" class="rpt-input">
       <select id="rptFilterPlan" class="rpt-select">
         <option value="">All Plans</option>
         <option value="Monthly">Monthly</option>
@@ -637,13 +637,13 @@
       </select>
       <input type="date" id="rptFilterDate" class="rpt-date">
       <button class="btn-ghost btn-sm" id="rptClearFilters">Clear</button>
-      <button class="btn-primary btn-sm" id="rptExportBtn">â¬‡ Export</button>
+      <button class="btn-primary btn-sm" id="rptExportBtn">⬇ Export</button>
     </div>
 
     <!-- Daily Admission Report Table -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">ðŸ§¾ Daily Admission Report</span>
+        <span class="card-title">📊 Daily Admission Report</span>
         <span class="badge-chip chip-blue" id="rptAdmissionCount">0</span>
       </div>
       <div class="rpt-table-wrap">
@@ -671,7 +671,7 @@
     <div class="panel-card glass-card" id="rptDetailDrawer" hidden>
       <div class="card-head">
         <span class="card-title" id="rptDetailTitle">Member Detail</span>
-        <button class="icon-btn" id="rptDetailClose">âœ•</button>
+        <button class="icon-btn" id="rptDetailClose">✕</button>
       </div>
       <div id="rptDetailBody"></div>
     </div>
@@ -681,7 +681,7 @@
 
       <!-- Attendance Analytics -->
       <div class="panel-card glass-card rpt-chart-card">
-        <div class="card-head"><span class="card-title">ðŸ“ˆ Attendance Analytics</span></div>
+        <div class="card-head"><span class="card-title">📈 Attendance Analytics</span></div>
         <div class="rpt-analytics-grid" id="rptAnalyticsGrid">
           <div class="rpt-analytic-item blue">
             <div class="rpt-analytic-val" id="anaCheckins">0</div>
@@ -696,7 +696,7 @@
             <div class="rpt-analytic-lbl">Active Now</div>
           </div>
           <div class="rpt-analytic-item amber">
-            <div class="rpt-analytic-val" id="anaPeak">â€“</div>
+            <div class="rpt-analytic-val" id="anaPeak">–</div>
             <div class="rpt-analytic-lbl">Peak Slot</div>
           </div>
         </div>
@@ -707,7 +707,7 @@
 
       <!-- Slot Engagement -->
       <div class="panel-card glass-card rpt-chart-card">
-        <div class="card-head"><span class="card-title">ðŸ•’ Slot Engagement</span></div>
+        <div class="card-head"><span class="card-title">📣 Slot Engagement</span></div>
         <div id="slotEngagementBars" class="slot-bars"></div>
       </div>
 
@@ -716,24 +716,24 @@
     <!-- Payment Details -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">ðŸ’° Payment Summary</span>
+        <span class="card-title">💳 Payment Summary</span>
       </div>
       <div class="rpt-payment-grid">
         <div class="rpt-pay-card green">
           <div class="rpt-pay-label">Daily</div>
-          <div class="rpt-pay-val" id="payDaily">â‚¹0</div>
+          <div class="rpt-pay-val" id="payDaily">₹0</div>
         </div>
         <div class="rpt-pay-card blue">
           <div class="rpt-pay-label">Weekly</div>
-          <div class="rpt-pay-val" id="payWeekly">â‚¹0</div>
+          <div class="rpt-pay-val" id="payWeekly">₹0</div>
         </div>
         <div class="rpt-pay-card violet">
           <div class="rpt-pay-label">Monthly</div>
-          <div class="rpt-pay-val" id="payMonthly">â‚¹0</div>
+          <div class="rpt-pay-val" id="payMonthly">₹0</div>
         </div>
         <div class="rpt-pay-card amber">
           <div class="rpt-pay-label">Pending</div>
-          <div class="rpt-pay-val" id="payPending">â‚¹0</div>
+          <div class="rpt-pay-val" id="payPending">₹0</div>
         </div>
       </div>
       <div class="table-scroll" style="margin-top:10px;">
@@ -749,12 +749,12 @@
     <!-- Renewal Details -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">ðŸ”„ Renewal Tracker</span>
+        <span class="card-title">🔄 Renewal Tracker</span>
       </div>
       <div class="rpt-renewal-tabs">
-        <button class="rpt-rtab active" data-rtab="expiring">âš  Expiring</button>
-        <button class="rpt-rtab" data-rtab="expired">ðŸ”´ Expired</button>
-        <button class="rpt-rtab" data-rtab="renewed">âœ… Renewed</button>
+        <button class="rpt-rtab active" data-rtab="expiring">⚠ Expiring</button>
+        <button class="rpt-rtab" data-rtab="expired">⏳ Expired</button>
+        <button class="rpt-rtab" data-rtab="renewed">✓ Renewed</button>
       </div>
       <div id="renewalList" class="alert-list mt8">
         <div class="empty-hint">No renewal data.</div>
@@ -770,7 +770,7 @@
         <div class="single-col-layout all-members-layout">
           <div class="panel-card glass-card all-members-panel">
             <div class="card-head">
-              <span class="card-title">ðŸ‘¥ All Members</span>
+              <span class="card-title">👥 All Members</span>
               <div class="btn-row all-members-toolbar">
                 <span class="badge-chip chip-blue" id="allMembersCount">0</span>
               </div>
@@ -778,8 +778,8 @@
             <div class="filter-section">
               <div class="filter-row">
                 <div class="search-group">
-                  <input type="search" id="userFilterInput" placeholder="Search by name, email, member ID, mobileâ€¦" class="filter-input">
-                  <button class="btn-ghost btn-sm" id="allMembersRefresh" title="Refresh data">ðŸ”„</button>
+                  <input type="search" id="userFilterInput" placeholder="Search by name, email, member ID, mobile…" class="filter-input">
+                  <button class="btn-ghost btn-sm" id="allMembersRefresh" title="Refresh data">🔄</button>
                 </div>
                 <div class="filter-group">
                   <select id="userSportFilterInput" class="filter-select">
@@ -814,7 +814,7 @@
             <div class="all-members-insights" id="allMembersInsights">
               <div class="insight-grid">
                 <div class="insight-card" data-filter="all" title="Click to show all members">
-                  <div class="insight-icon">ðŸ‘ï¸</div>
+                  <div class="insight-icon">👍</div>
                   <div class="insight-content">
                     <div class="insight-value" id="allMembersVisibleCount">0</div>
                     <div class="insight-label">Total Members</div>
@@ -822,7 +822,7 @@
                   </div>
                 </div>
                 <div class="insight-card" data-filter="face-enrolled" title="Click to show face enrolled members">
-                  <div class="insight-icon">ðŸ¤–</div>
+                  <div class="insight-icon">🤖</div>
                   <div class="insight-content">
                     <div class="insight-value" id="allMembersFaceEnrolled">0</div>
                     <div class="insight-label">Face Enrolled</div>
@@ -830,7 +830,7 @@
                   </div>
                 </div>
                 <div class="insight-card" data-filter="face-pending" title="Click to show face pending members">
-                  <div class="insight-icon">ðŸ“·</div>
+                  <div class="insight-icon">📷</div>
                   <div class="insight-content">
                     <div class="insight-value" id="allMembersFacePending">0</div>
                     <div class="insight-label">Face Pending</div>
@@ -838,7 +838,7 @@
                   </div>
                 </div>
                 <div class="insight-card" data-filter="active" title="Click to show active membership members">
-                  <div class="insight-icon">âœ…</div>
+                  <div class="insight-icon">✓</div>
                   <div class="insight-content">
                     <div class="insight-value" id="allMembersActiveMembership">0 / 0</div>
                     <div class="insight-label">Active Memberships</div>
@@ -848,7 +848,7 @@
               </div>
             </div>
             <div class="help-note">
-              <p>ðŸ’¡ <strong>Pro Tips:</strong> Use filters to find members quickly. All stats show totals from all members. Click member actions for detailed reports or management.</p>
+              <p>💡 <strong>Pro Tips:</strong> Use filters to find members quickly. All stats show totals from all members. Click member actions for detailed reports or management.</p>
             </div>
             <div class="table-scroll">
               <table class="report-table all-members-table">
@@ -863,7 +863,7 @@
                 <span class="card-title" id="allMemberReportTitle">Individual Member Report</span>
                 <p class="card-sub" id="allMemberReportSubtitle">Choose a member and open Report to see their full attendance, payment, and profile details.</p>
               </div>
-              <button class="icon-btn" id="allMemberReportClose">âœ•</button>
+              <button class="icon-btn" id="allMemberReportClose">✕</button>
             </div>
             <div class="all-member-report-body" id="allMemberReportBody"></div>
           </div>
@@ -877,7 +877,7 @@
     <!-- Plan Calculator -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">ðŸ§® Plan Calculator</span>
+        <span class="card-title">🛡 Plan Calculator</span>
       </div>
       <div class="plan-calc-grid">
         <label class="field-stack">
@@ -887,11 +887,11 @@
             <option value="Quarterly">Quarterly (90 days)</option>
             <option value="Half-Yearly">Half-Yearly (180 days)</option>
             <option value="Yearly">Yearly (365 days)</option>
-            <option value="Custom">Custom (1â€“29 days)</option>
+            <option value="Custom">Custom (1–29 days)</option>
           </select>
         </label>
         <label class="field-stack" id="planCalcCustomWrap" hidden>
-          <span>Custom Days (1â€“29)</span>
+          <span>Custom Days (1–29)</span>
           <input type="number" id="planCalcDays" min="1" max="29" value="7" placeholder="e.g. 15">
         </label>
         <label class="field-stack">
@@ -905,22 +905,22 @@
       </div>
       <div class="plan-calc-result" id="planCalcResult" hidden>
         <span class="plan-calc-badge" id="planCalcBadge">30 days</span>
-        <span id="planCalcText">Monthly plan Â· Expires on â€”</span>
+        <span id="planCalcText">Monthly plan · Expires on —</span>
       </div>
     </div>
 
     <!-- Filters -->
     <div class="panel-card glass-card membership-filters">
       <button class="filter-chip active" data-mfilter="all">All</button>
-      <button class="filter-chip" data-mfilter="active">ðŸŸ¢ Active</button>
-      <button class="filter-chip" data-mfilter="expiring">ðŸŸ¡ Expiring</button>
-      <button class="filter-chip" data-mfilter="expired">ðŸ”´ Expired</button>
+      <button class="filter-chip" data-mfilter="active">🟢 Active</button>
+      <button class="filter-chip" data-mfilter="expiring">⚠ Expiring</button>
+      <button class="filter-chip" data-mfilter="expired">⏳ Expired</button>
     </div>
 
     <!-- Members list -->
     <div class="panel-card glass-card">
       <div class="card-head">
-        <span class="card-title">ðŸ’³ Members</span>
+        <span class="card-title">👥 Members</span>
         <span class="badge-chip" id="membershipCountChip">0</span>
       </div>
       <div class="membership-list" id="membershipList">
@@ -930,9 +930,9 @@
 
     <!-- Create membership -->
     <div class="panel-card glass-card">
-      <div class="card-head"><span class="card-title">âž• Add Membership</span></div>
+      <div class="card-head"><span class="card-title">+ Add Membership</span></div>
       <form id="membershipForm" class="compact-form">
-        <input type="search" id="membershipUserSearchInput" placeholder="Search member, email, ID, mobileâ€¦" class="rpt-input">
+        <input type="search" id="membershipUserSearchInput" placeholder="Search member, email, ID, mobile…" class="rpt-input">
         <select id="membershipUserInput" required></select>
         <div class="form-row">
           <select id="membershipPlanInput">
@@ -953,7 +953,7 @@
           <input type="date" id="membershipExpiryInput" required>
         </div>
         <div class="form-row">
-          <input type="number" id="membershipAmountInput" min="0" value="0" placeholder="Amount â‚¹">
+          <input type="number" id="membershipAmountInput" min="0" value="0" placeholder="Amount ₹">
           <select id="membershipStatusInput">
             <option value="Paid">Paid</option>
             <option value="Pending">Pending</option>
@@ -977,7 +977,7 @@
           <!-- Expiring soon -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">âš  Expiring Soon</span>
+              <span class="card-title">⚠ Expiring Soon</span>
               <span class="badge-chip chip-amber" id="expiringCount">0</span>
             </div>
             <div class="alert-list" id="expiringList">
@@ -988,7 +988,7 @@
           <!-- Expired -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">ðŸ”´ Expired</span>
+              <span class="card-title">⏳ Expired</span>
               <span class="badge-chip chip-rose" id="expiredCount">0</span>
             </div>
             <div class="alert-list" id="expiredList">
@@ -999,7 +999,7 @@
           <!-- Payment pending -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">ðŸ’¸ Payment Pending</span>
+              <span class="card-title">💳 Payment Pending</span>
               <span class="badge-chip chip-amber" id="pendingPayCount">0</span>
             </div>
             <div class="alert-list" id="pendingPayList">
@@ -1010,7 +1010,7 @@
           <!-- Defaulters -->
           <div class="panel-card glass-card">
             <div class="card-head">
-              <span class="card-title">ðŸš« Defaulters</span>
+              <span class="card-title">⚠ Defaulters</span>
             </div>
             <div class="alert-list" id="defaultersList">
               <div class="empty-hint">No defaulters.</div>
@@ -1019,7 +1019,7 @@
 
           <!-- Announcements -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">ðŸ“£ Announcements</span></div>
+            <div class="card-head"><span class="card-title">📣 Announcements</span></div>
             <form id="announcementForm" class="compact-form">
               <select id="announcementUserInput"></select>
               <input type="text" id="announcementTitleInput" placeholder="Title" required>
@@ -1045,7 +1045,7 @@
 
           <!-- Slots -->
           <div class="panel-card glass-card">
-            <div class="card-head"><span class="card-title">â° Time Slots</span></div>
+            <div class="card-head"><span class="card-title">🕒 Time Slots</span></div>
             <form id="slotForm" class="compact-form">
               <input type="hidden" id="slotIdInput">
               <input type="text" id="slotNameInput" placeholder="Slot name" required>
@@ -1077,14 +1077,14 @@
 
           <!-- Member Account (self) -->
           <div class="panel-card glass-card" id="myAccountSection" hidden>
-            <div class="card-head"><span class="card-title">ðŸ‘¤ My Account</span></div>
+            <div class="card-head"><span class="card-title">👤 My Account</span></div>
             <div id="memberSummaryGrid"></div>
             <div id="memberProfileCard"></div>
           </div>
 
           <!-- My Records -->
           <div class="panel-card glass-card" id="myRecordsSection" hidden>
-            <div class="card-head"><span class="card-title">ðŸ“‚ My Records</span></div>
+            <div class="card-head"><span class="card-title">📄 My Records</span></div>
             <div class="card-sub-head">Attendance</div>
             <div class="alert-list" id="memberHistoryList"></div>
             <div class="card-sub-head mt8">Payments</div>
@@ -1104,7 +1104,7 @@
   <div class="toast" id="toast"></div>
 
   <footer class="app-footer">
-    <span>Â© 2026 </span>
+    <span>© 2026 </span>
     <a href="https://ards.in" target="_blank" rel="noopener noreferrer">Alpenrose Digital Solutions</a>
     <span>. All rights reserved. | </span>
     <a href="https://ards.in" target="_blank" rel="noopener noreferrer">ards.in</a>

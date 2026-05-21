@@ -36,6 +36,8 @@
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
   const MAX_RECOMMENDED_ZOOM = 2.6;
+  const FAST_VIDEO_ACCEPT_SCORE = 0.82;
+  const FAST_VIDEO_ACCEPT_FACE_RATIO = 0.19;
   const DETECTOR_OPTIONS_CACHE = new Map();
   const USER_DESCRIPTOR_CACHE = new WeakMap();
 
@@ -214,6 +216,13 @@
     return qualityScore(next) > (qualityScore(current) + 0.015);
   }
 
+  function isFastVideoAcceptance(detection) {
+    if (!detection) return false;
+    if (String(detection.captureMode || '') !== 'video-frame') return false;
+    return Number(detection.score || 0) >= FAST_VIDEO_ACCEPT_SCORE
+      && Number(detection.faceRatio || 0) >= FAST_VIDEO_ACCEPT_FACE_RATIO;
+  }
+
   async function loadModels(modelPath) {
     const faceapi = ensureFaceApi();
     const base = String(modelPath || 'models').replace(/\/+$/, '');
@@ -386,6 +395,10 @@
           captureMode: 'video-frame',
           single: true,
         });
+      }
+
+      if (isFastVideoAcceptance(detection)) {
+        return detection;
       }
 
       if (!detection && opts.allowLongRange !== false) {

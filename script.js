@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 500;
+const LIVE_SCAN_INTERVAL = 350;
 const DOOR_STATUS_POLL_MS = 3000;
 const DOOR_OPEN_WARNING_INTERVAL_MS = 8000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
@@ -33,6 +33,10 @@ const STRICT_MATCH_DISTANCE = 0.40;
 const STRICT_MATCH_MARGIN = 0.06;
 const MIN_DETECTION_SCORE = 0.62;
 const MIN_FACE_RATIO = 0.14;
+const FAST_TRACK_MATCH_DISTANCE = 0.34;
+const FAST_TRACK_MIN_MARGIN = 0.08;
+const FAST_TRACK_MIN_DETECTION_SCORE = 0.78;
+const FAST_TRACK_MIN_FACE_RATIO = 0.18;
 const LIBRARY_PATHS = Object.freeze({
   chart: 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js',
   faceApi: 'vendor/face-api.min.js',
@@ -3292,7 +3296,19 @@ function clearPendingRecognition() {
   S.pendingRecognition = null;
 }
 
-function requiredStableMatchesForDetection(detection) {
+function shouldFastTrackRecognition(match, detection) {
+  if (!match?.matched) return false;
+  if (Number(match.distance || 1) > FAST_TRACK_MATCH_DISTANCE) return false;
+  if (match.margin != null && Number(match.margin) < FAST_TRACK_MIN_MARGIN) return false;
+  if (Number(detection?.score || 0) < FAST_TRACK_MIN_DETECTION_SCORE) return false;
+  if (Number(detection?.faceRatio || 0) < FAST_TRACK_MIN_FACE_RATIO) return false;
+  return true;
+}
+
+function requiredStableMatchesForDetection(match, detection) {
+  if (shouldFastTrackRecognition(match, detection)) {
+    return 1;
+  }
   const captureMode = String(detection?.captureMode || '').toLowerCase();
   if (captureMode === 'center-zoom') {
     return REQUIRED_STABLE_MATCHES_LONG_RANGE;
@@ -3335,7 +3351,7 @@ function registerRecognitionAttempt(match, detection) {
     return { confirmed: false, count: 0, required: REQUIRED_STABLE_MATCHES };
   }
 
-  const required = requiredStableMatchesForDetection(detection);
+  const required = requiredStableMatchesForDetection(match, detection);
   const current = S.pendingRecognition;
   const sameWindow = current
     && current.userId === userId
@@ -3599,8 +3615,8 @@ async function detectRecognitionProbe(opts = {}) {
 
   const detection = await window.FaceAi.detectFromVideo(video, {
     hintBox: S.liveDetection?.faceBox || null,
-    allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 1,
-    recoveryMode: S.scanMissStreak >= 1,
+    allowLongRange: !S.liveDetection?.faceBox || S.scanMissStreak >= 2,
+    recoveryMode: S.scanMissStreak >= 2,
   });
   S.scanMissStreak = detection ? 0 : Math.min(S.scanMissStreak + 1, 6);
   return { source, detection };
