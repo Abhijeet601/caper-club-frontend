@@ -12,7 +12,7 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 650;
+const LIVE_SCAN_INTERVAL = 1200;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -36,33 +36,11 @@ const CAMERA_CONSTRAINT_SETS = Object.freeze([
     audio: false,
     video: {
       facingMode: { ideal: 'environment' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      aspectRatio: { ideal: 16 / 9 },
-      frameRate: { ideal: 24, max: 30 },
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      frameRate: { ideal: 15, max: 20 },
+      aspectRatio: { ideal: 4 / 3 },
     },
-  },
-  {
-    audio: false,
-    video: {
-      facingMode: { ideal: 'user' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-      aspectRatio: { ideal: 16 / 9 },
-      frameRate: { ideal: 24, max: 30 },
-    },
-  },
-  {
-    audio: false,
-    video: {
-      width: { ideal: 960 },
-      height: { ideal: 540 },
-      frameRate: { ideal: 24, max: 30 },
-    },
-  },
-  {
-    audio: false,
-    video: true,
   },
 ]);
 
@@ -157,6 +135,9 @@ const S = {
 };
 
 const scannedUsers = new Map();
+const scanDebounceUsers = new Map();
+const stableDetectionCounter = {};
+let frameCounter = 0;
 const lazyScriptPromises = Object.create(null);
 const selectRenderCache = {
   usersRef: null,
@@ -3057,13 +3038,19 @@ async function startLiveScan(opts = {}) {
   if (S.isScanning) return true;
   S.cameraRequested = true;
   S.scanMissStreak = 0;
+  clearPendingRecognition();
   const ok = await startCamera();
   if (!ok) { S.cameraRequested = false; $('enableCameraInput').checked = false; return false; }
   S.isScanning = true;
   setLiveDetection(null, { keepSearchZoom: true });
   document.querySelector('.scanner-panel')?.classList.add('is-live');
   clearInterval(S.scanLoopTimer);
-  S.scanLoopTimer = setInterval(() => runLiveCycle().catch(console.error), LIVE_SCAN_INTERVAL);
+  frameCounter = 0;
+  S.scanLoopTimer = setInterval(async () => {
+    frameCounter += 1;
+    if (frameCounter % 4 !== 0) return;
+    await runLiveCycle().catch(console.error);
+  }, LIVE_SCAN_INTERVAL);
   renderConsole();
   setScanState('loading','Scanning...','Matching in browser and validating membership.');
   if (opts.toast) toast('Live scan started.','success');
@@ -3073,10 +3060,12 @@ async function startLiveScan(opts = {}) {
 
 function stopLiveScan(opts = {}) {
   clearInterval(S.scanLoopTimer); S.scanLoopTimer = null;
+  frameCounter = 0;
   S.cameraRequested = false;
   S.cameraRestarting = false;
   S.isScanning = false; S.scanInFlight = false;
   S.scanMissStreak = 0;
+  clearPendingRecognition();
   queueDoorDetectionSync({ status: 'unknown', knownFace: false, forceLock: true }, { force: true });
   setLiveDetection(null);
   document.querySelector('.scanner-panel')?.classList.remove('is-live');
@@ -3196,10 +3185,14 @@ function getCameraErrorMessage(err) {
   return err?.message || 'Cannot start camera.';
 }
 
-async function runLiveCycle() {
+async function processLiveRecognition() {
   if (!S.isScanning || S.scanInFlight) return;
   if (!S.stream) { const ok = await startCamera(); if (!ok) { stopLiveScan(); return; } }
   await runScan({ source: 'camera', showToast: false });
+}
+
+async function runLiveCycle() {
+  await processLiveRecognition();
 }
 
 function grabFrame(opts = {}) {
@@ -3315,15 +3308,16 @@ async function runScan(opts = {}) {
       return result;
     }
 
-    const userRecord = getUserRecord(match.user.id) || match.user;
-    if (!canScan(match.user.id)) {
+    const userId = String(match.user.id || '').trim();
+    const userRecord = getUserRecord(userId) || match.user;
+    if (!canScan(userId)) {
       return null;
     }
 
-    const attendanceRecord = getAttendanceRecord(match.user.id);
-    const action = inferAttendanceAction(match.user.id);
+    const attendanceRecord = getAttendanceRecord(userId);
+    const action = inferAttendanceAction(userId);
 
-    const localCooldown = getCooldownInfo(match.user.id, action);
+    const localCooldown = getCooldownInfo(userId, action);
     if (localCooldown.remainingMs > 0) {
       const result = buildClientScanResult({
         status: 'cooldown',
@@ -3337,7 +3331,7 @@ async function runScan(opts = {}) {
         captureMode: probe.detection.captureMode,
         zoomFactor: probe.detection.recommendedZoom,
         source,
-        userId: match.user.id,
+        userId,
       });
       S.scanResult = result;
       renderScanResult();
@@ -3346,10 +3340,27 @@ async function runScan(opts = {}) {
       return result;
     }
 
+    stableDetectionCounter[userId] = (stableDetectionCounter[userId] || 0) + 1;
+    if (stableDetectionCounter[userId] < 3) {
+      setScanState('loading', 'Confirming face...', `Stable detection ${stableDetectionCounter[userId]}/3`, 'Confirm');
+      return null;
+    }
+
+    const now = Date.now();
+    if (scannedUsers.has(userId)) {
+      const lastScan = Number(scannedUsers.get(userId) || 0);
+      if ((now - lastScan) < 90000) {
+        setScanState('detected', 'Cooldown Active', 'This member was already marked recently.', 'Cooldown');
+        stableDetectionCounter[userId] = 0;
+        return null;
+      }
+    }
+    scannedUsers.set(userId, now);
+
     const backendResult = await api('/attendance', {
       method:'POST',
       body:{
-        userId: match.user.id,
+        userId,
         action,
         area: $('scanAreaInput').value.trim() || 'Capper Sports Club Entry',
         confidence: match.confidence,
@@ -3369,15 +3380,18 @@ async function runScan(opts = {}) {
       captureMode: probe.detection.captureMode,
       zoomFactor: probe.detection.recommendedZoom,
       source,
-      userId: match.user.id || match.user?.userId || null,
+      userId: userId || match.user?.userId || null,
     });
     if (result.status === 'granted' && result.attendanceAction) {
-      recordAttendanceAction(match.user.id, result.attendanceAction, result.scannedAt, result.name);
-      updateLocalUserAttendance(match.user.id, result.attendanceAction, result.scannedAt);
+      stableDetectionCounter[userId] = 0;
+      recordAttendanceAction(userId, result.attendanceAction, result.scannedAt, result.name);
+      updateLocalUserAttendance(userId, result.attendanceAction, result.scannedAt);
     } else if (result.status === 'cooldown') {
+      stableDetectionCounter[userId] = 0;
       syncCooldownFromResult(result, action);
     } else if (result.status === 'duplicate' && attendanceRecord?.completed) {
-      recordAttendanceAction(match.user.id, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
+      stableDetectionCounter[userId] = 0;
+      recordAttendanceAction(userId, attendanceRecord.action || 'OUT', attendanceRecord.timestamp, result.name);
     }
     S.scanResult = result;
     renderScanResult();
@@ -4374,6 +4388,8 @@ async function doorUnlockFor5s() {
 function clearSess() {
   sessionStorage.removeItem(STORAGE_KEYS.token);
   scannedUsers.clear();
+  scanDebounceUsers.clear();
+  Object.keys(stableDetectionCounter).forEach(key => delete stableDetectionCounter[key]);
   clearDoorStatusPoll();
   Object.assign(S, {
     token:'', activeTab:'liveOpsTab', currentUser:null, dashboard:null, users:[], slots:[],
@@ -4607,11 +4623,11 @@ function canScan(userId) {
   const id = String(userId || '').trim();
   if (!id) return false;
   const now = Date.now();
-  const last = scannedUsers.get(id);
+  const last = scanDebounceUsers.get(id);
   if (last && (now - last) < FACE_SCAN_DEBOUNCE_MS) return false;
-  scannedUsers.set(id, now);
-  scannedUsers.forEach((value, key) => {
-    if ((now - value) >= FACE_SCAN_DEBOUNCE_MS) scannedUsers.delete(key);
+  scanDebounceUsers.set(id, now);
+  scanDebounceUsers.forEach((value, key) => {
+    if ((now - value) >= FACE_SCAN_DEBOUNCE_MS) scanDebounceUsers.delete(key);
   });
   return true;
 }

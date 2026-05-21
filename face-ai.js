@@ -1,37 +1,32 @@
 (function initFaceAi(global) {
   'use strict';
 
-  const DEFAULT_THRESHOLD = 0.47;
-  const STRONG_MATCH_THRESHOLD = 0.42;
+  const DEFAULT_THRESHOLD = 0.38;
+  const STRONG_MATCH_THRESHOLD = 0.35;
   const MIN_MATCH_MARGIN = 0.045;
   const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 416, scoreThreshold: 0.32, label: 'full-frame' }),
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.4, label: 'balanced' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.32, label: 'full-frame' }),
+    Object.freeze({ inputSize: 192, scoreThreshold: 0.4, label: 'balanced' }),
   ]);
   const VIDEO_FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 224, scoreThreshold: 0.44, label: 'video-fast' }),
+    Object.freeze({ inputSize: 192, scoreThreshold: 0.5, label: 'video-fast' }),
   ]);
-  const VIDEO_RECOVERY_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.36, label: 'video-balanced' }),
-  ]);
+  // Disabled for lower CPU usage in realtime mode.
+  const VIDEO_RECOVERY_PASSES = Object.freeze([]);
   const CENTER_CROP_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 416, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
-    Object.freeze({ inputSize: 512, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
+    Object.freeze({ inputSize: 320, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
   ]);
-  const VIDEO_CENTER_CROP_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 320, scoreThreshold: 0.3, zoom: 1.45, offsetX: 0, offsetY: -0.04, label: 'video-center-1.45x' }),
-  ]);
+  // Disabled for lower CPU usage in realtime mode.
+  const VIDEO_CENTER_CROP_PASSES = Object.freeze([]);
   const FOCUS_PASS = Object.freeze({
-    inputSize: 512,
+    inputSize: 320,
     scoreThreshold: 0.24,
     label: 'focus-zoom',
   });
-  const VIDEO_FOCUS_PASS = Object.freeze({
-    inputSize: 320,
-    scoreThreshold: 0.28,
-    label: 'video-focus',
-  });
+  // Disabled for lower CPU usage in realtime mode.
+  const VIDEO_FOCUS_PASS = null;
   const SMALL_FACE_RATIO = 0.18;
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
@@ -111,6 +106,10 @@
 
   function faceRatioFromBox(faceBox) {
     return Math.max(Number(faceBox?.width || 0), Number(faceBox?.height || 0));
+  }
+
+  function isFaceTooSmall(faceRatio) {
+    return faceRatio < 0.12;
   }
 
   function classifyDistanceHint(faceRatio) {
@@ -281,6 +280,9 @@
       surfaceHeight,
     );
     const faceRatio = faceRatioFromBox(faceBox);
+    if (isFaceTooSmall(faceRatio)) {
+      return null;
+    }
 
     return {
       descriptor,
@@ -369,46 +371,16 @@
     if (!dimensions.width || !dimensions.height) return null;
 
     if (opts.videoMode) {
-      let detection = null;
-      const recoveryMode = Boolean(opts.recoveryMode);
-
-      if (opts.hintBox) {
-        detection = await refineSmallFace(input, dimensions.width, dimensions.height, { faceBox: opts.hintBox }, {
-          pass: VIDEO_FOCUS_PASS,
-          targetLongEdge: 512,
-          captureMode: 'focus-lock',
-          single: true,
-        });
-      }
-
-      if (!detection) {
-        detection = await detectOnSurface(input, dimensions.width, dimensions.height, recoveryMode ? VIDEO_RECOVERY_PASSES : VIDEO_FULL_FRAME_PASSES, {
+      const detection = await detectOnSurface(
+        input,
+        dimensions.width,
+        dimensions.height,
+        VIDEO_FULL_FRAME_PASSES,
+        {
           captureMode: 'video-frame',
           single: true,
-        });
-      }
-
-      if (!detection && opts.allowLongRange !== false) {
-        detection = await detectLongRangeCandidate(input, dimensions.width, dimensions.height, {
-          passes: VIDEO_CENTER_CROP_PASSES,
-          targetLongEdge: 640,
-          captureMode: 'center-zoom',
-          single: true,
-        });
-      }
-
-      if (detection && detection.captureMode !== 'focus-lock' && detection.faceRatio < SMALL_FACE_RATIO) {
-        const refined = await refineSmallFace(input, dimensions.width, dimensions.height, detection, {
-          pass: VIDEO_FOCUS_PASS,
-          targetLongEdge: 512,
-          captureMode: 'focus-lock',
-          single: true,
-        });
-        if (refined && shouldPrefer(refined, detection)) {
-          detection = refined;
-        }
-      }
-
+        },
+      );
       return detection || null;
     }
 
