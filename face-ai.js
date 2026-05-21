@@ -3,6 +3,7 @@
 
   const DEFAULT_THRESHOLD = 0.42;
   const STRONG_MATCH_THRESHOLD = 0.38;
+  const MIN_ATTENDANCE_CONFIDENCE = 0.65;
   const MIN_MATCH_MARGIN = 0.06;
   const SUPPORT_DISTANCE_BUFFER = 0.03;
   const FULL_FRAME_PASSES = Object.freeze([
@@ -700,17 +701,19 @@
     const sampleMeanBoost = best.sampleMeanDistance <= (threshold + 0.015) ? 0.008 : 0;
     const adaptiveThreshold = Math.min(0.47, threshold + supportBoost + sampleMeanBoost);
     const adaptiveStrongThreshold = Math.min(0.43, STRONG_MATCH_THRESHOLD + (supportBoost * 0.7));
+    const confidence = distanceToConfidence(best.distance);
     const strongMatch = best.distance <= adaptiveStrongThreshold;
     const separated = !Number.isFinite(secondDistance) || margin >= Math.max(0.04, MIN_MATCH_MARGIN - (supportBoost * 0.5));
     const sampleSupported = !best.hasSampleSet || best.supportCount >= 1 || strongMatch;
-    const matched = best.distance <= adaptiveThreshold && sampleSupported && (strongMatch || separated);
+    const confidenceQualified = confidence >= MIN_ATTENDANCE_CONFIDENCE;
+    const matched = best.distance <= adaptiveThreshold && sampleSupported && (strongMatch || separated || confidenceQualified);
     let reason = '';
 
     if (best.distance > adaptiveThreshold) {
       reason = 'distance';
     } else if (!sampleSupported) {
       reason = 'sample-support';
-    } else if (!strongMatch && !separated) {
+    } else if (!strongMatch && !separated && !confidenceQualified) {
       reason = 'ambiguous';
     }
 
@@ -722,7 +725,7 @@
       sampleMeanDistance: Number(best.sampleMeanDistance.toFixed(4)),
       sampleSupport: best.supportCount,
       sampleCount: best.sampleCount,
-      confidence: distanceToConfidence(best.distance),
+      confidence,
       adaptiveThreshold: Number(adaptiveThreshold.toFixed(4)),
       matched,
       reason,

@@ -37,6 +37,7 @@ const FAST_TRACK_MATCH_DISTANCE = 0.34;
 const FAST_TRACK_MIN_MARGIN = 0.08;
 const FAST_TRACK_MIN_DETECTION_SCORE = 0.78;
 const FAST_TRACK_MIN_FACE_RATIO = 0.18;
+const MIN_ATTENDANCE_CONFIDENCE = 0.65;
 const BORDERLINE_MATCH_DISTANCE = 0.365;
 const BORDERLINE_MATCH_MARGIN = 0.075;
 const ATTENDANCE_API_TIMEOUT_MS = 2500;
@@ -3493,6 +3494,18 @@ function validateRecognitionAttempt(match, detection) {
     return null;
   }
 
+  if (Number(detection?.score || 0) < MIN_DETECTION_SCORE) {
+    return 'Camera view is noisy. Look at the camera and try again.';
+  }
+
+  if (Number(detection?.faceRatio || 0) < MIN_FACE_RATIO) {
+    return 'Face is too far from the camera. Please step closer.';
+  }
+
+  if (Number(match.confidence || 0) >= MIN_ATTENDANCE_CONFIDENCE) {
+    return '';
+  }
+
   if (Number(match.distance || 1) > STRICT_MATCH_DISTANCE) {
     return 'Face match is weak. Move closer and try again.';
   }
@@ -3514,14 +3527,6 @@ function validateRecognitionAttempt(match, detection) {
     && Number(match.margin || 0) < 0.1
   ) {
     return 'Please blink once and look directly at the camera.';
-  }
-
-  if (Number(detection?.score || 0) < MIN_DETECTION_SCORE) {
-    return 'Camera view is noisy. Look at the camera and try again.';
-  }
-
-  if (Number(detection?.faceRatio || 0) < MIN_FACE_RATIO) {
-    return 'Face is too far from the camera. Please step closer.';
   }
 
   return '';
