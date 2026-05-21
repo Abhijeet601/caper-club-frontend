@@ -10,10 +10,12 @@
     Object.freeze({ inputSize: 192, scoreThreshold: 0.4, label: 'balanced' }),
   ]);
   const VIDEO_FULL_FRAME_PASSES = Object.freeze([
-    Object.freeze({ inputSize: 192, scoreThreshold: 0.5, label: 'video-fast' }),
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.38, label: 'video-fast' }),
+    Object.freeze({ inputSize: 192, scoreThreshold: 0.32, label: 'video-balanced' }),
   ]);
-  // Disabled for lower CPU usage in realtime mode.
-  const VIDEO_RECOVERY_PASSES = Object.freeze([]);
+  const VIDEO_RECOVERY_PASSES = Object.freeze([
+    Object.freeze({ inputSize: 224, scoreThreshold: 0.28, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'video-center-1.35x' }),
+  ]);
   const CENTER_CROP_PASSES = Object.freeze([
     Object.freeze({ inputSize: 224, scoreThreshold: 0.3, zoom: 1.35, offsetX: 0, offsetY: -0.04, label: 'center-1.35x' }),
     Object.freeze({ inputSize: 320, scoreThreshold: 0.26, zoom: 1.85, offsetX: 0, offsetY: -0.06, label: 'center-1.85x' }),
@@ -25,8 +27,11 @@
     scoreThreshold: 0.24,
     label: 'focus-zoom',
   });
-  // Disabled for lower CPU usage in realtime mode.
-  const VIDEO_FOCUS_PASS = null;
+  const VIDEO_FOCUS_PASS = Object.freeze({
+    inputSize: 320,
+    scoreThreshold: 0.22,
+    label: 'video-focus-zoom',
+  });
   const SMALL_FACE_RATIO = 0.18;
   const LONG_RANGE_FACE_RATIO = 0.14;
   const TARGET_FACE_RATIO = 0.24;
@@ -388,7 +393,7 @@
     if (!dimensions.width || !dimensions.height) return null;
 
     if (opts.videoMode) {
-      const detection = await detectOnSurface(
+      let detection = await detectOnSurface(
         input,
         dimensions.width,
         dimensions.height,
@@ -398,6 +403,27 @@
           single: true,
         },
       );
+      if (!detection) {
+        detection = await detectLongRangeCandidate(input, dimensions.width, dimensions.height, {
+          passes: VIDEO_RECOVERY_PASSES,
+          captureMode: 'video-center-zoom',
+          single: true,
+          targetLongEdge: 640,
+        });
+      }
+
+      if (detection && detection.faceRatio < SMALL_FACE_RATIO && VIDEO_FOCUS_PASS) {
+        const refined = await refineSmallFace(input, dimensions.width, dimensions.height, detection, {
+          pass: VIDEO_FOCUS_PASS,
+          captureMode: 'video-focus-zoom',
+          single: true,
+          targetLongEdge: 720,
+        });
+        if (refined && shouldPrefer(refined, detection)) {
+          detection = refined;
+        }
+      }
+
       return detection || null;
     }
 

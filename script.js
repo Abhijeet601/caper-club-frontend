@@ -12,7 +12,8 @@ const STORAGE_KEYS = {
   sessionTimers: 'capper-session-timers',
 };
 const DEFAULT_API_BASE = 'https://caper-club-backend-production.up.railway.app';
-const LIVE_SCAN_INTERVAL = 450;
+const LIVE_SCAN_INTERVAL = 250;
+const REQUIRED_STABLE_DETECTIONS = 1;
 const DOOR_STATUS_POLL_MS = 3000;
 const FACE_SCAN_DEBOUNCE_MS = 3000;
 const ATTENDANCE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -3071,7 +3072,6 @@ async function startLiveScan(opts = {}) {
   frameCounter = 0;
   S.scanLoopTimer = setInterval(async () => {
     frameCounter += 1;
-    if (frameCounter % 2 !== 0) return;
     await runLiveCycle().catch(console.error);
   }, LIVE_SCAN_INTERVAL);
   renderConsole();
@@ -3222,7 +3222,7 @@ function getCameraErrorMessage(err) {
 async function processLiveRecognition() {
   if (!S.isScanning || S.scanInFlight) return;
   const now = Date.now();
-  if (now - lastDetectionAt < 700) {
+  if (now - lastDetectionAt < 350) {
     return;
   }
   lastDetectionAt = now;
@@ -3380,8 +3380,8 @@ async function runScan(opts = {}) {
     }
 
     stableDetectionCounter[userId] = (stableDetectionCounter[userId] || 0) + 1;
-    if (stableDetectionCounter[userId] < 2) {
-      setScanState('loading', 'Confirming face...', `Stable detection ${stableDetectionCounter[userId]}/3`, 'Confirm');
+    if (stableDetectionCounter[userId] < REQUIRED_STABLE_DETECTIONS) {
+      setScanState('loading', 'Confirming face...', `Stable detection ${stableDetectionCounter[userId]}/${REQUIRED_STABLE_DETECTIONS}`, 'Confirm');
       return null;
     }
 
